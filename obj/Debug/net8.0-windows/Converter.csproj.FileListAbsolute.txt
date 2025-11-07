@@ -23,3 +23,4 @@ C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\System.Text.Json.d
 C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\Xabe.FFmpeg.Downloader.dll
 C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\runtimes\browser\lib\net8.0\System.Text.Encodings.Web.dll
 C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\Newtonsoft.Json.dll
+C:\Users\User\source\repos\Converter\obj\Debug\net8.0-windows\Converter.sourcelink.json

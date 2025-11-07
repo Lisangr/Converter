@@ -174,15 +174,11 @@ namespace Converter
 
             tabVideo = new TabPage("🎬 Видео");
             tabAudio = new TabPage("🔊 Аудио");
-            tabOutput = new TabPage("💾 Вывод");
-            tabAdvanced = new TabPage("⚙ Дополнительно");
 
             BuildVideoTab();
             BuildAudioTab();
-            BuildOutputTab();
-            BuildAdvancedTab();
 
-            tabSettings.TabPages.AddRange(new[] { tabVideo, tabAudio, tabOutput, tabAdvanced });
+            tabSettings.TabPages.AddRange(new[] { tabVideo, tabAudio });
             panel.Controls.Add(tabSettings);
             splitContainerMain.Panel2.Controls.Add(panel);
         }
@@ -196,7 +192,7 @@ namespace Converter
             // Format
             panel.Controls.Add(CreateLabel("Формат вывода:", 10, y));
             cbFormat = CreateComboBox(140, y, 180);
-            cbFormat.Items.AddRange(new object[] { "MP4", "MKV", "AVI", "MOV", "WEBM", "FLV" });
+            cbFormat.Items.AddRange(new object[] { "MP4", "MKV", "AVI", "MOV", "WEBM", "FLV", "TS", "M4V", "3GP", "OGV", "WMV", "GIF" });
             cbFormat.SelectedIndexChanged += cbFormat_SelectedIndexChanged;
             panel.Controls.Add(cbFormat);
             y += 40;
@@ -233,6 +229,45 @@ namespace Converter
 
             groupRes.Controls.AddRange(new Control[] { rbUsePreset, rbUsePercent, cbPreset, nudPercent });
             panel.Controls.Add(groupRes);
+            y += groupRes.Height + 20;
+
+            // Output section (moved from 'Вывод')
+            panel.Controls.Add(CreateLabel("Папка сохранения:", 10, y));
+            txtOutputFolder = new TextBox { Left = 10, Top = y + 25, Width = 380, Font = new Font("Segoe UI", 9F) };
+            var btnBrowseOut = CreateStyledButton("📁 Обзор", 400);
+            btnBrowseOut.Top = y + 23;
+            btnBrowseOut.Width = 80;
+            btnBrowseOut.Click += (s, e) =>
+            {
+                using var fbd = new FolderBrowserDialog();
+                if (fbd.ShowDialog() == DialogResult.OK)
+                    txtOutputFolder.Text = fbd.SelectedPath;
+            };
+            panel.Controls.AddRange(new Control[] { txtOutputFolder, btnBrowseOut });
+            y += 70;
+
+            chkCreateConvertedFolder = new CheckBox
+            {
+                Left = 10,
+                Top = y,
+                Width = 300,
+                Text = "Создать подпапку 'Converted'",
+                Checked = true
+            };
+            panel.Controls.Add(chkCreateConvertedFolder);
+            y += 40;
+
+            panel.Controls.Add(CreateLabel("Шаблон имени:", 10, y));
+            cbNamingPattern = CreateComboBox(140, y, 250);
+            cbNamingPattern.Items.AddRange(new object[]
+            {
+                "{original}",
+                "{original}_converted",
+                "{original}_{format}",
+                "{original}_{codec}_{resolution}"
+            });
+            if (cbNamingPattern.Items.Count > 1) cbNamingPattern.SelectedIndex = 1;
+            panel.Controls.Add(cbNamingPattern);
 
             tabVideo.Controls.Add(panel);
         }
@@ -369,26 +404,39 @@ namespace Converter
             panelBottom = new Panel 
             { 
                 Dock = DockStyle.Bottom, 
-                Height = 200,
+                Height = 300, // Increased height to accommodate both sections
                 BackColor = Color.FromArgb(250, 250, 255),
                 Padding = new Padding(10)
             };
 
+            // Main split container for progress and log sections
+            var splitContainer = new SplitContainer
+            {
+                Dock = DockStyle.Fill,
+                Orientation = Orientation.Vertical,
+                SplitterDistance = 120, // Initial position of the splitter
+                SplitterWidth = 8,
+                BackColor = Color.FromArgb(200, 200, 210)
+            };
+
+            // Top panel - Progress section
+            var panelTop = new Panel 
+            { 
+                Dock = DockStyle.Fill, 
+                BackColor = Color.White,
+                Padding = new Padding(10)
+            };
+
             // Progress section
-            var panelProgress = new Panel { Left = 10, Top = 10, Width = 1270, Height = 85, BackColor = Color.White };
-            panelProgress.BorderStyle = BorderStyle.FixedSingle;
+            lblStatusTotal = new Label { Left = 0, Top = 5, Width = 600, Text = "Готов к конвертации", Font = new Font("Segoe UI", 9F) };
+            progressBarTotal = new ProgressBar { Left = 0, Top = 25, Width = panelTop.Width - 20, Height = 20, Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top };
 
-            lblStatusTotal = new Label { Left = 10, Top = 5, Width = 600, Text = "Готов к конвертации", Font = new Font("Segoe UI", 9F) };
-            progressBarTotal = new ProgressBar { Left = 10, Top = 25, Width = 1240, Height = 20 };
-
-            lblStatusCurrent = new Label { Left = 10, Top = 50, Width = 600, Text = "Ожидание...", Font = new Font("Segoe UI", 8.5F), ForeColor = Color.Gray };
-            progressBarCurrent = new ProgressBar { Left = 10, Top = 70, Width = 1240, Height = 15 };
-
-            panelProgress.Controls.AddRange(new Control[] { lblStatusTotal, progressBarTotal, lblStatusCurrent, progressBarCurrent });
+            lblStatusCurrent = new Label { Left = 0, Top = 50, Width = 600, Text = "Ожидание...", Font = new Font("Segoe UI", 8.5F), ForeColor = Color.Gray };
+            progressBarCurrent = new ProgressBar { Left = 0, Top = 70, Width = panelTop.Width - 20, Height = 15, Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top };
 
             // Buttons
-            btnStart = CreateStyledButton("▶ Начать конвертацию", 10);
-            btnStart.Top = 105;
+            btnStart = CreateStyledButton("▶ Начать конвертацию", 0);
+            btnStart.Top = 95;
             btnStart.Width = 170;
             btnStart.Height = 35;
             btnStart.BackColor = Color.FromArgb(0, 120, 215);
@@ -396,8 +444,8 @@ namespace Converter
             btnStart.FlatAppearance.BorderSize = 0;
             btnStart.Click += btnStart_Click;
 
-            btnStop = CreateStyledButton("⏹ Остановить", 190);
-            btnStop.Top = 105;
+            btnStop = CreateStyledButton("⏹ Остановить", 180);
+            btnStop.Top = 95;
             btnStop.Width = 120;
             btnStop.Height = 35;
             btnStop.BackColor = Color.FromArgb(180, 50, 50);
@@ -406,39 +454,59 @@ namespace Converter
             btnStop.FlatAppearance.BorderSize = 0;
             btnStop.Click += (s, e) => _cancellationTokenSource?.Cancel();
 
-            btnSavePreset = CreateStyledButton("💾 Сохранить пресет", 900);
-            btnSavePreset.Top = 105;
+            btnSavePreset = CreateStyledButton("💾 Сохранить пресет", 890);
+            btnSavePreset.Top = 95;
             btnSavePreset.Width = 180;
             btnSavePreset.Height = 35;
+            btnSavePreset.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnSavePreset.Click += btnSavePreset_Click;
 
-            btnLoadPreset = CreateStyledButton("📂 Загрузить пресет", 1090);
-            btnLoadPreset.Top = 105;
+            btnLoadPreset = CreateStyledButton("📂 Загрузить пресет", 1080);
+            btnLoadPreset.Top = 95;
             btnLoadPreset.Width = 180;
             btnLoadPreset.Height = 35;
+            btnLoadPreset.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnLoadPreset.Click += btnLoadPreset_Click;
 
-            // Log section
+            panelTop.Controls.AddRange(new Control[] { 
+                lblStatusTotal, progressBarTotal, lblStatusCurrent, progressBarCurrent,
+                btnStart, btnStop, btnSavePreset, btnLoadPreset 
+            });
+
+            // Bottom panel - Log section
+            var panelBottomLog = new Panel 
+            { 
+                Dock = DockStyle.Fill,
+                BackColor = Color.White,
+                Padding = new Padding(5)
+            };
+
             groupLog = new GroupBox 
             { 
-                Left = 10, 
-                Top = 150, 
-                Width = 1270, 
-                Height = 40, 
-                Text = "📋 Журнал операций" 
+                Dock = DockStyle.Fill, 
+                Text = "📋 Журнал операций",
+                Padding = new Padding(5)
             };
+            
             txtLog = new TextBox 
             { 
                 Dock = DockStyle.Fill, 
                 Multiline = true, 
-                ScrollBars = ScrollBars.Vertical,
+                ScrollBars = ScrollBars.Both,
                 BackColor = Color.FromArgb(245, 245, 250),
                 Font = new Font("Consolas", 8.5F),
-                ReadOnly = true
+                ReadOnly = true,
+                WordWrap = false
             };
             groupLog.Controls.Add(txtLog);
+            panelBottomLog.Controls.Add(groupLog);
 
-            panelBottom.Controls.AddRange(new Control[] { panelProgress, btnStart, btnStop, btnSavePreset, btnLoadPreset, groupLog });
+            // Add panels to split container
+            splitContainer.Panel1.Controls.Add(panelTop);
+            splitContainer.Panel2.Controls.Add(panelBottomLog);
+
+            // Add split container to main panel
+            panelBottom.Controls.Add(splitContainer);
             this.Controls.Add(panelBottom);
         }
 
@@ -489,6 +557,13 @@ namespace Converter
             cbPreset.SelectedIndex = 3;
             cbAudioBitrate.SelectedIndex = 3;
             cbQuality.SelectedIndex = 1;
+            // Ensure Output defaults
+            if (cbNamingPattern != null && cbNamingPattern.Items.Count > 1 && cbNamingPattern.SelectedIndex < 0)
+                cbNamingPattern.SelectedIndex = 1;
+            // Initialize hidden Advanced defaults to keep logic working without UI tab
+            if (txtFfmpegPath == null) txtFfmpegPath = new TextBox();
+            if (nudThreads == null) nudThreads = new NumericUpDown { Value = 0 };
+            if (chkHardwareAccel == null) chkHardwareAccel = new CheckBox { Checked = false };
         }
 
         private void Form1_DragEnter(object? sender, DragEventArgs e)
@@ -615,35 +690,56 @@ namespace Converter
             switch (format.ToUpperInvariant())
             {
                 case "MP4":
-                    cbVideoCodec.Items.AddRange(new object[] { "libx264 (H.264)", "libx265 (HEVC)", "libsvtav1 (AV1)" });
-                    cbAudioCodec.Items.AddRange(new object[] { "aac", "libmp3lame" });
+                case "M4V":
+                    cbVideoCodec.Items.AddRange(new object[] { "copy (без перекодирования)", "libx264 (H.264)", "libx265 (HEVC)", "libsvtav1 (AV1)" });
+                    cbAudioCodec.Items.AddRange(new object[] { "copy", "aac", "libmp3lame" });
                     break;
                 case "MKV":
-                    cbVideoCodec.Items.AddRange(new object[] { "libx264 (H.264)", "libx265 (HEVC)", "libvpx-vp9 (VP9)", "libsvtav1 (AV1)" });
-                    cbAudioCodec.Items.AddRange(new object[] { "aac", "libmp3lame", "libopus", "ac3" });
+                    cbVideoCodec.Items.AddRange(new object[] { "copy (без перекодирования)", "libx264 (H.264)", "libx265 (HEVC)", "libvpx-vp9 (VP9)", "libsvtav1 (AV1)", "mpeg2video" });
+                    cbAudioCodec.Items.AddRange(new object[] { "copy", "aac", "libmp3lame", "libopus", "ac3", "flac" });
                     break;
                 case "WEBM":
-                    cbVideoCodec.Items.AddRange(new object[] { "libvpx (VP8)", "libvpx-vp9 (VP9)", "libsvtav1 (AV1)" });
-                    cbAudioCodec.Items.AddRange(new object[] { "libopus", "libvorbis" });
+                    cbVideoCodec.Items.AddRange(new object[] { "copy (без перекодирования)", "libvpx (VP8)", "libvpx-vp9 (VP9)", "libsvtav1 (AV1)" });
+                    cbAudioCodec.Items.AddRange(new object[] { "copy", "libopus", "libvorbis" });
                     break;
                 case "AVI":
-                    cbVideoCodec.Items.AddRange(new object[] { "mpeg4", "libx264 (H.264)" });
-                    cbAudioCodec.Items.AddRange(new object[] { "mp2", "libmp3lame" });
+                    cbVideoCodec.Items.AddRange(new object[] { "copy (без перекодирования)", "mpeg4", "libx264 (H.264)" });
+                    cbAudioCodec.Items.AddRange(new object[] { "copy", "mp2", "libmp3lame" });
                     break;
                 case "MOV":
-                    cbVideoCodec.Items.AddRange(new object[] { "libx264 (H.264)", "prores_ks (ProRes)" });
-                    cbAudioCodec.Items.AddRange(new object[] { "aac", "alac" });
+                    cbVideoCodec.Items.AddRange(new object[] { "copy (без перекодирования)", "libx264 (H.264)", "prores_ks (ProRes)" });
+                    cbAudioCodec.Items.AddRange(new object[] { "copy", "aac", "alac" });
                     break;
                 case "FLV":
-                    cbVideoCodec.Items.AddRange(new object[] { "flv1", "libx264 (H.264)" });
-                    cbAudioCodec.Items.AddRange(new object[] { "aac", "libmp3lame" });
+                    cbVideoCodec.Items.AddRange(new object[] { "copy (без перекодирования)", "flv1", "libx264 (H.264)" });
+                    cbAudioCodec.Items.AddRange(new object[] { "copy", "aac", "libmp3lame" });
+                    break;
+                case "TS":
+                    cbVideoCodec.Items.AddRange(new object[] { "copy (без перекодирования)", "libx264 (H.264)", "libx265 (HEVC)", "mpeg2video" });
+                    cbAudioCodec.Items.AddRange(new object[] { "copy", "aac", "mp2", "ac3" });
+                    break;
+                case "3GP":
+                    cbVideoCodec.Items.AddRange(new object[] { "libx264 (H.264)", "mpeg4" });
+                    cbAudioCodec.Items.AddRange(new object[] { "aac" });
+                    break;
+                case "OGV":
+                    cbVideoCodec.Items.AddRange(new object[] { "libtheora" });
+                    cbAudioCodec.Items.AddRange(new object[] { "libvorbis", "libopus" });
+                    break;
+                case "WMV":
+                    cbVideoCodec.Items.AddRange(new object[] { "wmv2", "libx264 (H.264)" });
+                    cbAudioCodec.Items.AddRange(new object[] { "wmav2", "libmp3lame" });
+                    break;
+                case "GIF":
+                    cbVideoCodec.Items.AddRange(new object[] { "gif" });
+                    cbAudioCodec.Items.AddRange(new object[] { });
                     break;
                 default:
                     cbVideoCodec.Items.AddRange(new object[] { "libx264 (H.264)" });
                     cbAudioCodec.Items.AddRange(new object[] { "aac" });
                     break;
             }
-            
+
             if (cbVideoCodec.Items.Count > 0) cbVideoCodec.SelectedIndex = 0;
             if (cbAudioCodec.Items.Count > 0) cbAudioCodec.SelectedIndex = 0;
         }
@@ -881,22 +977,46 @@ namespace Converter
                 conv.AddParameter("-loglevel verbose");
                 conv.AddParameter($"-i \"{inputPath}\"");
 
+                bool isGif = string.Equals(format, "gif", StringComparison.OrdinalIgnoreCase);
+                bool videoCopy = string.Equals(vcodec, "copy", StringComparison.OrdinalIgnoreCase);
+                bool audioCopy = chkEnableAudio.Checked && string.Equals(acodec, "copy", StringComparison.OrdinalIgnoreCase);
+
                 if (chkHardwareAccel.Checked)
                 {
                     conv.AddParameter("-hwaccel auto");
                 }
 
-                if (!string.IsNullOrWhiteSpace(scaleFilter))
+                // GIF не содержит аудио
+                if (isGif)
                 {
-                    conv.AddParameter($"-vf {scaleFilter}");
+                    conv.AddParameter("-an");
+                }
+                else if (!chkEnableAudio.Checked)
+                {
+                    conv.AddParameter("-an");
                 }
 
-                conv.AddParameter($"-c:v {vcodec}");
-                conv.AddParameter("-pix_fmt yuv420p");
-
-                if (vcodec.Contains("264") || vcodec.Contains("265"))
+                // Видео кодирование/копирование
+                if (videoCopy)
                 {
-                    conv.AddParameter($"-crf {crf} -preset medium");
+                    conv.AddParameter("-c:v copy");
+                }
+                else
+                {
+                    if (!string.IsNullOrWhiteSpace(scaleFilter))
+                    {
+                        conv.AddParameter($"-vf {scaleFilter}");
+                    }
+                    conv.AddParameter($"-c:v {vcodec}");
+                    if (!isGif)
+                    {
+                        conv.AddParameter("-pix_fmt yuv420p");
+                    }
+                    if (vcodec.IndexOf("x264", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        vcodec.IndexOf("x265", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        conv.AddParameter($"-crf {crf} -preset medium");
+                    }
                 }
 
                 var threads = (int)nudThreads.Value;
@@ -905,16 +1025,20 @@ namespace Converter
                     conv.AddParameter($"-threads {threads}");
                 }
 
-                if (chkEnableAudio.Checked)
+                // Аудио кодирование/копирование (если не GIF и аудио включено)
+                if (!isGif && chkEnableAudio.Checked)
                 {
-                    conv.AddParameter($"-c:a {acodec} -b:a {abitrate}");
-                }
-                else
-                {
-                    conv.AddParameter("-an");
+                    if (audioCopy)
+                    {
+                        conv.AddParameter("-c:a copy");
+                    }
+                    else
+                    {
+                        conv.AddParameter($"-c:a {acodec} -b:a {abitrate}");
+                    }
                 }
 
-                if (format == "mp4")
+                if (string.Equals(format, "mp4", StringComparison.OrdinalIgnoreCase))
                 {
                     conv.AddParameter("-movflags +faststart");
                 }
