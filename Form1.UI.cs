@@ -94,7 +94,7 @@ namespace Converter
             base.OnLoad(e);
             BuildUi();
             SetDefaults();
-            InitializeThemeSupport();
+            InitializeAdvancedTheming();
             _ = EnsureFfmpegAsync();
         }
 

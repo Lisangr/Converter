@@ -64,7 +64,7 @@ namespace Converter.UI.Controls
         public event EventHandler<EventArgs>? DoubleClicked;
         public event EventHandler<ThumbnailPositionEventArgs>? RefreshThumbnailRequested;
         
-        private readonly ThemeChangedEventHandler _themeChangedHandler;
+        private readonly EventHandler<Theme> _themeChangedHandler;
         
         public FileListItem(string filePath)
         {
@@ -273,19 +273,19 @@ namespace Converter.UI.Controls
         
         public void ApplyTheme(Theme theme)
         {
-            BackColor = theme.BackgroundSecondary;
-            ForeColor = theme.TextPrimary;
-            _fileName.ForeColor = theme.TextPrimary;
-            _fileSize.ForeColor = theme.TextSecondary;
-            _duration.ForeColor = theme.TextSecondary;
-            _progressBar.ForeColor = theme.Accent;
-            _thumbnail.BackColor = theme.BackgroundPrimary;
+            BackColor = theme["Surface"];
+            ForeColor = theme["TextPrimary"];
+            _fileName.ForeColor = theme["TextPrimary"];
+            _fileSize.ForeColor = theme["TextSecondary"];
+            _duration.ForeColor = theme["TextSecondary"];
+            _progressBar.ForeColor = theme["Accent"];
+            _thumbnail.BackColor = theme["BackgroundSecondary"];
             _thumbnail.BorderStyle = BorderStyle.FixedSingle;
-            _removeButton.BackColor = theme.Error;
+            _removeButton.BackColor = theme["Error"];
             _removeButton.ForeColor = Color.White;
             _removeButton.FlatStyle = FlatStyle.Flat;
             _removeButton.FlatAppearance.BorderSize = 0;
-            _progressBar.BackColor = theme.Border;
+            _progressBar.BackColor = theme["Border"];
             Invalidate();
         }
 
