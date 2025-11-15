@@ -32,6 +32,7 @@ namespace Converter
         private ShareService _shareService = new ShareService();
         private readonly List<QueueItem> _conversionHistory = new();
         private Button? _btnShare;
+        private Button? _btnOpenEditor;
         private NotificationService? _notificationService;
         private NotificationSettings _notificationSettings = new();
         private Button? _btnNotificationSettings;
@@ -340,6 +341,10 @@ namespace Converter
             _btnShare.Enabled = false;
             _btnShare.Click += OnShareButtonClick;
 
+            _btnOpenEditor = CreateStyledButton("🎬 Открыть редактор", 680);
+            _btnOpenEditor.Enabled = false;
+            _btnOpenEditor.Click += OnOpenEditorClick;
+
             btnAddFiles.Click += btnAddFiles_Click;
             btnRemoveSelected.Click += btnRemoveSelected_Click;
             btnClearAll.Click += (s, e) => ClearAllFiles();
@@ -349,9 +354,11 @@ namespace Converter
                 btnAddFiles,
                 btnRemoveSelected,
                 btnClearAll,
-                _btnShare
+                _btnShare,
+                _btnOpenEditor
             });
             UpdateShareButtonState();
+            UpdateEditorButtonState();
 
             // Initialize ThumbnailService
             _thumbnailService = new ThumbnailService();
@@ -404,6 +411,39 @@ namespace Converter
         private void OnDragDropPanelFileRemoved(object? sender, string filePath)
         {
             RemoveFileByPath(filePath);
+        }
+
+        private void OnOpenEditorClick(object? sender, EventArgs e)
+        {
+            if (_dragDropPanel == null)
+            {
+                MessageBox.Show("Панель файлов не инициализирована", "Ошибка");
+                return;
+            }
+
+            var files = _dragDropPanel.GetFilePaths();
+            if (files.Length == 0)
+            {
+                MessageBox.Show("Сначала добавьте видео файл!", "Внимание");
+                return;
+            }
+
+            var firstFile = files[0];
+            if (!File.Exists(firstFile))
+            {
+                MessageBox.Show("Выбранный файл не найден. Добавьте файл заново.", "Ошибка");
+                return;
+            }
+
+            try
+            {
+                using var editorForm = new VideoEditorForm(firstFile);
+                editorForm.ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Не удалось открыть редактор: {ex.Message}", "Ошибка");
+            }
         }
 
         private void BuildRightPanel()
@@ -1638,6 +1678,7 @@ namespace Converter
 
             AppendLog($"Добавлено файлов: {paths.Length}");
             DebounceEstimate();
+            UpdateEditorButtonState();
         }
 
         private ConversionSettings CreateConversionSettings()
@@ -1739,6 +1780,8 @@ namespace Converter
                 _queueManager?.RemoveItem(id);
                 _queueItemLookup.Remove(item.FilePath);
             }
+
+            UpdateEditorButtonState();
         }
 
         private void RemoveFileByPath(string filePath)
@@ -1761,6 +1804,7 @@ namespace Converter
             _dragDropPanel?.ClearFiles(notify: false);
             UpdateQueueStatistics();
             DebounceEstimate();
+            UpdateEditorButtonState();
         }
 
         private void OpenVideoInPlayer(string filePath)
@@ -2383,6 +2427,16 @@ namespace Converter
             }
 
             _btnShare.Enabled = _conversionHistory.Any(x => x.Status == ConversionStatus.Completed);
+        }
+
+        private void UpdateEditorButtonState()
+        {
+            if (_btnOpenEditor == null || filesPanel == null)
+            {
+                return;
+            }
+
+            _btnOpenEditor.Enabled = filesPanel.Controls.Count > 0;
         }
 
         private async Task ConvertFileAsync(string inputPath, string outputPath, string format, string vcodec,
