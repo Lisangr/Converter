@@ -1,51 +1,20 @@
-# Converter (FFmpeg-powered WinForms Studio)
+# Converter
 
-Converter — это настольное приложение на .NET 8/Windows Forms, которое объединяет пакетное кодирование видео через FFmpeg с богатым интерфейсом: плиточная панель drag&drop, полноценный редактор роликов, умные пресеты, аудиообработка, очередь заданий и система уведомлений.
+A layered WinForms media converter built on top of FFmpeg with clear separation between domain, application, infrastructure and presentation concerns.
 
-## Ключевые возможности
-### Импорт и предпросмотр
-- **Drag & Drop холст** с миниатюрами и карточками файлов ("перетащи или выбери"), которые показывают длительность, кодек и размер и позволяют удалять кликом по оверлею. 【F:UI/DragDropPanel.cs†L11-L113】【F:UI/VideoThumbnailControl.cs†L12-L129】
-- **Расширенный список файлов** с превью, шкалой прогресса, контекстным меню обновления кадра и индикатором статуса прямо на главной форме. 【F:UI/Controls/FileListItem.cs†L10-L120】
-- **Встроенный видео‑редактор** (кадрирование, обрезка, эффекты, правка субтитров, предпросмотр и экспорт). 【F:UI/VideoEditorForm.cs†L1-L120】
+## Projects
 
-### Настройки кодирования
-- Поддержка распространённых контейнеров и кодеков, CRF-профилей, масштабирования по пресетам/процентам, шаблонов имени файла, подпапки `Converted`, выбора FFmpeg, потоков и аппаратного ускорения. 【F:Form1.UI.cs†L886-L1205】
-- **Аудиоблок** позволяет отключать дорожку либо настраивать кодек/битрейт и применять нормализацию, шумоподавление, эквалайзер и fade‑эффекты через отдельную панель. 【F:Form1.UI.cs†L1208-L1278】【F:UI/AudioProcessingPanel.cs†L1-L170】
-- **Сервис пресетов** подгружает десятки профилей (YouTube, Instagram, TikTok, archival и т.д.), группирует их по категориям и позволяет сохранять/загружать пользовательские профили в JSON/XML. 【F:Form1.UI.cs†L905-L1050】【F:Services/PresetService.cs†L1-L120】
+- `Converter.Domain` — immutable domain models for conversion requests, queue items and progress.
+- `Converter.Application` — abstractions, presenters and orchestrators that implement business rules.
+- `Converter.Infrastructure` — FFmpeg integration, persistence, notifications and thumbnail generation.
+- `Converter.WinForms` — thin UI shell that implements `IMainView` and wires up the presenter through `Host.CreateDefaultBuilder`.
+- `Converter.Application.Tests` — xUnit tests covering presenters, command builder and queue service.
 
-### Очередь и автоматизация
-- Отдельная вкладка "Очередь" c контролом управления (автостарт, ограничение параллельности, сортировки по приоритету/размеру/длительности/дате, фильтры по статусу, очищение завершённых). 【F:Form1.UI.cs†L431-L560】【F:UI/Controls/QueueControlPanel.cs†L1-L120】
-- **QueueManager** обрабатывает несколько файлов параллельно, ведёт прогресс, позволяет поднимать/опускать, приостанавливать, отменять элементы, выставлять приоритеты, собирать статистику и останавливать очередь при ошибке. 【F:Services/QueueManager.cs†L1-L120】【F:Services/QueueManager.cs†L120-L220】
-- После батча можно открыть диалог статистики (суммарные размеры, экономию места, скорость) и окно "Поделиться" с готовыми текстами для Twitter/Reddit/Discord/Kickstarter/Instagram и генератором карточки PNG. 【F:UI/Dialogs/StatisticsDialog.cs†L1-L70】【F:UI/Dialogs/ShareDialog.cs†L1-L120】
+## Running
 
-### Обратная связь и удобство
-- **Панель оценок** считает время/размер/экономию и отображает условную "производительность ПК" благодаря EstimationService, который анализирует медиа через FFmpeg. 【F:Form1.UI.cs†L90-L210】【F:UI/Controls/EstimatePanel.cs†L1-L70】【F:Services/EstimationService.cs†L1-L120】
-- Логи с таймстампами, двойной прогресс (общий + текущий), история завершённых конверсий и кнопка открытия системного видео‑редактора.
-- Автоустановка FFmpeg в `%LocalAppData%/Converter/ffmpeg`, если путь не указан. 【F:Form1.UI.cs†L2822-L2856】
-- **Уведомления**: гибкая настройка всплывающих toast'ов, звуков и напоминаний о прогрессе, включая кнопку "Открыть папку" в toast'е. 【F:Services/NotificationService.cs†L1-L120】【F:UI/Dialogs/NotificationSettingsForm.cs†L1-L90】
-- **Шеринг**: генерация отчёта, копирование готовых текстов и сохранение карточки с результатами. 【F:Form1.UI.cs†L2199-L2420】
+1. Ensure .NET 8.0 SDK is installed.
+2. Restore dependencies: `dotnet restore Converter.sln`
+3. Run the WinForms app: `dotnet run --project src/Converter.WinForms/Converter.WinForms.csproj`
+4. Execute tests: `dotnet test Converter.sln`
 
-### Темы и UI
-- ThemeManager управляет светлыми/тёмными палитрами, анимацией переходов, авто‑переключением по расписанию и пользовательским селектором темы на форме. 【F:Form1.cs†L12-L72】【F:Services/ThemeManager.cs†L1-L100】【F:UI/Controls/ThemeSelectorControl.cs†L1-L90】
-- Сплит‑макет: слева плитка и список файлов, справа вкладки "Пресеты", "Видео", "Аудио", "Очередь", снизу — прогресс и лог. 【F:Form1.UI.cs†L270-L360】
-
-## Требования
-- Windows 10/11
-- .NET 8.0 SDK (для сборки) / Desktop Runtime (для запуска)
-- Первое подключение к интернету для авто‑скачивания FFmpeg
-
-## Сборка и запуск
-```bash
-dotnet restore
-dotnet build
-dotnet run --project Converter.csproj
-```
-Или откройте `Converter.sln` в Visual Studio 2022+ и запустите F5. При первом старте приложение загрузит FFmpeg и запомнит путь (можно переопределить на вкладке "Видео" → "Расширенные" параметры).
-
-## Структура репозитория
-- `Form1.cs` / `Form1.UI.cs` — основная форма, инициализация UI, логика очереди и кодирования
-- `UI/` — пользовательские контролы, панели редактора, диалоги (подробнее см. [UI/README.md](UI/README.md))
-- `Services/` — вспомогательные сервисы: пресеты, оценки, очередь, уведомления, темы, аудиообработка, генерация миниатюр
-- `Models/` — DTO для очереди, оценок, пресетов, тем, отчётов
-- `Presets/` — данные предустановок
-- `TECHNICAL_DOCUMENTATION.md` — архитектурные детали и расширенные схемы
+FFmpeg binaries are downloaded at runtime via `Xabe.FFmpeg.Downloader` and cached under the application's data folder.
