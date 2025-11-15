@@ -7,6 +7,9 @@
     <Compile Update="Form1.UI.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Update="UI\AudioProcessingPanel.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Update="UI\Controls\EstimatePanel.cs">
       <SubType>UserControl</SubType>
     </Compile>
@@ -19,8 +22,59 @@
     <Compile Update="UI\Controls\PresetPanel.cs">
       <SubType>UserControl</SubType>
     </Compile>
-    <Compile Update="UI\Controls\ThemeToggleButton.cs">
+    <Compile Update="UI\Controls\QueueControlPanel.cs">
       <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="UI\Controls\QueueItemControl.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="UI\Controls\ThemeSelectorControl.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UI\CropPanel.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="UI\CustomEqualizerForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="UI\Dialogs\NotificationSettingsForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="UI\Dialogs\ShareDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="UI\Dialogs\StatisticsDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="UI\Dialogs\ThemeSettingsDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="UI\DragDropPanel.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="UI\EffectsPanel.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="UI\SubtitleEditDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="UI\SubtitlesEditorPanel.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="UI\TimelineEditorForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="UI\TrimPanel.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="UI\VideoEditorForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="UI\VideoPlayerPanel.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="UI\VideoThumbnailControl.cs">
+      <SubType>UserControl</SubType>
     </Compile>
   </ItemGroup>
 </Project>

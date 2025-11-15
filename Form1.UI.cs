@@ -971,9 +971,7 @@ namespace Converter
                     categoryTab.Controls.Add(categoryPanel);
                     categoryTabControl.TabPages.Add(categoryTab);
                 }
-                
-                // Временная отладка
-                MessageBox.Show($"Загружено пресетов: {presets.Count}\nКатегории: {string.Join(", ", presets.Select(p => p.Category).Distinct())}");
+            
             }
             else
             {

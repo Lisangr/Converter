@@ -16,7 +16,7 @@ namespace Converter.UI
         private readonly Label lblDuration;
 
         private IMediaInfo? currentMedia;
-        private readonly Timer playbackTimer;
+        private readonly System.Windows.Forms.Timer playbackTimer;
         private TimeSpan currentPosition = TimeSpan.Zero;
         private bool isPlaying;
 
@@ -101,7 +101,7 @@ namespace Converter.UI
             };
             controlPanel.Controls.Add(lblDuration);
 
-            playbackTimer = new Timer { Interval = 100 };
+            playbackTimer = new System.Windows.Forms.Timer { Interval = 100 };
             playbackTimer.Tick += PlaybackTimer_Tick;
         }
 

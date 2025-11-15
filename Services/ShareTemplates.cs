@@ -8,39 +8,22 @@ public static class ShareTemplates
 {
     public static string GetKickstarterUpdate(ShareReport report)
     {
-        return $"# 🎉 Update: Amazing Results!
-
-" +
-               $"Just tested the converter with **{report.FilesConverted} real files** and the results are incredible!
-
-" +
-               "## 📊 Stats:
-" +
-               $"- **Space saved:** {FormatBytes(report.TotalSpaceSaved)}
-" +
-               $"- **Processing time:** {FormatDuration(report.ProcessingTime)}
-" +
-               $"- **Most used codec:** {report.TopCodecs.FirstOrDefault() ?? "N/A"}
-
-" +
-               "This is why we need your support to make this tool even better!
-
-" +
+        return "# 🎉 Update: Amazing Results!" + Environment.NewLine + Environment.NewLine +
+               $"Just tested the converter with **{report.FilesConverted} real files** and the results are incredible!" + Environment.NewLine + Environment.NewLine +
+               "## 📊 Stats:" + Environment.NewLine +
+               $"- **Space saved:** {FormatBytes(report.TotalSpaceSaved)}" + Environment.NewLine +
+               $"- **Processing time:** {FormatDuration(report.ProcessingTime)}" + Environment.NewLine +
+               $"- **Most used codec:** {report.TopCodecs.FirstOrDefault() ?? "N/A"}" + Environment.NewLine + Environment.NewLine +
+               "This is why we need your support to make this tool even better!" + Environment.NewLine + Environment.NewLine +
                "Back us now: [link]";
     }
 
     public static string GetInstagramStory(ShareReport report)
     {
-        return $"💾 Compressed {report.FilesConverted} videos
-" +
-               $"Saved {FormatBytes(report.TotalSpaceSaved)}! 🎉
-
-" +
-               $"⏱️ In just {FormatDuration(report.ProcessingTime)}
-
-" +
-               "Try it yourself! 👆
-" +
+        return $"💾 Compressed {report.FilesConverted} videos" + Environment.NewLine +
+               $"Saved {FormatBytes(report.TotalSpaceSaved)}! 🎉" + Environment.NewLine + Environment.NewLine +
+               $"⏱️ In just {FormatDuration(report.ProcessingTime)}" + Environment.NewLine + Environment.NewLine +
+               "Try it yourself! 👆" + Environment.NewLine +
                "#VideoCompression #Tech #Productivity";
     }
 

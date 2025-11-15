@@ -11,6 +11,7 @@ namespace Converter
         [STAThread]
         static void Main()
         {
+            #if false
             ToastNotificationManagerCompat.OnActivated += toastArgs =>
             {
                 try
@@ -37,6 +38,7 @@ namespace Converter
                     // Ignore activation errors.
                 }
             };
+            #endif
 
             ApplicationConfiguration.Initialize();
             Application.Run(new Form1());

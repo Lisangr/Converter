@@ -21,8 +21,8 @@ namespace Converter.Services
         public event EventHandler<Theme>? ThemeChanged;
         public event ThemeTransitionProgressEventHandler? ThemeTransitionProgress;
 
-        private Timer? _transitionTimer;
-        private Timer? _autoSwitchTimer;
+        private System.Windows.Forms.Timer? _transitionTimer;
+        private System.Windows.Forms.Timer? _autoSwitchTimer;
         private Theme? _targetTheme;
         private Theme? _sourceTheme;
         private float _transitionProgress;
@@ -132,7 +132,7 @@ namespace Converter.Services
 
             _transitionTimer?.Stop();
             _transitionTimer?.Dispose();
-            _transitionTimer = new Timer { Interval = 16 };
+            _transitionTimer = new System.Windows.Forms.Timer { Interval = 16 };
             _transitionTimer.Tick += (s, e) =>
             {
                 _transitionProgress += 16f / AnimationDuration;
@@ -251,6 +251,11 @@ namespace Converter.Services
                         }
                         break;
 
+                    case TabPage page:
+                        page.BackColor = CurrentTheme["Background"];
+                        page.ForeColor = CurrentTheme["TextPrimary"];
+                        break;
+
                     case Panel panel:
                         panel.BackColor = panel.Tag?.ToString() == "Surface"
                             ? CurrentTheme["Surface"]
@@ -267,11 +272,6 @@ namespace Converter.Services
                         tab.ForeColor = CurrentTheme["TextPrimary"];
                         break;
 
-                    case TabPage page:
-                        page.BackColor = CurrentTheme["Background"];
-                        page.ForeColor = CurrentTheme["TextPrimary"];
-                        break;
-
                     case DataGridView dgv:
                         ApplyDataGridViewTheme(dgv);
                         break;
@@ -285,14 +285,14 @@ namespace Converter.Services
                         ss.ForeColor = CurrentTheme["TextPrimary"];
                         break;
 
-                    case ToolStrip ts:
-                        ts.BackColor = CurrentTheme["Surface"];
-                        ts.ForeColor = CurrentTheme["TextPrimary"];
-                        break;
-
                     case MenuStrip ms:
                         ms.BackColor = CurrentTheme["Surface"];
                         ms.ForeColor = CurrentTheme["TextPrimary"];
+                        break;
+
+                    case ToolStrip ts:
+                        ts.BackColor = CurrentTheme["Surface"];
+                        ts.ForeColor = CurrentTheme["TextPrimary"];
                         break;
 
                     case SplitContainer split:
@@ -382,7 +382,7 @@ namespace Converter.Services
 
         private void SetupAutoSwitchTimer()
         {
-            _autoSwitchTimer ??= new Timer { Interval = 60000 };
+            _autoSwitchTimer ??= new System.Windows.Forms.Timer { Interval = 60000 };
             _autoSwitchTimer.Tick -= AutoSwitchTimerOnTick;
             _autoSwitchTimer.Tick += AutoSwitchTimerOnTick;
             _autoSwitchTimer.Start();

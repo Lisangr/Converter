@@ -25,37 +25,7 @@ namespace Converter.Services
                 return;
             }
 
-            try
-            {
-                var toastContent = new ToastContentBuilder()
-                    .AddText(title)
-                    .AddText(message);
-
-                if (!string.IsNullOrWhiteSpace(imagePath) && File.Exists(imagePath))
-                {
-                    toastContent.AddInlineImage(new Uri(imagePath));
-                }
-
-                if (!string.IsNullOrWhiteSpace(folderPath))
-                {
-                    toastContent.AddArgument("folder", folderPath);
-                    toastContent.AddButton(new ToastButton()
-                        .SetContent("📁 Открыть папку")
-                        .AddArgument("action", "openFolder")
-                        .SetBackgroundActivation());
-                }
-
-                toastContent
-                    .AddButton(new ToastButton()
-                        .SetContent("Закрыть")
-                        .AddArgument("action", "dismiss")
-                        .SetBackgroundActivation())
-                    .Show();
-            }
-            catch
-            {
-                MessageBox.Show(message, title, MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
+            MessageBox.Show(message, title, MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         public void PlayCompletionSound()
@@ -139,39 +109,7 @@ namespace Converter.Services
                 return;
             }
 
-            try
-            {
-                var builder = new ToastContentBuilder()
-                    .AddText("✅ Конвертация завершена")
-                    .AddText($"Обработано: {result.ProcessedFiles} файлов")
-                    .AddProgressBar(value: 1.0, title: "Завершено", status: $"Сэкономлено {FormatFileSize(result.SpaceSaved)}");
-
-                if (!string.IsNullOrWhiteSpace(result.ThumbnailPath) && File.Exists(result.ThumbnailPath))
-                {
-                    builder.AddInlineImage(new Uri(result.ThumbnailPath));
-                }
-
-                if (!string.IsNullOrWhiteSpace(result.OutputFolder))
-                {
-                    builder.AddArgument("folder", result.OutputFolder);
-                    builder.AddButton(new ToastButton()
-                        .SetContent("📁 Открыть папку")
-                        .AddArgument("action", "openFolder")
-                        .SetBackgroundActivation());
-                }
-
-                builder
-                    .AddButton(new ToastButton()
-                        .SetContent("🔄 Конвертировать ещё")
-                        .AddArgument("action", "newConversion")
-                        .SetBackgroundActivation())
-                    .AddAudio(new ToastAudio().SetSrc(new Uri("ms-winsoundevent:Notification.Default")))
-                    .Show();
-            }
-            catch
-            {
-                ShowDesktopNotification("✅ Конвертация завершена", $"Обработано: {result.ProcessedFiles} файлов", result.ThumbnailPath, result.OutputFolder);
-            }
+            ShowDesktopNotification("✅ Конвертация завершена", $"Обработано: {result.ProcessedFiles} файлов\nСэкономлено: {FormatFileSize(result.SpaceSaved)}", result.ThumbnailPath, result.OutputFolder);
         }
 
         private string FormatFileSize(long bytes)
@@ -218,5 +156,15 @@ namespace Converter.Services
         public string? OutputFolder { get; set; }
         public string? ThumbnailPath { get; set; }
         public string? ErrorMessage { get; set; }
+        public long? OutputSize { get; set; }
+
+        public ConversionResult() { }
+
+        public ConversionResult(bool success, long? outputSize, string? errorMessage)
+        {
+            Success = success;
+            OutputSize = outputSize;
+            ErrorMessage = errorMessage;
+        }
     }
 }

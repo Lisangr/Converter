@@ -704,8 +704,6 @@ public class QueueManager
         }
 
         var outputSize = Math.Max(0, item.FileSizeBytes - random.Next(0, (int)Math.Max(1, item.FileSizeBytes / 10)));
-        return new ConversionResult(true, outputSize, null);
+        return new ConversionResult { Success = true, ProcessedFiles = 1, SpaceSaved = outputSize };
     }
 }
-
-public record ConversionResult(bool Success, long? OutputSize, string? ErrorMessage);

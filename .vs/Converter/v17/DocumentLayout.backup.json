@@ -74,8 +74,7 @@
               "RelativeToolTip": "UI\\Controls\\PresetButton.cs",
               "ViewState": "AgIAAAMAAAAAAAAAAAAAABsAAAAMAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-14T14:27:06.771Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-14T14:27:06.771Z"
             },
             {
               "$type": "Document",
@@ -87,8 +86,7 @@
               "RelativeToolTip": "UI\\Controls\\PresetPanel.cs",
               "ViewState": "AgIAAEcAAAAAAAAAAAAAwGEAAAASAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-14T14:15:37.288Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-14T14:15:37.288Z"
             },
             {
               "$type": "Document",
@@ -100,8 +98,7 @@
               "RelativeToolTip": "Services\\ThemeManager.cs",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAA8AAAAQAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-14T10:17:23.38Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-14T10:17:23.38Z"
             },
             {
               "$type": "Document",
@@ -113,8 +110,7 @@
               "RelativeToolTip": "UI\\Controls\\FileListItem.cs",
               "ViewState": "AgIAAM4AAAAAAAAAAAAWwOUAAAAtAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-14T09:38:51.203Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-14T09:38:51.203Z"
             },
             {
               "$type": "Document",
@@ -125,20 +121,19 @@
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.resx",
               "RelativeToolTip": "Form1.UI.resx",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001005|",
-              "WhenOpened": "2025-11-07T12:17:07.59Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-07T12:17:07.59Z"
             },
             {
               "$type": "Document",
               "DocumentIndex": 5,
-              "Title": "Form1.UI.cs [\u041A\u043E\u043D\u0441\u0442\u0440\u0443\u043A\u0442\u043E\u0440]",
+              "Title": "Form1.UI.cs [Design]",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.cs",
               "RelativeDocumentMoniker": "Form1.UI.cs",
-              "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.cs [\u041A\u043E\u043D\u0441\u0442\u0440\u0443\u043A\u0442\u043E\u0440]",
-              "RelativeToolTip": "Form1.UI.cs [\u041A\u043E\u043D\u0441\u0442\u0440\u0443\u043A\u0442\u043E\u0440]",
+              "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.cs [Design]",
+              "RelativeToolTip": "Form1.UI.cs [Design]",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-07T12:17:01.283Z",
-              "EditorCaption": " [\u041A\u043E\u043D\u0441\u0442\u0440\u0443\u043A\u0442\u043E\u0440]"
+              "EditorCaption": " [Design]"
             },
             {
               "$type": "Document",
@@ -159,7 +154,7 @@
               "RelativeDocumentMoniker": "Form1.UI.cs",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.cs",
               "RelativeToolTip": "Form1.UI.cs",
-              "ViewState": "AgIAAOoAAAAAAAAAAAD4v/oAAAAoAAAAAAAAAA==",
+              "ViewState": "AgIAAOoAAAAAAAAAAAD4v/oAAAARAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-07T12:10:00.732Z",
               "EditorCaption": ""

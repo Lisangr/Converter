@@ -24,3 +24,4 @@ C:\Users\User\source\repos\Converter\obj\Debug\net8.0-windows\refint\Converter.d
 C:\Users\User\source\repos\Converter\obj\Debug\net8.0-windows\Converter.pdb
 C:\Users\User\source\repos\Converter\obj\Debug\net8.0-windows\Converter.genruntimeconfig.cache
 C:\Users\User\source\repos\Converter\obj\Debug\net8.0-windows\ref\Converter.dll
+C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\Microsoft.Toolkit.Uwp.Notifications.dll
