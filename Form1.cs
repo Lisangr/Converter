@@ -10,7 +10,8 @@ namespace Converter
 {
     public partial class Form1 : Form
     {
-        private ThemeToggleButton? _themeToggle;
+        private ThemeSelectorControl? _themeSelector;
+        private Button? _themeMenuButton;
         private bool _themeInitialized;
 
         public Form1()
@@ -18,30 +19,47 @@ namespace Converter
             InitializeComponent();
         }
 
-        private void InitializeThemeSupport()
+        private void InitializeAdvancedTheming()
         {
-            if (_themeInitialized || panelLeftTop == null)
+            if (_themeInitialized)
             {
                 return;
             }
-
-            _themeToggle = new ThemeToggleButton
-            {
-                Anchor = AnchorStyles.Top | AnchorStyles.Right
-            };
-
-            panelLeftTop.Controls.Add(_themeToggle);
-            PositionThemeToggle();
 
             btnStart.Tag = "AccentButton";
 
             ThemeManager.Instance.ThemeChanged -= OnThemeChanged;
             ThemeManager.Instance.ThemeChanged += OnThemeChanged;
             ThemeManager.Instance.ApplyTheme(this);
-            ApplyThemeToDynamicControls(ThemeManager.Instance.CurrentTheme);
+            UpdateCustomControlsTheme(ThemeManager.Instance.CurrentTheme);
 
-            panelLeftTop.Resize -= PanelLeftTopOnResize;
-            panelLeftTop.Resize += PanelLeftTopOnResize;
+            _themeSelector = new ThemeSelectorControl
+            {
+                Visible = false,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right
+            };
+            Controls.Add(_themeSelector);
+
+            _themeMenuButton = new Button
+            {
+                Text = "🎨",
+                Size = new Size(35, 30),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                FlatStyle = FlatStyle.Flat,
+                Tag = "NoTheme"
+            };
+            _themeMenuButton.FlatAppearance.BorderSize = 0;
+            _themeMenuButton.Click += (s, e) =>
+            {
+                if (_themeSelector == null) return;
+                _themeSelector.Visible = !_themeSelector.Visible;
+                _themeSelector.BringToFront();
+            };
+            Controls.Add(_themeMenuButton);
+
+            Resize -= OnThemeControlsResize;
+            Resize += OnThemeControlsResize;
+            PositionThemeControls();
 
             _themeInitialized = true;
         }
@@ -55,11 +73,11 @@ namespace Converter
             }
 
             ThemeManager.Instance.ApplyTheme(this);
-            ApplyThemeToDynamicControls(theme);
+            UpdateCustomControlsTheme(theme);
             Refresh();
         }
 
-        private void ApplyThemeToDynamicControls(Theme theme)
+        private void UpdateCustomControlsTheme(Theme theme)
         {
             if (_estimatePanel != null)
             {
@@ -74,14 +92,24 @@ namespace Converter
                 }
             }
 
+            if (_queueItemsPanel != null)
+            {
+                foreach (var control in _queueItemsPanel.Controls.OfType<QueueItemControl>())
+                {
+                    control.BackColor = theme["Surface"];
+                    control.ForeColor = theme["TextPrimary"];
+                    control.Refresh();
+                }
+            }
+
             if (progressBarTotal != null)
             {
-                progressBarTotal.ForeColor = theme.Accent;
+                progressBarTotal.ForeColor = theme["Accent"];
             }
 
             if (progressBarCurrent != null)
             {
-                progressBarCurrent.ForeColor = theme.Accent;
+                progressBarCurrent.ForeColor = theme["Accent"];
             }
         }
 
@@ -91,14 +119,24 @@ namespace Converter
             base.OnFormClosed(e);
         }
 
-        private void PanelLeftTopOnResize(object? sender, EventArgs e) => PositionThemeToggle();
+        private void OnThemeControlsResize(object? sender, EventArgs e) => PositionThemeControls();
 
-        private void PositionThemeToggle()
+        private void PositionThemeControls()
         {
-            if (_themeToggle == null || panelLeftTop == null) return;
-            var x = Math.Max(10, panelLeftTop.Width - _themeToggle.Width - 10);
-            _themeToggle.Location = new Point(x, 8);
-            _themeToggle.BringToFront();
+            if (_themeMenuButton == null || _themeSelector == null)
+            {
+                return;
+            }
+
+            var padding = 10;
+            var buttonX = Math.Max(padding, ClientSize.Width - _themeMenuButton.Width - padding);
+            _themeMenuButton.Location = new Point(buttonX, padding);
+            _themeMenuButton.BringToFront();
+
+            var selectorX = Math.Max(padding, buttonX - _themeSelector.Width - 10);
+            var selectorY = _themeMenuButton.Bottom + 5;
+            _themeSelector.Location = new Point(selectorX, selectorY);
+            _themeSelector.BringToFront();
         }
     }
 }

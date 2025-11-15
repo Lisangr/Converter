@@ -3,9 +3,26 @@
               CurrentProfile="(Default)">
   <Profiles />
   <Settings>
-    <Setting Name="Theme" Type="System.String" Scope="User">
-      <Value Profile="(Default)">Light</Value>
+    <Setting Name="ThemeName" Type="System.String" Scope="User">
+      <Value Profile="(Default)">light</Value>
+    </Setting>
+    <Setting Name="ThemeAnimations" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">True</Value>
+    </Setting>
+    <Setting Name="ThemeAnimationDuration" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">300</Value>
+    </Setting>
+    <Setting Name="ThemeAutoSwitch" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="PreferredDarkTheme" Type="System.String" Scope="User">
+      <Value Profile="(Default)">dark</Value>
+    </Setting>
+    <Setting Name="DarkModeStart" Type="System.String" Scope="User">
+      <Value Profile="(Default)">20:00:00</Value>
+    </Setting>
+    <Setting Name="DarkModeEnd" Type="System.String" Scope="User">
+      <Value Profile="(Default)">07:00:00</Value>
     </Setting>
   </Settings>
 </SettingsFile>
-

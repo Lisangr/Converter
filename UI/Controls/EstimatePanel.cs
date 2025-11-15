@@ -82,7 +82,7 @@ namespace Converter.UI.Controls
             lblOutput.Text = "После конвертации: ...";
             lblSaved.Text = "Экономия: ...";
             lblTime.Text = "⏱️ Примерное время: ...";
-            lblTime.ForeColor = CurrentTheme.TextPrimary;
+            lblTime.ForeColor = CurrentTheme["TextPrimary"];
         }
 
         public void UpdateEstimate(ConversionEstimate estimate)
@@ -98,24 +98,24 @@ namespace Converter.UI.Controls
             pbPerf.Value = Math.Max(pbPerf.Minimum, Math.Min(pbPerf.Maximum, perf));
 
             if (estimate.EstimatedDuration.TotalMinutes > WarningThreshold)
-                lblTime.ForeColor = CurrentTheme.Warning;
+                lblTime.ForeColor = CurrentTheme["Warning"];
             else
-                lblTime.ForeColor = CurrentTheme.TextPrimary;
+                lblTime.ForeColor = CurrentTheme["TextPrimary"];
         }
 
         public void UpdateTheme(Theme theme)
         {
-            BackColor = theme.BackgroundSecondary;
-            ForeColor = theme.TextPrimary;
-            lblTitle.ForeColor = theme.TextPrimary;
-            lblInput.ForeColor = theme.TextSecondary;
-            lblOutput.ForeColor = theme.TextSecondary;
-            lblSaved.ForeColor = theme.TextSecondary;
-            lblTime.ForeColor = theme.TextPrimary;
-            lblPerf.ForeColor = theme.TextPrimary;
-            perfPanel.BackColor = theme.BackgroundPrimary;
-            pbPerf.ForeColor = theme.Accent;
-            pbPerf.BackColor = theme.Border;
+            BackColor = theme["BackgroundSecondary"];
+            ForeColor = theme["TextPrimary"];
+            lblTitle.ForeColor = theme["TextPrimary"];
+            lblInput.ForeColor = theme["TextSecondary"];
+            lblOutput.ForeColor = theme["TextSecondary"];
+            lblSaved.ForeColor = theme["TextSecondary"];
+            lblTime.ForeColor = theme["TextPrimary"];
+            lblPerf.ForeColor = theme["TextPrimary"];
+            perfPanel.BackColor = theme["Surface"];
+            pbPerf.ForeColor = theme["Accent"];
+            pbPerf.BackColor = theme["Border"];
             Invalidate();
         }
     }
