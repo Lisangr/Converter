@@ -55,6 +55,7 @@ namespace Converter
         private CheckBox chkEnableAudio = null!;
         private ComboBox cbAudioCodec = null!;
         private ComboBox cbAudioBitrate = null!;
+        private AudioProcessingPanel? _audioProcessingPanel;
 
         private TextBox txtOutputFolder = null!;
         private CheckBox chkCreateConvertedFolder = null!;
@@ -1038,38 +1039,62 @@ namespace Converter
 
         private void BuildAudioTab()
         {
-            var panel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(15), AutoScroll = true };
+            var container = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                ColumnCount = 1,
+                RowCount = 2
+            };
+            container.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            container.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            var settingsPanel = new Panel { Dock = DockStyle.Top, Padding = new Padding(15), AutoSize = true };
 
             int y = 10;
 
-            chkEnableAudio = new CheckBox 
-            { 
-                Left = 10, 
-                Top = y, 
-                Width = 200, 
-                Text = "Включить аудиодорожку", 
+            chkEnableAudio = new CheckBox
+            {
+                Left = 10,
+                Top = y,
+                Width = 220,
+                Text = "Включить аудиодорожку",
                 Checked = true,
                 Font = new Font("Segoe UI", 9F, FontStyle.Bold)
             };
-            chkEnableAudio.CheckedChanged += (s, e) => 
+            chkEnableAudio.CheckedChanged += (s, e) =>
             {
-                cbAudioCodec.Enabled = chkEnableAudio.Checked;
-                cbAudioBitrate.Enabled = chkEnableAudio.Checked;
+                var enabled = chkEnableAudio.Checked;
+                cbAudioCodec.Enabled = enabled;
+                cbAudioBitrate.Enabled = enabled;
+                if (_audioProcessingPanel != null)
+                {
+                    _audioProcessingPanel.Enabled = enabled;
+                }
             };
-            panel.Controls.Add(chkEnableAudio);
+            settingsPanel.Controls.Add(chkEnableAudio);
             y += 50;
 
-            panel.Controls.Add(CreateLabel("Аудио-кодек:", 10, y));
+            settingsPanel.Controls.Add(CreateLabel("Аудио-кодек:", 10, y));
             cbAudioCodec = CreateComboBox(140, y, 180);
-            panel.Controls.Add(cbAudioCodec);
+            settingsPanel.Controls.Add(cbAudioCodec);
             y += 40;
 
-            panel.Controls.Add(CreateLabel("Битрейт:", 10, y));
+            settingsPanel.Controls.Add(CreateLabel("Битрейт:", 10, y));
             cbAudioBitrate = CreateComboBox(140, y, 180);
             cbAudioBitrate.Items.AddRange(new object[] { "96k", "128k", "160k", "192k", "256k", "320k" });
-            panel.Controls.Add(cbAudioBitrate);
+            settingsPanel.Controls.Add(cbAudioBitrate);
 
-            tabAudio.Controls.Add(panel);
+            _audioProcessingPanel = new AudioProcessingPanel
+            {
+                Dock = DockStyle.Fill
+            };
+            _audioProcessingPanel.Enabled = chkEnableAudio.Checked;
+
+            container.Controls.Add(settingsPanel, 0, 0);
+            container.Controls.Add(_audioProcessingPanel, 0, 1);
+
+            tabAudio.Controls.Add(container);
         }
 
         private void BuildOutputTab()
@@ -1649,7 +1674,8 @@ namespace Converter
                 Crf = crf,
                 EnableAudio = chkEnableAudio.Checked,
                 UseHardwareAcceleration = chkHardwareAccel?.Checked ?? false,
-                Threads = threads
+                Threads = threads,
+                AudioProcessing = _audioProcessingPanel?.GetOptions().Clone()
             };
         }
 
@@ -2040,7 +2066,8 @@ namespace Converter
                         ContainerFormat = format,
                         AudioCodec = acodec,
                         AudioBitrate = ParseBitrate(abitrate),
-                        EnableAudio = chkEnableAudio.Checked
+                        EnableAudio = chkEnableAudio.Checked,
+                        AudioProcessing = _audioProcessingPanel?.GetOptions().Clone()
                     }
                 };
 
@@ -2379,13 +2406,14 @@ namespace Converter
                     System.IO.Directory.CreateDirectory(outputDir);
                 }
 
+                IMediaInfo? mediaInfo = null;
                 string? scaleFilter = null;
                 TimeSpan? estimatedDuration = null;
                 try
                 {
-                    var info = await FFmpeg.GetMediaInfo(inputPath);
-                    var v = info.VideoStreams?.FirstOrDefault();
-                    
+                    mediaInfo = await FFmpeg.GetMediaInfo(inputPath);
+                    var v = mediaInfo.VideoStreams?.FirstOrDefault();
+
                     if (v != null)
                     {
                         if (rbUsePreset.Checked)
@@ -2524,6 +2552,21 @@ namespace Converter
                 bool isGif = string.Equals(format, "gif", StringComparison.OrdinalIgnoreCase);
                 bool videoCopy = string.Equals(vcodec, "copy", StringComparison.OrdinalIgnoreCase);
                 bool audioCopy = chkEnableAudio.Checked && string.Equals(acodec, "copy", StringComparison.OrdinalIgnoreCase);
+                AudioProcessingOptions? audioProcessingOptions = null;
+                string? audioFilterString = null;
+                bool audioFiltersActive = false;
+                if (!isGif && chkEnableAudio.Checked && _audioProcessingPanel != null)
+                {
+                    var snapshot = _audioProcessingPanel.GetOptions().Clone();
+                    snapshot.TotalDuration = mediaInfo?.Duration.TotalSeconds ?? 0;
+                    var builtFilters = AudioProcessingService.BuildAudioFilterString(snapshot);
+                    if (!string.IsNullOrWhiteSpace(builtFilters))
+                    {
+                        audioProcessingOptions = snapshot;
+                        audioFilterString = builtFilters;
+                        audioFiltersActive = true;
+                    }
+                }
 
                 if (chkHardwareAccel.Checked)
                 {
@@ -2572,6 +2615,11 @@ namespace Converter
                 // Аудио кодирование/копирование (если не GIF и аудио включено)
                 if (!isGif && chkEnableAudio.Checked)
                 {
+                    if (audioCopy && audioFiltersActive)
+                    {
+                        audioCopy = false;
+                    }
+
                     if (audioCopy)
                     {
                         conv.AddParameter("-c:a copy");
@@ -2579,6 +2627,11 @@ namespace Converter
                     else
                     {
                         conv.AddParameter($"-c:a {acodec} -b:a {abitrate}");
+                    }
+
+                    if (audioFiltersActive && audioProcessingOptions != null)
+                    {
+                        AudioProcessingService.ApplyAudioProcessing(conv, audioProcessingOptions, audioFilterString);
                     }
                 }
 
