@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Threading;
@@ -10,6 +11,7 @@ using Xabe.FFmpeg.Downloader;
 using Converter.Models;
 using Converter.Services;
 using Converter.UI.Controls;
+using Converter.UI.Dialogs;
 
 namespace Converter
 {
@@ -22,6 +24,9 @@ namespace Converter
         private Button btnClearAll = null!;
         private FlowLayoutPanel filesPanel = null!;
         private ThumbnailService _thumbnailService = null!;
+        private ShareService _shareService = new ShareService();
+        private readonly List<QueueItem> _conversionHistory = new();
+        private Button? _btnShare;
 
         private TabControl tabSettings = null!;
         private TabPage tabVideo = null!;
@@ -314,12 +319,22 @@ namespace Converter
             btnAddFiles = CreateStyledButton("➕ Добавить файлы", 0);
             btnRemoveSelected = CreateStyledButton("➖ Удалить выбранные", 160);
             btnClearAll = CreateStyledButton("🗑 Очистить всё", 340);
+            _btnShare = CreateStyledButton("📤 Поделиться", 520);
+            _btnShare.Enabled = false;
+            _btnShare.Click += OnShareButtonClick;
 
             btnAddFiles.Click += btnAddFiles_Click;
             btnRemoveSelected.Click += btnRemoveSelected_Click;
             btnClearAll.Click += (s, e) => filesPanel.Controls.Clear();
 
-            panelLeftTop.Controls.AddRange(new Control[] { btnAddFiles, btnRemoveSelected, btnClearAll });
+            panelLeftTop.Controls.AddRange(new Control[]
+            {
+                btnAddFiles,
+                btnRemoveSelected,
+                btnClearAll,
+                _btnShare
+            });
+            UpdateShareButtonState();
 
             // Initialize ThumbnailService
             _thumbnailService = new ThumbnailService();
@@ -1337,7 +1352,7 @@ namespace Converter
             {
                 await EnsureFfmpegAsync();
                 var result = await ProcessAllFilesAsync(_cancellationTokenSource.Token);
-                
+
                 if (!_cancellationTokenSource.Token.IsCancellationRequested)
                 {
                     if (result.failed == 0)
@@ -1350,7 +1365,9 @@ namespace Converter
                         AppendLog($"⚠ Завершено с ошибками: успешно {result.ok} из {result.total}, ошибок {result.failed}");
                         MessageBox.Show(this, $"Конвертация завершена с ошибками.\nУспешно: {result.ok}/{result.total}", "Готово", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     }
-                    
+
+                    PromptShareResults(result.processedItems);
+
                     if (MessageBox.Show(this, "Открыть папку с файлами?", "Готово", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                     {
                         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
@@ -1383,10 +1400,11 @@ namespace Converter
                 progressBarCurrent.Value = 0;
                 lblStatusTotal.Text = "Готов к конвертации";
                 lblStatusCurrent.Text = "Ожидание...";
+                UpdateShareButtonState();
             }
         }
 
-        private async Task<(int total, int ok, int failed)> ProcessAllFilesAsync(CancellationToken cancellationToken)
+        private async Task<(int total, int ok, int failed, List<QueueItem> processedItems)> ProcessAllFilesAsync(CancellationToken cancellationToken)
         {
             var format = (cbFormat.SelectedItem?.ToString() ?? "MP4").ToLowerInvariant();
             var vcodec = ExtractCodecName(cbVideoCodec.SelectedItem?.ToString() ?? "libx264");
@@ -1398,6 +1416,7 @@ namespace Converter
             var totalFiles = items.Count;
             var processedFiles = 0;
             var failedFiles = 0;
+            var processedItems = new List<QueueItem>();
 
             foreach (var item in items)
             {
@@ -1407,6 +1426,20 @@ namespace Converter
                 processedFiles++;
                 var inputPath = item.FilePath;
                 var fileName = System.IO.Path.GetFileNameWithoutExtension(inputPath);
+                var presetLabel = GetSelectedPresetLabel();
+                var inputInfo = new System.IO.FileInfo(inputPath);
+                var queueItem = new QueueItem
+                {
+                    InputPath = inputPath,
+                    OutputPath = GenerateOutputPath(inputPath, format),
+                    FileSizeBytes = inputInfo.Exists ? inputInfo.Length : 0,
+                    Status = ConversionStatus.Pending,
+                    Settings = new QueueItemSettings
+                    {
+                        VideoCodec = vcodec,
+                        PresetName = presetLabel
+                    }
+                };
 
                 // Update status
                 this.BeginInvoke(new Action(() =>
@@ -1418,9 +1451,14 @@ namespace Converter
                     progressBarCurrent.Value = 0;
                 }));
 
+                var stopwatch = Stopwatch.StartNew();
+                queueItem.Status = ConversionStatus.Processing;
+                queueItem.StartedAt = DateTime.Now;
+
                 try
                 {
-                    var outputPath = GenerateOutputPath(inputPath, format);
+                    var outputPath = queueItem.OutputPath ?? GenerateOutputPath(inputPath, format);
+                    queueItem.OutputPath = outputPath;
                     await ConvertFileAsync(inputPath, outputPath, format, vcodec, acodec, abitrate, crf, cancellationToken);
 
                     this.BeginInvoke(new Action(() =>
@@ -1428,6 +1466,16 @@ namespace Converter
                         item.IsConverting = false;
                         item.BackColor = Color.LightGreen;
                     }));
+
+                    if (System.IO.File.Exists(outputPath))
+                    {
+                        var outputInfo = new System.IO.FileInfo(outputPath);
+                        queueItem.OutputFileSizeBytes = outputInfo.Length;
+                    }
+                    stopwatch.Stop();
+                    queueItem.ConversionDuration = stopwatch.Elapsed;
+                    queueItem.CompletedAt = DateTime.Now;
+                    queueItem.Status = ConversionStatus.Completed;
                 }
                 catch (OperationCanceledException)
                 {
@@ -1436,6 +1484,10 @@ namespace Converter
                         item.IsConverting = false;
                         item.BackColor = Color.LightGray;
                     }));
+                    stopwatch.Stop();
+                    queueItem.ConversionDuration = stopwatch.Elapsed;
+                    queueItem.CompletedAt = DateTime.Now;
+                    queueItem.Status = ConversionStatus.Canceled;
                     throw;
                 }
                 catch (Exception ex)
@@ -1447,6 +1499,16 @@ namespace Converter
                         item.IsConverting = false;
                         item.BackColor = Color.LightCoral;
                     }));
+                    stopwatch.Stop();
+                    queueItem.ConversionDuration = stopwatch.Elapsed;
+                    queueItem.CompletedAt = DateTime.Now;
+                    queueItem.Status = ConversionStatus.Failed;
+                }
+                finally
+                {
+                    queueItem.CompletedAt ??= DateTime.Now;
+                    processedItems.Add(queueItem);
+                    _conversionHistory.Add(queueItem);
                 }
             }
 
@@ -1456,7 +1518,77 @@ namespace Converter
                 lblStatusTotal.Text = $"Завершено: {processedFiles} из {totalFiles}";
             }));
 
-            return (totalFiles, totalFiles - failedFiles, failedFiles);
+            return (totalFiles, totalFiles - failedFiles, failedFiles, processedItems);
+        }
+
+        private void PromptShareResults(List<QueueItem> batchItems)
+        {
+            UpdateShareButtonState();
+
+            var successfulItems = batchItems
+                .Where(x => x.Status == ConversionStatus.Completed)
+                .ToList();
+
+            if (!successfulItems.Any())
+            {
+                return;
+            }
+
+            var savedBytes = successfulItems.Sum(x =>
+                Math.Max(0, x.FileSizeBytes - (x.OutputFileSizeBytes ?? x.FileSizeBytes)));
+
+            var message =
+                $"Конвертация завершена!\n\n" +
+                $"Файлов обработано: {successfulItems.Count}\n" +
+                $"Сэкономлено места: {FormatFileSize(savedBytes)}\n\n" +
+                "Хотите поделиться результатами?";
+
+            if (MessageBox.Show(this, message, "Поздравляем!", MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Information) == DialogResult.Yes)
+            {
+                ShowShareDialog(successfulItems);
+            }
+        }
+
+        private void OnShareButtonClick(object? sender, EventArgs e)
+        {
+            var successfulItems = _conversionHistory
+                .Where(x => x.Status == ConversionStatus.Completed)
+                .ToList();
+
+            if (!successfulItems.Any())
+            {
+                MessageBox.Show(this, "Еще нет завершённых конверсий для публикации.", "Нет данных",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                UpdateShareButtonState();
+                return;
+            }
+
+            ShowShareDialog(successfulItems);
+        }
+
+        private void ShowShareDialog(List<QueueItem> completedItems)
+        {
+            var report = _shareService.GenerateReport(completedItems);
+            if (report == null)
+            {
+                MessageBox.Show(this, "Не удалось собрать статистику для отчета.", "Нет данных",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            using var shareDialog = new ShareDialog(report);
+            shareDialog.ShowDialog(this);
+        }
+
+        private void UpdateShareButtonState()
+        {
+            if (_btnShare == null)
+            {
+                return;
+            }
+
+            _btnShare.Enabled = _conversionHistory.Any(x => x.Status == ConversionStatus.Completed);
         }
 
         private async Task ConvertFileAsync(string inputPath, string outputPath, string format, string vcodec, 
@@ -1710,10 +1842,25 @@ namespace Converter
             }
         }
 
+        private string GetSelectedPresetLabel()
+        {
+            if (rbUsePreset?.Checked == true)
+            {
+                return cbPreset?.SelectedItem?.ToString() ?? "Пресет";
+            }
+
+            if (rbUsePercent?.Checked == true)
+            {
+                return $"{nudPercent.Value}% масштаб";
+            }
+
+            return "Оригинал";
+        }
+
         private string GenerateOutputPath(string inputPath, string format)
         {
             var outputFolder = txtOutputFolder.Text.Trim();
-            
+
             // If output folder is not set, use the input file's directory
             if (string.IsNullOrEmpty(outputFolder))
             {
