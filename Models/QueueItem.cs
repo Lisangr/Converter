@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.IO;
+using Converter.Services;
 
 namespace Converter.Models;
 
@@ -97,4 +98,5 @@ public class ConversionSettings
     public bool CopyAudio { get; set; }
     public bool UseHardwareAcceleration { get; set; }
     public int? Threads { get; set; }
+    public AudioProcessingOptions? AudioProcessing { get; set; }
 }
