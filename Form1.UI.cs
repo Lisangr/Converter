@@ -34,6 +34,7 @@ namespace Converter
         private TabPage tabOutput = null!;
         private TabPage tabAdvanced = null!;
         private TabPage tabPresets = null!;
+        private TabPage tabQueue = null!;
 
         private ComboBox cbFormat = null!;
         private ComboBox cbVideoCodec = null!;
@@ -81,6 +82,13 @@ namespace Converter
         private UI.Controls.EstimatePanel? _estimatePanel;
         private System.Windows.Forms.Timer? _estimateDebounce;
         private CancellationTokenSource? _estimateCts;
+
+        // Queue management
+        private QueueManager? _queueManager;
+        private QueueControlPanel? _queueControlPanel;
+        private FlowLayoutPanel? _queueItemsPanel;
+        private readonly Dictionary<string, Guid> _queueItemLookup = new(StringComparer.OrdinalIgnoreCase);
+        private ConversionStatus? _queueFilterStatus;
         protected override void OnLoad(EventArgs e)
         {
             base.OnLoad(e);
@@ -325,7 +333,7 @@ namespace Converter
 
             btnAddFiles.Click += btnAddFiles_Click;
             btnRemoveSelected.Click += btnRemoveSelected_Click;
-            btnClearAll.Click += (s, e) => filesPanel.Controls.Clear();
+            btnClearAll.Click += (s, e) => ClearAllFiles();
 
             panelLeftTop.Controls.AddRange(new Control[]
             {
@@ -376,14 +384,407 @@ namespace Converter
             tabPresets = new TabPage("⭐ Пресеты");
             tabVideo = new TabPage("🎬 Видео");
             tabAudio = new TabPage("🔊 Аудио");
+            tabQueue = new TabPage("📋 Очередь");
 
             BuildPresetsTab();
             BuildVideoTab();
             BuildAudioTab();
+            BuildQueueTab();
 
-            tabSettings.TabPages.AddRange(new[] { tabPresets, tabVideo, tabAudio });
+            tabSettings.TabPages.AddRange(new[] { tabPresets, tabVideo, tabAudio, tabQueue });
             panel.Controls.Add(tabSettings);
             splitContainerMain.Panel2.Controls.Add(panel);
+        }
+
+        private void BuildQueueTab()
+        {
+            var container = new Panel
+            {
+                Dock = DockStyle.Fill,
+                Padding = new Padding(10),
+                BackColor = Color.White
+            };
+
+            tabQueue.Controls.Clear();
+            tabQueue.Controls.Add(container);
+            InitializeQueueManagement(container);
+        }
+
+        private void InitializeQueueManagement(Control host)
+        {
+            _queueManager = new QueueManager(ConvertQueueItemAsync);
+            _queueManager.ItemAdded += OnQueueItemAdded;
+            _queueManager.ItemRemoved += OnQueueItemRemoved;
+            _queueManager.ItemStatusChanged += OnQueueItemStatusChanged;
+            _queueManager.ItemProgressChanged += OnQueueItemProgressChanged;
+            _queueManager.QueueCompleted += OnQueueCompleted;
+            _queueManager.ErrorOccurred += OnQueueError;
+
+            _queueControlPanel = new QueueControlPanel
+            {
+                Dock = DockStyle.Top
+            };
+            _queueControlPanel.StartClicked += async (_, _) =>
+            {
+                if (_queueManager != null)
+                {
+                    _queueManager.ResumeQueue();
+                    await _queueManager.StartQueueAsync();
+                }
+            };
+            _queueControlPanel.PauseClicked += (_, _) => _queueManager?.PauseQueue();
+            _queueControlPanel.StopClicked += (_, _) => _queueManager?.StopQueue();
+            _queueControlPanel.ClearCompletedClicked += (_, _) =>
+            {
+                _queueManager?.ClearCompleted();
+                RefreshQueueDisplay();
+            };
+            _queueControlPanel.SortRequested += (_, sortType) => SortQueue(sortType);
+            _queueControlPanel.FilterChanged += (_, status) => FilterQueue(status);
+            _queueControlPanel.AutoStartChanged += (_, value) =>
+            {
+                if (_queueManager != null)
+                {
+                    _queueManager.AutoStartNextItem = value;
+                }
+            };
+            _queueControlPanel.StopOnErrorChanged += (_, value) =>
+            {
+                if (_queueManager != null)
+                {
+                    _queueManager.StopOnError = value;
+                }
+            };
+            _queueControlPanel.MaxConcurrentChanged += (_, value) =>
+            {
+                if (_queueManager != null)
+                {
+                    _queueManager.MaxConcurrentConversions = value;
+                }
+            };
+
+            _queueItemsPanel = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                Padding = new Padding(5),
+                BackColor = Color.WhiteSmoke
+            };
+
+            host.Controls.Add(_queueItemsPanel);
+            host.Controls.Add(_queueControlPanel);
+        }
+
+        private void OnQueueItemAdded(object? sender, QueueItem item)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => OnQueueItemAdded(sender, item)));
+                return;
+            }
+
+            if (_queueItemsPanel == null)
+            {
+                return;
+            }
+
+            if (_queueFilterStatus.HasValue && item.Status != _queueFilterStatus.Value)
+            {
+                return;
+            }
+
+            if (_queueItemsPanel.Controls.OfType<QueueItemControl>().Any(c => c.Item.Id == item.Id))
+            {
+                return;
+            }
+
+            _queueItemsPanel.Controls.Add(CreateQueueItemControl(item));
+            UpdateQueueStatistics();
+        }
+
+        private void OnQueueItemRemoved(object? sender, QueueItem item)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => OnQueueItemRemoved(sender, item)));
+                return;
+            }
+
+            if (_queueItemsPanel == null)
+            {
+                return;
+            }
+
+            var control = _queueItemsPanel.Controls
+                .OfType<QueueItemControl>()
+                .FirstOrDefault(c => c.Item.Id == item.Id);
+
+            if (control != null)
+            {
+                _queueItemsPanel.Controls.Remove(control);
+                control.Dispose();
+            }
+
+            _queueItemLookup.Remove(item.FilePath);
+            UpdateQueueStatistics();
+        }
+
+        private void OnQueueItemStatusChanged(object? sender, QueueItem item)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => OnQueueItemStatusChanged(sender, item)));
+                return;
+            }
+
+            if (_queueItemsPanel == null)
+            {
+                return;
+            }
+
+            var control = _queueItemsPanel.Controls
+                .OfType<QueueItemControl>()
+                .FirstOrDefault(c => c.Item.Id == item.Id);
+
+            control?.UpdateDisplay();
+            UpdateQueueStatistics();
+
+            if (_queueFilterStatus.HasValue)
+            {
+                FilterQueue(_queueFilterStatus);
+            }
+        }
+
+        private void OnQueueItemProgressChanged(object? sender, QueueItem item)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => OnQueueItemProgressChanged(sender, item)));
+                return;
+            }
+
+            if (_queueItemsPanel == null)
+            {
+                return;
+            }
+
+            var control = _queueItemsPanel.Controls
+                .OfType<QueueItemControl>()
+                .FirstOrDefault(c => c.Item.Id == item.Id);
+
+            control?.UpdateDisplay();
+        }
+
+        private void OnQueueCompleted(object? sender, EventArgs e)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => OnQueueCompleted(sender, e)));
+                return;
+            }
+
+            var stats = _queueManager?.GetStatistics();
+            if (stats == null)
+            {
+                return;
+            }
+
+            MessageBox.Show(
+                this,
+                "Все файлы обработаны!",
+                "Конвертация завершена",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+
+            ShowStatisticsDialog(stats);
+        }
+
+        private void OnQueueError(object? sender, string message)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => OnQueueError(sender, message)));
+                return;
+            }
+
+            MessageBox.Show(
+                this,
+                $"Произошла ошибка: {message}",
+                "Ошибка",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+
+        private QueueItemControl CreateQueueItemControl(QueueItem item)
+        {
+            var control = new QueueItemControl(item);
+            control.MoveUpClicked += (_, id) =>
+            {
+                _queueManager?.MoveItemUp(id);
+                RefreshQueueDisplay();
+            };
+            control.MoveDownClicked += (_, id) =>
+            {
+                _queueManager?.MoveItemDown(id);
+                RefreshQueueDisplay();
+            };
+            control.StarToggled += (_, id) =>
+            {
+                _queueManager?.ToggleStarred(id);
+                RefreshQueueDisplay();
+            };
+            control.CancelClicked += (_, id) => _queueManager?.CancelItem(id);
+            control.PriorityChanged += (_, data) =>
+            {
+                _queueManager?.SetItemPriority(data.Id, data.Priority);
+                RefreshQueueDisplay();
+            };
+            return control;
+        }
+
+        private void SortQueue(string sortType)
+        {
+            if (_queueManager == null)
+            {
+                return;
+            }
+
+            switch (sortType)
+            {
+                case "priority":
+                    _queueManager.SortByPriority();
+                    break;
+                case "size":
+                    _queueManager.SortBySize();
+                    break;
+                case "duration":
+                    _queueManager.SortByDuration();
+                    break;
+                case "date":
+                    _queueManager.SortByAddedDate();
+                    break;
+            }
+
+            RefreshQueueDisplay();
+        }
+
+        private void FilterQueue(ConversionStatus? status)
+        {
+            if (_queueManager == null)
+            {
+                return;
+            }
+
+            _queueFilterStatus = status;
+            RefreshQueueDisplay(GetFilteredQueueItems());
+        }
+
+        private void RefreshQueueDisplay(IEnumerable<QueueItem>? items = null)
+        {
+            if (_queueItemsPanel == null || _queueManager == null)
+            {
+                return;
+            }
+
+            var source = items ?? GetFilteredQueueItems();
+            _queueItemsPanel.SuspendLayout();
+            _queueItemsPanel.Controls.Clear();
+            foreach (var item in source)
+            {
+                _queueItemsPanel.Controls.Add(CreateQueueItemControl(item));
+            }
+            _queueItemsPanel.ResumeLayout();
+            UpdateQueueStatistics();
+        }
+
+        private IEnumerable<QueueItem> GetFilteredQueueItems()
+        {
+            if (_queueManager == null)
+            {
+                return Array.Empty<QueueItem>();
+            }
+
+            if (!_queueFilterStatus.HasValue)
+            {
+                return _queueManager.GetQueue();
+            }
+
+            if (_queueFilterStatus == ConversionStatus.Processing)
+            {
+                return _queueManager.GetQueue()
+                    .Where(x => x.Status == ConversionStatus.Processing || x.Status == ConversionStatus.Paused)
+                    .ToList();
+            }
+
+            return _queueManager.FilterByStatus(_queueFilterStatus.Value);
+        }
+
+        private void UpdateQueueStatistics()
+        {
+            if (_queueManager == null || _queueControlPanel == null)
+            {
+                return;
+            }
+
+            var stats = _queueManager.GetStatistics();
+            _queueControlPanel.UpdateStatistics(stats);
+        }
+
+        private void ShowStatisticsDialog(QueueStatistics stats)
+        {
+            using var dialog = new StatisticsDialog(stats);
+            dialog.ShowDialog(this);
+        }
+
+        private async Task<ConversionResult> ConvertQueueItemAsync(QueueItem item, IProgress<int> progress, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var settings = item.Settings ?? CreateConversionSettings();
+                var format = (settings.ContainerFormat ?? (cbFormat.SelectedItem?.ToString() ?? "mp4")).ToLowerInvariant();
+                var videoCodec = settings.VideoCodec ?? ExtractCodecName(cbVideoCodec.SelectedItem?.ToString() ?? "libx264");
+                var audioCodec = settings.AudioCodec ?? ExtractCodecName(cbAudioCodec.SelectedItem?.ToString() ?? "aac");
+                var audioBitrate = settings.AudioBitrate.HasValue ? $"{settings.AudioBitrate}k" : (cbAudioBitrate.SelectedItem?.ToString() ?? "192k");
+                var crf = settings.Crf ?? ExtractCRF(cbQuality.SelectedItem?.ToString() ?? "Хорошее (CRF 23)");
+                var output = item.OutputPath ?? GenerateOutputPath(item.FilePath, format);
+                item.OutputPath = output;
+
+                var adapter = new Progress<double>(value =>
+                {
+                    var percent = (int)Math.Round(value);
+                    percent = Math.Clamp(percent, 0, 100);
+                    progress.Report(percent);
+                });
+
+                await ConvertFileAsync(
+                    item.FilePath,
+                    output,
+                    format,
+                    videoCodec,
+                    audioCodec,
+                    audioBitrate,
+                    crf,
+                    cancellationToken,
+                    adapter);
+
+                long? outputSize = null;
+                if (System.IO.File.Exists(output))
+                {
+                    outputSize = new System.IO.FileInfo(output).Length;
+                }
+
+                return new ConversionResult(true, outputSize, null);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                return new ConversionResult(false, null, ex.Message);
+            }
         }
 
         private void BuildPresetsTab()
@@ -1136,9 +1537,76 @@ namespace Converter
 
                 // Asynchronously probe file info
                 _ = ProbeFileAsync(fileItem, path);
+
+                if (_queueManager != null)
+                {
+                    var info = new System.IO.FileInfo(path);
+                    var settings = CreateConversionSettings();
+                    var format = settings.ContainerFormat ?? (cbFormat.SelectedItem?.ToString() ?? "mp4");
+                    var queueItem = new QueueItem
+                    {
+                        FilePath = path,
+                        OutputPath = GenerateOutputPath(path, format),
+                        FileSizeBytes = info.Exists ? info.Length : 0,
+                        Duration = TimeSpan.Zero,
+                        AddedAt = DateTime.Now,
+                        Settings = settings
+                    };
+                    _queueManager.AddItem(queueItem);
+                    _queueItemLookup[path] = queueItem.Id;
+                }
             }
 
             AppendLog($"Добавлено файлов: {paths.Length}");
+        }
+
+        private ConversionSettings CreateConversionSettings()
+        {
+            var format = (cbFormat.SelectedItem?.ToString() ?? "MP4").ToLowerInvariant();
+            var videoCodec = ExtractCodecName(cbVideoCodec.SelectedItem?.ToString() ?? "libx264");
+            var audioCodec = ExtractCodecName(cbAudioCodec.SelectedItem?.ToString() ?? "aac");
+            int? audioBitrate = null;
+            if (chkEnableAudio.Checked)
+            {
+                var bitrateText = cbAudioBitrate.SelectedItem?.ToString();
+                if (!string.IsNullOrWhiteSpace(bitrateText))
+                {
+                    var sanitized = bitrateText.EndsWith("k", StringComparison.OrdinalIgnoreCase)
+                        ? bitrateText[..^1]
+                        : bitrateText;
+                    if (int.TryParse(sanitized, out var parsed))
+                    {
+                        audioBitrate = parsed;
+                    }
+                }
+            }
+
+            var crf = ExtractCRF(cbQuality.SelectedItem?.ToString() ?? "CRF 23");
+            var threads = nudThreads != null && nudThreads.Value > 0 ? (int?)nudThreads.Value : null;
+
+            return new ConversionSettings
+            {
+                VideoCodec = videoCodec,
+                AudioCodec = audioCodec,
+                AudioBitrate = audioBitrate,
+                PresetName = cbPreset.SelectedItem?.ToString(),
+                ContainerFormat = format,
+                Crf = crf,
+                EnableAudio = chkEnableAudio.Checked,
+                UseHardwareAcceleration = chkHardwareAccel?.Checked ?? false,
+                Threads = threads
+            };
+        }
+
+        private static int? ParseBitrate(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+
+            var sanitized = value.EndsWith("k", StringComparison.OrdinalIgnoreCase) ? value[..^1] : value;
+            return int.TryParse(sanitized, out var parsed) ? parsed : null;
         }
 
         private async Task LoadThumbnailAsync(FileListItem item)
@@ -1179,6 +1647,21 @@ namespace Converter
             filesPanel.Controls.Remove(item);
             item.Dispose();
             DebounceEstimate();
+
+            if (_queueItemLookup.TryGetValue(item.FilePath, out var id))
+            {
+                _queueManager?.RemoveItem(id);
+                _queueItemLookup.Remove(item.FilePath);
+            }
+        }
+
+        private void ClearAllFiles()
+        {
+            filesPanel.Controls.Clear();
+            _queueManager?.ClearQueue();
+            _queueItemLookup.Clear();
+            UpdateQueueStatistics();
+            DebounceEstimate();
         }
 
         private void OpenVideoInPlayer(string filePath)
@@ -1206,7 +1689,20 @@ namespace Converter
                 await EnsureFfmpegAsync();
                 var info = await FFmpeg.GetMediaInfo(path);
                 var v = info.VideoStreams?.FirstOrDefault();
-                
+
+                if (_queueItemLookup.TryGetValue(path, out var queueId))
+                {
+                    var fileInfo = new System.IO.FileInfo(path);
+                    _queueManager?.UpdateItem(queueId, q =>
+                    {
+                        q.Duration = info.Duration;
+                        if (fileInfo.Exists)
+                        {
+                            q.FileSizeBytes = fileInfo.Length;
+                        }
+                    });
+                }
+
                 this.BeginInvoke(new Action(() =>
                 {
                     if (v != null)
@@ -1235,15 +1731,22 @@ namespace Converter
         private void btnRemoveSelected_Click(object? sender, EventArgs e)
         {
             var selectedItems = filesPanel.Controls.OfType<FileListItem>().Where(item => item.BackColor == Color.LightBlue).ToList();
-            
+
             foreach (var item in selectedItems)
             {
                 filesPanel.Controls.Remove(item);
                 item.Dispose();
+
+                if (_queueItemLookup.TryGetValue(item.FilePath, out var id))
+                {
+                    _queueManager?.RemoveItem(id);
+                    _queueItemLookup.Remove(item.FilePath);
+                }
             }
-            
+
             AppendLog($"Удалено файлов: {selectedItems.Count}");
             DebounceEstimate();
+            UpdateQueueStatistics();
         }
 
         private void cbFormat_SelectedIndexChanged(object? sender, EventArgs e)
@@ -1430,14 +1933,19 @@ namespace Converter
                 var inputInfo = new System.IO.FileInfo(inputPath);
                 var queueItem = new QueueItem
                 {
-                    InputPath = inputPath,
+                    FilePath = inputPath,
                     OutputPath = GenerateOutputPath(inputPath, format),
                     FileSizeBytes = inputInfo.Exists ? inputInfo.Length : 0,
                     Status = ConversionStatus.Pending,
-                    Settings = new QueueItemSettings
+                    AddedAt = DateTime.Now,
+                    Settings = new ConversionSettings
                     {
                         VideoCodec = vcodec,
-                        PresetName = presetLabel
+                        PresetName = presetLabel,
+                        ContainerFormat = format,
+                        AudioCodec = acodec,
+                        AudioBitrate = ParseBitrate(abitrate),
+                        EnableAudio = chkEnableAudio.Checked
                     }
                 };
 
@@ -1459,7 +1967,7 @@ namespace Converter
                 {
                     var outputPath = queueItem.OutputPath ?? GenerateOutputPath(inputPath, format);
                     queueItem.OutputPath = outputPath;
-                    await ConvertFileAsync(inputPath, outputPath, format, vcodec, acodec, abitrate, crf, cancellationToken);
+                    await ConvertFileAsync(inputPath, outputPath, format, vcodec, acodec, abitrate, crf, cancellationToken, null);
 
                     this.BeginInvoke(new Action(() =>
                     {
@@ -1487,7 +1995,7 @@ namespace Converter
                     stopwatch.Stop();
                     queueItem.ConversionDuration = stopwatch.Elapsed;
                     queueItem.CompletedAt = DateTime.Now;
-                    queueItem.Status = ConversionStatus.Canceled;
+                    queueItem.Status = ConversionStatus.Cancelled;
                     throw;
                 }
                 catch (Exception ex)
@@ -1591,8 +2099,8 @@ namespace Converter
             _btnShare.Enabled = _conversionHistory.Any(x => x.Status == ConversionStatus.Completed);
         }
 
-        private async Task ConvertFileAsync(string inputPath, string outputPath, string format, string vcodec, 
-            string acodec, string abitrate, int crf, CancellationToken cancellationToken)
+        private async Task ConvertFileAsync(string inputPath, string outputPath, string format, string vcodec,
+            string acodec, string abitrate, int crf, CancellationToken cancellationToken, IProgress<double>? progressObserver = null)
         {
             var fileName = System.IO.Path.GetFileName(inputPath);
             AppendLog($"🎬 Начало: {fileName} -> {System.IO.Path.GetFileName(outputPath)}");
@@ -1718,6 +2226,7 @@ namespace Converter
                     {
                         var percent = Math.Clamp(args.Percent, 0, 100);
                         progressBarCurrent.Value = (int)percent;
+                        progressObserver?.Report(percent);
                         
                         // Вычисляем оставшееся время на основе оценки
                         string timeDisplay;

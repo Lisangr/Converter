@@ -6,5 +6,6 @@ public enum ConversionStatus
     Processing,
     Completed,
     Failed,
-    Canceled
+    Paused,
+    Cancelled
 }
