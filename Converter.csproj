@@ -8,7 +8,18 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!-- Exclude generated files from nested projects (src/**/obj, src/**/bin) to prevent duplicate assembly attributes -->
   <ItemGroup>
+    <Compile Remove="**/obj/**/*.cs" />
+    <Compile Remove="**/bin/**/*.cs" />
+    <None Remove="**/obj/**" />
+    <None Remove="**/bin/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="8.0.0" />
     <PackageReference Include="Xabe.FFmpeg" Version="6.0.2" />
     <PackageReference Include="Xabe.FFmpeg.Downloader" Version="5.1.0" />
     <PackageReference Include="System.Text.Json" Version="9.0.0" />

@@ -11,7 +11,7 @@ using Xabe.FFmpeg;
 
 namespace Converter.Services
 {
-    public class ThumbnailService
+    public class ThumbnailService : IDisposable
     {
         private readonly string _cacheDirectory;
         private readonly ConcurrentDictionary<string, Image> _memoryCache;

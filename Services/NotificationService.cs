@@ -1,9 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Media;
-using System.Windows.Forms;
-using Microsoft.Toolkit.Uwp.Notifications;
 
 namespace Converter.Services
 {
@@ -25,7 +24,8 @@ namespace Converter.Services
                 return;
             }
 
-            MessageBox.Show(message, title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            // UI-agnostic: log instead of MessageBox to avoid blocking UI thread from service layer
+            Debug.WriteLine($"Notification: {title} - {message}");
         }
 
         public void PlayCompletionSound()

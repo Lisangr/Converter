@@ -1,5 +1,14 @@
-using System.Diagnostics;
-using Microsoft.Toolkit.Uwp.Notifications;
+using System;
+using System.Windows.Forms;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Converter.Application.Abstractions;
+using Converter.Application.Builders;
+using Converter.Application.Presenters;
+using Converter.Application.Services;
+using Converter.Infrastructure.Ffmpeg;
+using Converter.Infrastructure.Notifications;
+using Converter.Infrastructure.Persistence;
 
 namespace Converter
 {
@@ -11,37 +20,35 @@ namespace Converter
         [STAThread]
         static void Main()
         {
-            #if false
-            ToastNotificationManagerCompat.OnActivated += toastArgs =>
-            {
-                try
-                {
-                    var args = ToastArguments.Parse(toastArgs.Argument);
-                    var action = args.Get("action");
+            System.Windows.Forms.Application.EnableVisualStyles();
+            System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
+            
+            var services = new ServiceCollection()
+                .AddLogging(configure => 
+                    configure.AddDebug()
+                            .SetMinimumLevel(LogLevel.Debug))
+                .AddSingleton<IConversionCommandBuilder, ConversionCommandBuilder>()
+                .AddSingleton<IFFmpegExecutor, FFmpegExecutor>()
+                .AddSingleton<IConversionOrchestrator, ConversionOrchestrator>()
+                .AddSingleton<IQueueService, QueueService>()
+                .AddSingleton<INotificationGateway, NotificationGateway>()
+                .AddSingleton<IThumbnailProvider, ThumbnailProvider>()
+                .AddSingleton<ISettingsStore, FileSettingsStore>()
+                .AddSingleton<IPresetRepository, JsonPresetRepository>()
+                .BuildServiceProvider();
 
-                    if (string.Equals(action, "openFolder", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var folder = args.Get("folder");
-                        if (!string.IsNullOrWhiteSpace(folder))
-                        {
-                            Process.Start(new ProcessStartInfo
-                            {
-                                FileName = "explorer.exe",
-                                Arguments = folder,
-                                UseShellExecute = true
-                            });
-                        }
-                    }
-                }
-                catch
-                {
-                    // Ignore activation errors.
-                }
-            };
-            #endif
+            // Create and configure the main form
+            var view = new Form1() as IMainView;
+            var presenter = new MainPresenter(
+                view,
+                services.GetRequiredService<IQueueService>(),
+                services.GetRequiredService<IConversionOrchestrator>(),
+                services.GetRequiredService<INotificationGateway>(),
+                services.GetRequiredService<ISettingsStore>(),
+                services.GetRequiredService<IPresetRepository>(),
+                services.GetRequiredService<ILogger<MainPresenter>>());
 
-            ApplicationConfiguration.Initialize();
-            Application.Run(new Form1());
+            System.Windows.Forms.Application.Run((Form)view);
         }
     }
 }

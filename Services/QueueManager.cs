@@ -15,6 +15,7 @@ public class QueueManager
     private readonly object _syncRoot = new();
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _itemTokens = new();
     private readonly Func<QueueItem, IProgress<int>, CancellationToken, Task<ConversionResult>> _conversionHandler;
+    private readonly SynchronizationContext? _syncContext;
     private SemaphoreSlim _conversionSemaphore;
     private CancellationTokenSource _cancellationTokenSource;
     private bool _isPaused;
@@ -56,6 +57,20 @@ public class QueueManager
         _conversionSemaphore = new SemaphoreSlim(_maxConcurrentConversions, _maxConcurrentConversions);
         _cancellationTokenSource = new CancellationTokenSource();
         _conversionHandler = conversionHandler ?? SimulateConversionAsync;
+        _syncContext = SynchronizationContext.Current;
+    }
+
+    private void Post(Action action)
+    {
+        var ctx = _syncContext;
+        if (ctx != null)
+        {
+            ctx.Post(static s => ((Action)s!).Invoke(), action);
+        }
+        else
+        {
+            action();
+        }
     }
 
     public void AddItem(QueueItem item)
@@ -76,7 +91,7 @@ public class QueueManager
             _queue.Add(item);
         }
 
-        ItemAdded?.Invoke(this, item);
+        Post(() => ItemAdded?.Invoke(this, item));
 
         if (AutoStartNextItem && !_isProcessing)
         {
@@ -112,7 +127,7 @@ public class QueueManager
                 token.Cancel();
                 token.Dispose();
             }
-            ItemRemoved?.Invoke(this, removed);
+            Post(() => ItemRemoved?.Invoke(this, removed));
         }
     }
 
@@ -128,7 +143,7 @@ public class QueueManager
 
         foreach (var item in cleared)
         {
-            ItemRemoved?.Invoke(this, item);
+            Post(() => ItemRemoved?.Invoke(this, item));
         }
     }
 
@@ -146,7 +161,7 @@ public class QueueManager
 
         foreach (var item in completed)
         {
-            ItemRemoved?.Invoke(this, item);
+            Post(() => ItemRemoved?.Invoke(this, item));
         }
     }
 
@@ -164,7 +179,7 @@ public class QueueManager
             if (index > 0)
             {
                 _queue.Move(index, index - 1);
-                ItemStatusChanged?.Invoke(this, item);
+                Post(() => ItemStatusChanged?.Invoke(this, item));
             }
         }
     }
@@ -183,7 +198,7 @@ public class QueueManager
             if (index < _queue.Count - 1)
             {
                 _queue.Move(index, index + 1);
-                ItemStatusChanged?.Invoke(this, item);
+                Post(() => ItemStatusChanged?.Invoke(this, item));
             }
         }
     }
@@ -202,7 +217,7 @@ public class QueueManager
             if (index > 0)
             {
                 _queue.Move(index, 0);
-                ItemStatusChanged?.Invoke(this, item);
+                Post(() => ItemStatusChanged?.Invoke(this, item));
             }
         }
     }
@@ -221,7 +236,7 @@ public class QueueManager
             if (index < _queue.Count - 1)
             {
                 _queue.Move(index, _queue.Count - 1);
-                ItemStatusChanged?.Invoke(this, item);
+                Post(() => ItemStatusChanged?.Invoke(this, item));
             }
         }
     }
@@ -242,7 +257,7 @@ public class QueueManager
 
         if (target != null)
         {
-            ItemStatusChanged?.Invoke(this, target);
+            Post(() => ItemStatusChanged?.Invoke(this, target));
             if (AutoStartNextItem)
             {
                 SortByPriority();
@@ -271,7 +286,7 @@ public class QueueManager
 
         if (target != null)
         {
-            ItemStatusChanged?.Invoke(this, target);
+            Post(() => ItemStatusChanged?.Invoke(this, target));
             SortByPriority();
         }
     }
@@ -329,7 +344,7 @@ public class QueueManager
 
             if (!hasPending && !_stopRequested)
             {
-                QueueCompleted?.Invoke(this, EventArgs.Empty);
+                Post(() => QueueCompleted?.Invoke(this, EventArgs.Empty));
             }
 
             if (AutoStartNextItem && !_stopRequested && hasPending)
@@ -365,7 +380,7 @@ public class QueueManager
                 {
                     item.Progress = Math.Clamp(value, 0, 100);
                 }
-                ItemProgressChanged?.Invoke(this, item);
+                Post(() => ItemProgressChanged?.Invoke(this, item));
             });
 
         var result = await ConvertVideoAsync(item, progress, linkedCts.Token).ConfigureAwait(false);
@@ -384,7 +399,7 @@ public class QueueManager
                 item.ErrorMessage = result.ErrorMessage;
                 if (!string.IsNullOrWhiteSpace(result.ErrorMessage))
                 {
-                    ErrorOccurred?.Invoke(this, result.ErrorMessage);
+                    Post(() => ErrorOccurred?.Invoke(this, result.ErrorMessage!));
                 }
                 if (StopOnError)
                 {
@@ -400,7 +415,7 @@ public class QueueManager
                 }
             }
 
-            ItemStatusChanged?.Invoke(this, item);
+            Post(() => ItemStatusChanged?.Invoke(this, item));
         }
         catch (OperationCanceledException)
         {
@@ -409,7 +424,7 @@ public class QueueManager
                 item.Status = ConversionStatus.Cancelled;
             }
 
-            ItemStatusChanged?.Invoke(this, item);
+            Post(() => ItemStatusChanged?.Invoke(this, item));
         }
         catch (Exception ex)
         {
@@ -419,8 +434,8 @@ public class QueueManager
                 item.ErrorMessage = ex.Message;
             }
 
-            ItemStatusChanged?.Invoke(this, item);
-            ErrorOccurred?.Invoke(this, ex.Message);
+            Post(() => ItemStatusChanged?.Invoke(this, item));
+            Post(() => ErrorOccurred?.Invoke(this, ex.Message));
 
             if (StopOnError)
             {
@@ -452,7 +467,7 @@ public class QueueManager
 
         foreach (var item in processing)
         {
-            ItemStatusChanged?.Invoke(this, item);
+            Post(() => ItemStatusChanged?.Invoke(this, item));
         }
     }
 
@@ -471,7 +486,7 @@ public class QueueManager
 
         foreach (var item in paused)
         {
-            ItemStatusChanged?.Invoke(this, item);
+            Post(() => ItemStatusChanged?.Invoke(this, item));
         }
     }
 
@@ -507,7 +522,7 @@ public class QueueManager
             item.CompletedAt = null;
             item.ConversionDuration = null;
             item.OutputFileSizeBytes = null;
-            ItemStatusChanged?.Invoke(this, item);
+            Post(() => ItemStatusChanged?.Invoke(this, item));
         }
     }
 
@@ -529,7 +544,7 @@ public class QueueManager
 
             item.Status = ConversionStatus.Cancelled;
             item.Progress = 0;
-            ItemStatusChanged?.Invoke(this, item);
+            Post(() => ItemStatusChanged?.Invoke(this, item));
         }
     }
 
@@ -565,7 +580,7 @@ public class QueueManager
 
         if (target != null)
         {
-            ItemStatusChanged?.Invoke(this, target);
+            Post(() => ItemStatusChanged?.Invoke(this, target));
         }
     }
 

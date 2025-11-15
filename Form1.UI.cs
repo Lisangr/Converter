@@ -345,7 +345,7 @@ namespace Converter
             _btnOpenEditor.Enabled = false;
             _btnOpenEditor.Click += OnOpenEditorClick;
 
-            btnAddFiles.Click += btnAddFiles_Click;
+            btnAddFiles.Click += (s, e) => AddFilesRequested?.Invoke(this, EventArgs.Empty);
             btnRemoveSelected.Click += btnRemoveSelected_Click;
             btnClearAll.Click += (s, e) => ClearAllFiles();
 
@@ -1274,7 +1274,7 @@ namespace Converter
             btnStart.BackColor = Color.FromArgb(0, 120, 215);
             btnStart.ForeColor = Color.White;
             btnStart.FlatAppearance.BorderSize = 0;
-            btnStart.Click += btnStart_Click;
+            btnStart.Click += (s, e) => StartConversionRequested?.Invoke(this, EventArgs.Empty);
 
             btnStop = CreateStyledButton("⏹ Остановить", 180);
             btnStop.Top = _estimatePanel.Bottom + 10;
@@ -1284,7 +1284,7 @@ namespace Converter
             btnStop.ForeColor = Color.White;
             btnStop.Enabled = false;
             btnStop.FlatAppearance.BorderSize = 0;
-            btnStop.Click += (s, e) => _cancellationTokenSource?.Cancel();
+            btnStop.Click += (s, e) => CancelConversionRequested?.Invoke(this, EventArgs.Empty);
 
             _btnNotificationSettings = CreateStyledButton("🔔 Уведомления", 310);
             _btnNotificationSettings.Top = _estimatePanel.Bottom + 10;
@@ -2914,7 +2914,10 @@ namespace Converter
                     txtLog.AppendText($"[{timestamp}] {message}{Environment.NewLine}");
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+            }
         }
 
         private class FileConversionInfo

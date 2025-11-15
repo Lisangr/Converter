@@ -3,6 +3,14 @@ C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\Converter.deps.jso
 C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\Converter.runtimeconfig.json
 C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\Converter.dll
 C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\Converter.pdb
+C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\Microsoft.Extensions.DependencyInjection.dll
+C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\Microsoft.Extensions.DependencyInjection.Abstractions.dll
+C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\Microsoft.Extensions.Logging.dll
+C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\Microsoft.Extensions.Logging.Abstractions.dll
+C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\Microsoft.Extensions.Logging.Debug.dll
+C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\Microsoft.Extensions.Options.dll
+C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\Microsoft.Extensions.Primitives.dll
+C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\Microsoft.Toolkit.Uwp.Notifications.dll
 C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\Newtonsoft.Json.dll
 C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\System.IO.Pipelines.dll
 C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\System.Text.Encodings.Web.dll
@@ -24,4 +32,3 @@ C:\Users\User\source\repos\Converter\obj\Debug\net8.0-windows\refint\Converter.d
 C:\Users\User\source\repos\Converter\obj\Debug\net8.0-windows\Converter.pdb
 C:\Users\User\source\repos\Converter\obj\Debug\net8.0-windows\Converter.genruntimeconfig.cache
 C:\Users\User\source\repos\Converter\obj\Debug\net8.0-windows\ref\Converter.dll
-C:\Users\User\source\repos\Converter\bin\Debug\net8.0-windows\Microsoft.Toolkit.Uwp.Notifications.dll
