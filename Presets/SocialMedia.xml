@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Presets>
+  <Category Name="Social Media">
+    <Preset Id="instagram_story" Name="Instagram Story" Icon="📱" Description="Вертикальное видео 1080x1920">
+      <Video Width="1080" Height="1920" Codec="libx264" Bitrate="15000" Format="mp4" />
+      <Audio Enabled="true" Codec="aac" Bitrate="192" />
+      <Constraints MaxDurationSeconds="900" />
+      <UI ColorHex="#E1306C" IsPro="false" />
+    </Preset>
+    <Preset Id="instagram_feed" Name="Instagram Feed" Icon="📱" Description="Квадрат 1080x1080">
+      <Video Width="1080" Height="1080" Codec="libx264" Bitrate="12000" Format="mp4" />
+      <Audio Enabled="true" Codec="aac" Bitrate="192" />
+      <UI ColorHex="#C13584" IsPro="false" />
+    </Preset>
+    <Preset Id="instagram_reels" Name="Instagram Reels" Icon="📱" Description="Вертикальное 1080x1920, до 90 сек">
+      <Video Width="1080" Height="1920" Codec="libx264" Bitrate="25000" Format="mp4" />
+      <Audio Enabled="true" Codec="aac" Bitrate="192" />
+      <Constraints MaxDurationSeconds="90" />
+      <UI ColorHex="#FD1D1D" IsPro="false" />
+    </Preset>
+    <Preset Id="tiktok" Name="TikTok" Icon="🎵" Description="Вертикальное 1080x1920, до 60 сек">
+      <Video Width="1080" Height="1920" Codec="libx264" Bitrate="20000" Format="mp4" />
+      <Audio Enabled="true" Codec="aac" Bitrate="128" />
+      <Constraints MaxDurationSeconds="60" />
+      <UI ColorHex="#000000" IsPro="false" />
+    </Preset>
+  </Category>
+</Presets>

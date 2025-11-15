@@ -7,8 +7,20 @@
       "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:form1.ui.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\form1.resx||{81828910-B8B3-4D2B-99A3-067027C180C1}",
-      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:form1.resx||{81828910-B8B3-4D2B-99A3-067027C180C1}"
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\controls\\presetbutton.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\controls\\presetbutton.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\controls\\presetpanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\controls\\presetpanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\controls\\filelistitem.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\controls\\filelistitem.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\services\\thememanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:services\\thememanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|C:\\Users\\User\\source\\repos\\Converter\\form1.ui.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}|Form",
@@ -17,6 +29,10 @@
     {
       "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\form1.ui.resx||{81828910-B8B3-4D2B-99A3-067027C180C1}",
       "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:form1.ui.resx||{81828910-B8B3-4D2B-99A3-067027C180C1}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\form1.resx||{81828910-B8B3-4D2B-99A3-067027C180C1}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:form1.resx||{81828910-B8B3-4D2B-99A3-067027C180C1}"
     }
   ],
   "DocumentGroupContainers": [
@@ -26,7 +42,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 8,
+          "SelectedChildIndex": 12,
           "Children": [
             {
               "$type": "Bookmark",
@@ -50,7 +66,55 @@
             },
             {
               "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "PresetButton.cs",
+              "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\UI\\Controls\\PresetButton.cs",
+              "RelativeDocumentMoniker": "UI\\Controls\\PresetButton.cs",
+              "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\UI\\Controls\\PresetButton.cs",
+              "RelativeToolTip": "UI\\Controls\\PresetButton.cs",
+              "ViewState": "AgIAAAMAAAAAAAAAAAAAABsAAAAMAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-14T14:27:06.771Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "PresetPanel.cs",
+              "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\UI\\Controls\\PresetPanel.cs",
+              "RelativeDocumentMoniker": "UI\\Controls\\PresetPanel.cs",
+              "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\UI\\Controls\\PresetPanel.cs",
+              "RelativeToolTip": "UI\\Controls\\PresetPanel.cs",
+              "ViewState": "AgIAAEcAAAAAAAAAAAAAwGEAAAASAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-14T14:15:37.288Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "ThemeManager.cs",
+              "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Services\\ThemeManager.cs",
+              "RelativeDocumentMoniker": "Services\\ThemeManager.cs",
+              "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\Services\\ThemeManager.cs",
+              "RelativeToolTip": "Services\\ThemeManager.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA8AAAAQAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-14T10:17:23.38Z"
+            },
+            {
+              "$type": "Document",
               "DocumentIndex": 3,
+              "Title": "FileListItem.cs",
+              "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\UI\\Controls\\FileListItem.cs",
+              "RelativeDocumentMoniker": "UI\\Controls\\FileListItem.cs",
+              "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\UI\\Controls\\FileListItem.cs",
+              "RelativeToolTip": "UI\\Controls\\FileListItem.cs",
+              "ViewState": "AgIAAM4AAAAAAAAAAAAWwOUAAAAtAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-14T09:38:51.203Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
               "Title": "Form1.UI.resx",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.resx",
               "RelativeDocumentMoniker": "Form1.UI.resx",
@@ -61,7 +125,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 5,
               "Title": "Form1.UI.cs [Design]",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.cs",
               "RelativeDocumentMoniker": "Form1.UI.cs",
@@ -73,7 +137,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 7,
               "Title": "Form1.resx",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Form1.resx",
               "RelativeDocumentMoniker": "Form1.resx",
@@ -90,7 +154,7 @@
               "RelativeDocumentMoniker": "Form1.UI.cs",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.cs",
               "RelativeToolTip": "Form1.UI.cs",
-              "ViewState": "AgIAAIIDAAAAAAAAAADwv68DAAAVAAAAAAAAAA==",
+              "ViewState": "AgIAAOoAAAAAAAAAAAD4v/oAAAAoAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-07T12:10:00.732Z",
               "EditorCaption": ""

@@ -7,5 +7,20 @@
     <Compile Update="Form1.UI.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Update="UI\Controls\EstimatePanel.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UI\Controls\FileListItem.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="UI\Controls\PresetButton.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="UI\Controls\PresetPanel.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UI\Controls\ThemeToggleButton.cs">
+      <SubType>Component</SubType>
+    </Compile>
   </ItemGroup>
 </Project>
