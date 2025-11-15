@@ -10,6 +10,7 @@ using Xabe.FFmpeg;
 using Xabe.FFmpeg.Downloader;
 using Converter.Models;
 using Converter.Services;
+using Converter.UI;
 using Converter.UI.Controls;
 using Converter.UI.Dialogs;
 
@@ -23,6 +24,7 @@ namespace Converter
         private Button btnRemoveSelected = null!;
         private Button btnClearAll = null!;
         private FlowLayoutPanel filesPanel = null!;
+        private DragDropPanel? _dragDropPanel;
         private ThumbnailService _thumbnailService = null!;
         private ShareService _shareService = new ShareService();
         private readonly List<QueueItem> _conversionHistory = new();
@@ -362,8 +364,39 @@ namespace Converter
             filesPanel.DragEnter += Panel_DragEnter;
             filesPanel.DragDrop += Panel_DragDrop;
 
-            splitContainerMain.Panel1.Controls.Add(filesPanel);
+            var leftContent = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2
+            };
+            leftContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 240F));
+            leftContent.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            _dragDropPanel = new DragDropPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                Margin = new Padding(5)
+            };
+            _dragDropPanel.FilesAdded += OnDragDropPanelFilesAdded;
+            _dragDropPanel.FileRemoved += OnDragDropPanelFileRemoved;
+
+            leftContent.Controls.Add(_dragDropPanel, 0, 0);
+            leftContent.Controls.Add(filesPanel, 0, 1);
+
+            splitContainerMain.Panel1.Controls.Add(leftContent);
             splitContainerMain.Panel1.Controls.Add(panelLeftTop);
+        }
+
+        private void OnDragDropPanelFilesAdded(object? sender, string[] files)
+        {
+            AddFilesToList(files, syncDragDropPanel: false);
+        }
+
+        private void OnDragDropPanelFileRemoved(object? sender, string filePath)
+        {
+            RemoveFileByPath(filePath);
         }
 
         private void BuildRightPanel()
@@ -1515,7 +1548,7 @@ namespace Converter
             }
         }
 
-        private async void AddFilesToList(string[] paths)
+        private async void AddFilesToList(string[] paths, bool syncDragDropPanel = true)
         {
             foreach (var path in paths)
             {
@@ -1531,6 +1564,11 @@ namespace Converter
                 fileItem.RefreshThumbnailRequested += (s, e) => RefreshThumbnail(fileItem, e.Position);
 
                 filesPanel.Controls.Add(fileItem);
+
+                if (syncDragDropPanel)
+                {
+                    _dragDropPanel?.AddFiles(new[] { path }, notify: false);
+                }
 
                 // Asynchronously load thumbnail
                 _ = LoadThumbnailAsync(fileItem);
@@ -1558,6 +1596,7 @@ namespace Converter
             }
 
             AppendLog($"Добавлено файлов: {paths.Length}");
+            DebounceEstimate();
         }
 
         private ConversionSettings CreateConversionSettings()
@@ -1642,11 +1681,16 @@ namespace Converter
             }
         }
 
-        private void RemoveFileFromList(FileListItem item)
+        private void RemoveFileFromList(FileListItem item, bool syncDragDropPanel = true)
         {
             filesPanel.Controls.Remove(item);
             item.Dispose();
             DebounceEstimate();
+
+            if (syncDragDropPanel)
+            {
+                _dragDropPanel?.RemoveFile(item.FilePath, notify: false);
+            }
 
             if (_queueItemLookup.TryGetValue(item.FilePath, out var id))
             {
@@ -1655,11 +1699,24 @@ namespace Converter
             }
         }
 
+        private void RemoveFileByPath(string filePath)
+        {
+            var item = filesPanel.Controls
+                .OfType<FileListItem>()
+                .FirstOrDefault(i => string.Equals(i.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+
+            if (item != null)
+            {
+                RemoveFileFromList(item, syncDragDropPanel: false);
+            }
+        }
+
         private void ClearAllFiles()
         {
             filesPanel.Controls.Clear();
             _queueManager?.ClearQueue();
             _queueItemLookup.Clear();
+            _dragDropPanel?.ClearFiles(notify: false);
             UpdateQueueStatistics();
             DebounceEstimate();
         }
