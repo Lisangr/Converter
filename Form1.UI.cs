@@ -2,7 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Imaging;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -29,6 +32,9 @@ namespace Converter
         private ShareService _shareService = new ShareService();
         private readonly List<QueueItem> _conversionHistory = new();
         private Button? _btnShare;
+        private NotificationService? _notificationService;
+        private NotificationSettings _notificationSettings = new();
+        private Button? _btnNotificationSettings;
 
         private TabControl tabSettings = null!;
         private TabPage tabVideo = null!;
@@ -1217,6 +1223,12 @@ namespace Converter
             btnStop.FlatAppearance.BorderSize = 0;
             btnStop.Click += (s, e) => _cancellationTokenSource?.Cancel();
 
+            _btnNotificationSettings = CreateStyledButton("🔔 Уведомления", 310);
+            _btnNotificationSettings.Top = _estimatePanel.Bottom + 10;
+            _btnNotificationSettings.Width = 160;
+            _btnNotificationSettings.Height = 35;
+            _btnNotificationSettings.Click += BtnNotificationSettings_Click;
+
             btnSavePreset = CreateStyledButton("💾 Сохранить пресет", 890);
             btnSavePreset.Top = _estimatePanel.Bottom + 10;
             btnSavePreset.Width = 180;
@@ -1231,9 +1243,9 @@ namespace Converter
             btnLoadPreset.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnLoadPreset.Click += btnLoadPreset_Click;
 
-            panelTop.Controls.AddRange(new Control[] { 
+            panelTop.Controls.AddRange(new Control[] {
                 lblStatusTotal, progressBarTotal, lblStatusCurrent, progressBarCurrent,
-                btnStart, btnStop, btnSavePreset, btnLoadPreset 
+                btnStart, btnStop, _btnNotificationSettings!, btnSavePreset, btnLoadPreset
             });
 
             // Bottom panel - Log section
@@ -1281,6 +1293,10 @@ namespace Converter
                     // Reposition buttons below estimate panel on resize
                     btnStart.Top = _estimatePanel.Bottom + 10;
                     btnStop.Top = _estimatePanel.Bottom + 10;
+                    if (_btnNotificationSettings != null)
+                    {
+                        _btnNotificationSettings.Top = _estimatePanel.Bottom + 10;
+                    }
                     btnSavePreset.Top = _estimatePanel.Bottom + 10;
                     btnLoadPreset.Top = _estimatePanel.Bottom + 10;
                 }
@@ -1907,10 +1923,13 @@ namespace Converter
             btnStart.Enabled = false;
             btnStop.Enabled = true;
             _cancellationTokenSource = new CancellationTokenSource();
+            var conversionStart = DateTime.Now;
 
             try
             {
                 await EnsureFfmpegAsync();
+                conversionStart = DateTime.Now;
+                _notificationService?.ResetProgressNotifications();
                 var result = await ProcessAllFilesAsync(_cancellationTokenSource.Token);
 
                 if (!_cancellationTokenSource.Token.IsCancellationRequested)
@@ -1927,6 +1946,7 @@ namespace Converter
                     }
 
                     PromptShareResults(result.processedItems);
+                    await SendCompletionNotificationAsync(result, conversionStart);
 
                     if (MessageBox.Show(this, "Открыть папку с файлами?", "Готово", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                     {
@@ -1940,16 +1960,34 @@ namespace Converter
                 else
                 {
                     AppendLog("⚠ Конвертация отменена пользователем");
+                    _notificationService?.NotifyConversionComplete(new ConversionResult
+                    {
+                        Success = false,
+                        ErrorMessage = "Конвертация отменена пользователем.",
+                        OutputFolder = txtOutputFolder.Text
+                    });
                 }
             }
             catch (OperationCanceledException)
             {
                 AppendLog("⚠ Конвертация отменена");
+                _notificationService?.NotifyConversionComplete(new ConversionResult
+                {
+                    Success = false,
+                    ErrorMessage = "Конвертация отменена пользователем.",
+                    OutputFolder = txtOutputFolder.Text
+                });
             }
             catch (Exception ex)
             {
                 AppendLog($"❌ Критическая ошибка: {ex.Message}");
                 MessageBox.Show(this, $"Ошибка: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                _notificationService?.NotifyConversionComplete(new ConversionResult
+                {
+                    Success = false,
+                    ErrorMessage = ex.Message,
+                    OutputFolder = txtOutputFolder.Text
+                });
             }
             finally
             {
@@ -2074,6 +2112,7 @@ namespace Converter
                     queueItem.CompletedAt ??= DateTime.Now;
                     processedItems.Add(queueItem);
                     _conversionHistory.Add(queueItem);
+                    _notificationService?.NotifyProgress(processedFiles, totalFiles);
                 }
             }
 
@@ -2112,6 +2151,169 @@ namespace Converter
                     MessageBoxIcon.Information) == DialogResult.Yes)
             {
                 ShowShareDialog(successfulItems);
+            }
+        }
+
+        private void BtnNotificationSettings_Click(object? sender, EventArgs e)
+        {
+            var settingsCopy = new NotificationSettings
+            {
+                DesktopNotificationsEnabled = _notificationSettings.DesktopNotificationsEnabled,
+                ShowProgressNotifications = _notificationSettings.ShowProgressNotifications,
+                SoundEnabled = _notificationSettings.SoundEnabled,
+                UseCustomSound = _notificationSettings.UseCustomSound,
+                CustomSoundPath = _notificationSettings.CustomSoundPath
+            };
+
+            using var settingsForm = new NotificationSettingsForm(settingsCopy);
+            if (settingsForm.ShowDialog(this) == DialogResult.OK)
+            {
+                _notificationSettings = settingsForm.Settings;
+                SaveNotificationSettings(_notificationSettings);
+                _notificationService?.Dispose();
+                _notificationService = new NotificationService(_notificationSettings);
+            }
+        }
+
+        private NotificationSettings LoadNotificationSettings()
+        {
+            try
+            {
+                var path = GetNotificationSettingsPath();
+                if (File.Exists(path))
+                {
+                    var json = File.ReadAllText(path);
+                    var settings = JsonSerializer.Deserialize<NotificationSettings>(json);
+                    if (settings != null)
+                    {
+                        return settings;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Не удалось загрузить настройки уведомлений: {ex.Message}");
+            }
+
+            return new NotificationSettings();
+        }
+
+        private void SaveNotificationSettings(NotificationSettings settings)
+        {
+            try
+            {
+                var path = GetNotificationSettingsPath();
+                var directory = Path.GetDirectoryName(path);
+                if (!string.IsNullOrWhiteSpace(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions
+                {
+                    WriteIndented = true
+                });
+
+                File.WriteAllText(path, json);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Не удалось сохранить настройки уведомлений: {ex.Message}");
+            }
+        }
+
+        private string GetNotificationSettingsPath()
+        {
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Converter",
+                "notifications.json");
+        }
+
+        private async Task SendCompletionNotificationAsync((int total, int ok, int failed, List<QueueItem> processedItems) result, DateTime startTime)
+        {
+            if (_notificationService == null)
+            {
+                return;
+            }
+
+            var successfulItems = result.processedItems
+                .Where(x => x.Status == ConversionStatus.Completed)
+                .ToList();
+
+            var summary = new ConversionResult
+            {
+                Success = result.failed == 0,
+                ProcessedFiles = successfulItems.Count,
+                SpaceSaved = CalculateSpaceSaved(successfulItems),
+                Duration = DateTime.Now - startTime,
+                OutputFolder = txtOutputFolder.Text
+            };
+
+            if (summary.Success)
+            {
+                summary.ThumbnailPath = await GenerateNotificationThumbnailAsync(successfulItems);
+            }
+            else
+            {
+                summary.ErrorMessage = $"Успешно: {result.ok} из {result.total}. Ошибок: {result.failed}.";
+            }
+
+            _notificationService.NotifyConversionComplete(summary);
+        }
+
+        private long CalculateSpaceSaved(IEnumerable<QueueItem> items)
+        {
+            long total = 0;
+            foreach (var item in items)
+            {
+                var inputSize = item.FileSizeBytes;
+                var outputSize = item.OutputFileSizeBytes ?? inputSize;
+                if (outputSize < inputSize)
+                {
+                    total += inputSize - outputSize;
+                }
+            }
+
+            return total;
+        }
+
+        private async Task<string?> GenerateNotificationThumbnailAsync(IEnumerable<QueueItem> items)
+        {
+            if (_thumbnailService == null)
+            {
+                return null;
+            }
+
+            var videoPath = items
+                .Select(i => i.OutputPath)
+                .FirstOrDefault(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path));
+
+            if (string.IsNullOrWhiteSpace(videoPath))
+            {
+                return null;
+            }
+
+            try
+            {
+                var image = await _thumbnailService.GetThumbnailAsync(videoPath!);
+                var previewDirectory = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Converter",
+                    "Notifications");
+                Directory.CreateDirectory(previewDirectory);
+                var previewPath = Path.Combine(previewDirectory, $"{Guid.NewGuid():N}.jpg");
+                using (var bitmap = new Bitmap(image))
+                {
+                    bitmap.Save(previewPath, ImageFormat.Jpeg);
+                }
+
+                return previewPath;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Не удалось создать превью уведомления: {ex.Message}");
+                return null;
             }
         }
 

@@ -17,6 +17,8 @@ namespace Converter
         public Form1()
         {
             InitializeComponent();
+            _notificationSettings = LoadNotificationSettings();
+            _notificationService = new NotificationService(_notificationSettings);
         }
 
         private void InitializeAdvancedTheming()
@@ -116,6 +118,7 @@ namespace Converter
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             ThemeManager.Instance.ThemeChanged -= OnThemeChanged;
+            _notificationService?.Dispose();
             base.OnFormClosed(e);
         }
 

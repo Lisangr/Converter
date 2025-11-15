@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using Microsoft.Toolkit.Uwp.Notifications;
+
 namespace Converter
 {
     internal static class Program
@@ -8,8 +11,33 @@ namespace Converter
         [STAThread]
         static void Main()
         {
-            // To customize application configuration such as set high DPI settings or default font,
-            // see https://aka.ms/applicationconfiguration.
+            ToastNotificationManagerCompat.OnActivated += toastArgs =>
+            {
+                try
+                {
+                    var args = ToastArguments.Parse(toastArgs.Argument);
+                    var action = args.Get("action");
+
+                    if (string.Equals(action, "openFolder", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var folder = args.Get("folder");
+                        if (!string.IsNullOrWhiteSpace(folder))
+                        {
+                            Process.Start(new ProcessStartInfo
+                            {
+                                FileName = "explorer.exe",
+                                Arguments = folder,
+                                UseShellExecute = true
+                            });
+                        }
+                    }
+                }
+                catch
+                {
+                    // Ignore activation errors.
+                }
+            };
+
             ApplicationConfiguration.Initialize();
             Application.Run(new Form1());
         }
