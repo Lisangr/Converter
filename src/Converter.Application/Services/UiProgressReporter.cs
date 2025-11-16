@@ -48,7 +48,11 @@ namespace Converter.Application.Services
                 InvokeOnUiThread(() =>
                 {
                     item.Progress = progress;
-                    _view.UpdateQueueItem(item);
+                    // Queue item visual updates are now driven by MainPresenter via ViewModel.
+                    if (!string.IsNullOrEmpty(status))
+                    {
+                        _view.StatusText = $"{status} ({progress}%)";
+                    }
                 });
                 
                 _logger.LogDebug("Item {ItemId} progress: {Progress}% - {Status}", 
@@ -69,7 +73,7 @@ namespace Converter.Application.Services
                     var text = !string.IsNullOrEmpty(status)
                         ? $"{status} ({progress}%)"
                         : $"Global progress: {progress}%";
-                    _view.SetStatusText(text);
+                    _view.StatusText = text;
                 });
                 
                 _logger.LogDebug("Global progress: {Progress}% - {Status}", progress, status ?? "");
@@ -91,7 +95,6 @@ namespace Converter.Application.Services
                 {
                     item.Status = ConversionStatus.Failed;
                     item.ErrorMessage = error;
-                    _view.UpdateQueueItem(item);
                     _view.ShowError(error);
                 });
                 

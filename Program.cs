@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Converter.Application.Abstractions;
 using Converter.Application.Presenters;
 using Converter.Application.Services;
+using Converter.Application.ViewModels;
 using Converter.Infrastructure;
 using Converter.UI;
 
@@ -24,12 +25,15 @@ namespace Converter
                             .SetMinimumLevel(LogLevel.Information))
                 .AddSingleton<IMainView, Form1>()
                 .AddSingleton<MainPresenter>()
+                .AddSingleton<MainViewModel>()
                 .AddSingleton<IQueueRepository, QueueRepository>()
                 .AddSingleton<IConversionUseCase, ConversionUseCase>()
                 .AddSingleton<IProfileProvider, ProfileProvider>()
                 .AddSingleton<IOutputPathBuilder, OutputPathBuilder>()
                 .AddSingleton<IProgressReporter, UiProgressReporter>()
                 .AddSingleton<IQueueProcessor, QueueProcessor>()
+                .AddSingleton<IFilePicker, WinFormsFilePicker>()
+                .AddSingleton<IFolderPicker, WinFormsFolderPicker>()
                 .AddInfrastructureServices()
                 .BuildServiceProvider();
 

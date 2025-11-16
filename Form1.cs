@@ -54,6 +54,33 @@ namespace Converter
             }
         }
 
+        // IMainView binding-related properties (bridge to existing UI)
+        private System.ComponentModel.BindingList<Converter.Application.ViewModels.QueueItemViewModel>? _queueItemsBinding;
+        public System.ComponentModel.BindingList<Converter.Application.ViewModels.QueueItemViewModel>? QueueItemsBinding
+        {
+            get => _queueItemsBinding;
+            set
+            {
+                _queueItemsBinding = value;
+                if (_queueBindingSource != null)
+                {
+                    _queueBindingSource.DataSource = value ?? new System.ComponentModel.BindingList<Converter.Application.ViewModels.QueueItemViewModel>();
+                }
+            }
+        }
+
+        public bool IsBusy
+        {
+            get => Cursor == Cursors.WaitCursor;
+            set => SetBusy(value);
+        }
+
+        public string StatusText
+        {
+            get => lblStatusTotal?.Text ?? string.Empty;
+            set => SetStatusText(value);
+        }
+
         public Form1()
         {
             InitializeComponent();
@@ -80,67 +107,6 @@ namespace Converter
                 if (btnStop != null) btnStop.Enabled = isBusy;
             }
             catch { }
-        }
-        // IMainView: queue view API (bridge to existing queue UI)
-        public void AddQueueItem(QueueItem item)
-        {
-            // Reuse existing queue UI: behave like external "item added" event
-            if (InvokeRequired) { BeginInvoke(new Action(() => AddQueueItem(item))); return; }
-            if (_queueManager != null)
-            {
-                _queueManager.AddItem(item);
-                RefreshQueueDisplay();
-            }
-        }
-
-        public void UpdateQueueItem(QueueItem item)
-        {
-            if (InvokeRequired) { BeginInvoke(new Action(() => UpdateQueueItem(item))); return; }
-
-            if (_queueManager != null)
-            {
-                _queueManager.UpdateItem(item.Id, q =>
-                {
-                    q.Status = item.Status;
-                    q.Progress = item.Progress;
-                    q.ErrorMessage = item.ErrorMessage;
-                    q.OutputPath = item.OutputPath;
-                    q.OutputFileSizeBytes = item.OutputFileSizeBytes;
-                });
-                RefreshQueueDisplay();
-            }
-        }
-
-        public void UpdateQueueItemProgress(Guid itemId, int progress)
-        {
-            if (InvokeRequired) { BeginInvoke(new Action(() => UpdateQueueItemProgress(itemId, progress))); return; }
-
-            if (_queueManager != null)
-            {
-                _queueManager.UpdateItem(itemId, q => q.Progress = progress);
-                RefreshQueueDisplay();
-            }
-        }
-
-        public void RemoveQueueItem(Guid itemId)
-        {
-            if (InvokeRequired) { BeginInvoke(new Action(() => RemoveQueueItem(itemId))); return; }
-
-            _queueManager?.RemoveItem(itemId);
-            RefreshQueueDisplay();
-        }
-
-        public void UpdateQueue(IEnumerable<QueueItem> items)
-        {
-            if (InvokeRequired) { BeginInvoke(new Action(() => UpdateQueue(items))); return; }
-
-            if (_queueManager != null)
-            {
-                // Сбросить очередь и добавить новые элементы как Pending
-                _queueManager.ClearQueue();
-                _queueManager.AddItems(items);
-                RefreshQueueDisplay();
-            }
         }
 
         public void SetStatusText(string status)
@@ -278,16 +244,6 @@ namespace Converter
                 }
             }
 
-            if (_queueItemsPanel != null)
-            {
-                foreach (var control in _queueItemsPanel.Controls.OfType<QueueItemControl>())
-                {
-                    control.BackColor = theme["Surface"];
-                    control.ForeColor = theme["TextPrimary"];
-                    control.Refresh();
-                }
-            }
-
             if (progressBarTotal != null)
             {
                 progressBarTotal.ForeColor = theme["Accent"];
@@ -302,12 +258,6 @@ namespace Converter
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             ThemeManager.Instance.ThemeChanged -= OnThemeChanged;
-            try
-            {
-                _queueManager?.StopQueue();
-            }
-            catch { }
-
             try
             {
                 _estimateDebounce?.Stop();

@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Converter.Application.Abstractions;
+using Converter.Application.ViewModels;
 using Converter.Extensions;
 using Converter.Models;
 using Microsoft.Extensions.Logging;
@@ -15,30 +16,36 @@ namespace Converter.Application.Presenters
     public sealed class MainPresenter : IDisposable
     {
         private readonly IMainView _view;
+        private readonly MainViewModel _viewModel;
         private readonly IQueueRepository _queueRepository;
         private readonly IQueueProcessor _queueProcessor;
         private readonly IProfileProvider _profileProvider;
         private readonly IOutputPathBuilder _pathBuilder;
         private readonly IProgressReporter _progressReporter;
+        private readonly IFilePicker _filePicker;
         private readonly ILogger<MainPresenter> _logger;
         private bool _disposed;
         private CancellationTokenSource _cancellationTokenSource;
 
         public MainPresenter(
             IMainView view,
+            MainViewModel viewModel,
             IQueueRepository queueRepository,
             IQueueProcessor queueProcessor,
             IProfileProvider profileProvider,
             IOutputPathBuilder pathBuilder,
             IProgressReporter progressReporter,
+            IFilePicker filePicker,
             ILogger<MainPresenter> logger)
         {
             _view = view ?? throw new ArgumentNullException(nameof(view));
+            _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
             _queueRepository = queueRepository ?? throw new ArgumentNullException(nameof(queueRepository));
             _queueProcessor = queueProcessor ?? throw new ArgumentNullException(nameof(queueProcessor));
             _profileProvider = profileProvider ?? throw new ArgumentNullException(nameof(profileProvider));
             _pathBuilder = pathBuilder ?? throw new ArgumentNullException(nameof(pathBuilder));
             _progressReporter = progressReporter ?? throw new ArgumentNullException(nameof(progressReporter));
+            _filePicker = filePicker ?? throw new ArgumentNullException(nameof(filePicker));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cancellationTokenSource = new CancellationTokenSource();
 
@@ -61,6 +68,8 @@ namespace Converter.Application.Presenters
             {
                 await LoadSettingsAsync();
                 await LoadPresetsAsync();
+                // Bind view to ViewModel collections
+                _view.QueueItemsBinding = _viewModel.QueueItems;
                 SubscribeToViewEvents();
                 await LoadQueueAsync();
             }
@@ -82,8 +91,16 @@ namespace Converter.Application.Presenters
             // Load profiles from provider and push to view
             var profiles = await _profileProvider.GetAllProfilesAsync();
             _view.AvailablePresets = new System.Collections.ObjectModel.ObservableCollection<Converter.Models.ConversionProfile>(profiles);
+
+            _viewModel.Presets.Clear();
+            foreach (var profile in profiles)
+            {
+                _viewModel.Presets.Add(profile);
+            }
+
             var defaultProfile = await _profileProvider.GetDefaultProfileAsync();
             _view.SelectedPreset = defaultProfile;
+            _viewModel.SelectedPreset = defaultProfile;
         }
 
         private void SubscribeToViewEvents()
@@ -99,6 +116,7 @@ namespace Converter.Application.Presenters
         {
             if (profile == null) return;
             _logger.LogInformation("Preset selected: {Name}", profile.Name);
+            _viewModel.SelectedPreset = profile;
             _view.ShowInfo($"Preset selected: {profile.Name}");
         }
 
@@ -113,7 +131,14 @@ namespace Converter.Application.Presenters
             {
                 _logger.LogInformation("Loading queue");
                 var items = await _queueRepository.GetAllAsync();
-                _view.UpdateQueue(items.ToList());
+                var list = items.ToList();
+
+                // Заполняем ViewModel
+                _viewModel.QueueItems.Clear();
+                foreach (var item in list)
+                {
+                    _viewModel.QueueItems.Add(QueueItemViewModel.FromModel(item));
+                }
                 _logger.LogInformation("Loaded {Count} items into the queue", items.Count);
             }
             catch (Exception ex)
@@ -128,7 +153,7 @@ namespace Converter.Application.Presenters
             try
             {
                 _logger.LogInformation("Adding files to queue");
-                var filePaths = _view.ShowOpenFileDialog(
+                var filePaths = _filePicker.PickFiles(
                     "Select files to convert", 
                     "Video Files|*.mp4;*.avi;*.mkv;*.mov;*.wmv|All Files|*.*");
                 
@@ -181,7 +206,7 @@ namespace Converter.Application.Presenters
             try
             {
                 _logger.LogInformation("Starting conversion");
-                _view.SetBusy(true);
+                _view.IsBusy = true;
 
                 await _queueProcessor.StartProcessingAsync(_cancellationTokenSource.Token);
 
@@ -194,7 +219,7 @@ namespace Converter.Application.Presenters
             }
             finally
             {
-                _view.SetBusy(false);
+                _view.IsBusy = false;
             }
         }
 
@@ -203,7 +228,7 @@ namespace Converter.Application.Presenters
             try
             {
                 _logger.LogInformation("Canceling conversion");
-                _view.SetBusy(true);
+                _view.IsBusy = true;
 
                 await _queueProcessor.StopProcessingAsync();
 
@@ -216,7 +241,7 @@ namespace Converter.Application.Presenters
             }
             finally
             {
-                _view.SetBusy(false);
+                _view.IsBusy = false;
             }
         }
 
@@ -236,8 +261,9 @@ namespace Converter.Application.Presenters
         {
             InvokeOnUiThread(() =>
             {
-                _view.AddQueueItem(item);
-                _view.SetStatusText($"Added {item.FileName} to queue");
+                // ViewModel
+                _viewModel.QueueItems.Add(QueueItemViewModel.FromModel(item));
+                _view.StatusText = $"Added {item.FileName} to queue";
             });
         }
 
@@ -245,8 +271,9 @@ namespace Converter.Application.Presenters
         {
             InvokeOnUiThread(() =>
             {
-                _view.UpdateQueueItem(item);
-                _view.SetStatusText($"Updated {item.FileName} - {item.Status}");
+                var vm = _viewModel.QueueItems.FirstOrDefault(q => q.Id == item.Id);
+                vm?.UpdateFromModel(item);
+                _view.StatusText = $"Updated {item.FileName} - {item.Status}";
             });
         }
 
@@ -254,8 +281,12 @@ namespace Converter.Application.Presenters
         {
             InvokeOnUiThread(() =>
             {
-                _view.RemoveQueueItem(itemId);
-                _view.SetStatusText("Item removed from queue");
+                var vm = _viewModel.QueueItems.FirstOrDefault(q => q.Id == itemId);
+                if (vm != null)
+                {
+                    _viewModel.QueueItems.Remove(vm);
+                }
+                _view.StatusText = "Item removed from queue";
             });
         }
 
@@ -264,8 +295,12 @@ namespace Converter.Application.Presenters
             InvokeOnUiThread(() =>
             {
                 item.Status = ConversionStatus.Processing;
-                _view.UpdateQueueItem(item);
-                _view.SetStatusText($"Processing {item.FileName}...");
+                var vm = _viewModel.QueueItems.FirstOrDefault(q => q.Id == item.Id);
+                if (vm != null)
+                {
+                    vm.Status = item.Status;
+                }
+                _view.StatusText = $"Processing {item.FileName}...";
             });
         }
 
@@ -274,8 +309,12 @@ namespace Converter.Application.Presenters
             InvokeOnUiThread(() =>
             {
                 item.Status = ConversionStatus.Completed;
-                _view.UpdateQueueItem(item);
-                _view.SetStatusText($"Completed: {item.FileName}");
+                var vm = _viewModel.QueueItems.FirstOrDefault(q => q.Id == item.Id);
+                if (vm != null)
+                {
+                    vm.Status = item.Status;
+                }
+                _view.StatusText = $"Completed: {item.FileName}";
             });
         }
 
@@ -284,7 +323,12 @@ namespace Converter.Application.Presenters
             InvokeOnUiThread(() =>
             {
                 item.Status = ConversionStatus.Failed;
-                _view.UpdateQueueItem(item);
+                var vm = _viewModel.QueueItems.FirstOrDefault(q => q.Id == item.Id);
+                if (vm != null)
+                {
+                    vm.Status = item.Status;
+                    vm.ErrorMessage = item.ErrorMessage;
+                }
                 _view.ShowError($"Failed to process {item.FileName}: {item.ErrorMessage}");
             });
         }
@@ -294,15 +338,19 @@ namespace Converter.Application.Presenters
             InvokeOnUiThread(() =>
             {
                 e.Item.Progress = e.Progress;
-                _view.UpdateQueueItemProgress(e.Item.Id, e.Progress);
+                var vm = _viewModel.QueueItems.FirstOrDefault(q => q.Id == e.Item.Id);
+                if (vm != null)
+                {
+                    vm.Progress = e.Progress;
+                }
 
                 if (!string.IsNullOrEmpty(e.Status))
                 {
-                    _view.SetStatusText($"{e.Status} ({e.Progress}%)");
+                    _view.StatusText = $"{e.Status} ({e.Progress}%)";
                 }
                 else
                 {
-                    _view.SetStatusText($"Processing {e.Item.FileName} - {e.Progress}%");
+                    _view.StatusText = $"Processing {e.Item.FileName} - {e.Progress}%";
                 }
             });
         }
@@ -311,8 +359,8 @@ namespace Converter.Application.Presenters
         {
             InvokeOnUiThread(() =>
             {
-                _view.SetStatusText("Queue processing completed");
-                _view.SetBusy(false);
+                _view.StatusText = "Queue processing completed";
+                _view.IsBusy = false;
                 _view.ShowInfo("All items have been processed");
             });
         }

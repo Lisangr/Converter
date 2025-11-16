@@ -93,12 +93,12 @@ namespace Converter
         private System.Windows.Forms.Timer? _estimateDebounce;
         private CancellationTokenSource? _estimateCts;
 
-        // Queue management
-        private QueueManager? _queueManager;
-        private QueueControlPanel? _queueControlPanel;
-        private FlowLayoutPanel? _queueItemsPanel;
-        private readonly Dictionary<string, Guid> _queueItemLookup = new(StringComparer.OrdinalIgnoreCase);
-        private ConversionStatus? _queueFilterStatus;
+        // MVVM binding helpers
+        private BindingSource? _queueBindingSource;
+        private DataGridView? _queueGrid;
+
+        // Presets binding (for future use)
+        private BindingSource? _presetsBindingSource;
 
         protected override void OnLoad(EventArgs e)
         {
@@ -494,331 +494,60 @@ namespace Converter
 
         private void InitializeQueueManagement(Control host)
         {
-            _queueManager = new QueueManager(ConvertQueueItemAsync);
-            _queueManager.ItemAdded += OnQueueItemAdded;
-            _queueManager.ItemRemoved += OnQueueItemRemoved;
-            _queueManager.ItemStatusChanged += OnQueueItemStatusChanged;
-            _queueManager.ItemProgressChanged += OnQueueItemProgressChanged;
-            _queueManager.QueueCompleted += OnQueueCompleted;
-            _queueManager.ErrorOccurred += OnQueueError;
+            // MVVM-based queue view: bind DataGridView to QueueItemsBinding (BindingList<QueueItemViewModel>)
 
-            _queueControlPanel = new QueueControlPanel
-            {
-                Dock = DockStyle.Top
-            };
-            _queueControlPanel.StartClicked += async (_, _) =>
-            {
-                if (_queueManager != null)
-                {
-                    _queueManager.ResumeQueue();
-                    await _queueManager.StartQueueAsync();
-                }
-            };
-            _queueControlPanel.PauseClicked += (_, _) => _queueManager?.PauseQueue();
-            _queueControlPanel.StopClicked += (_, _) => _queueManager?.StopQueue();
-            _queueControlPanel.ClearCompletedClicked += (_, _) =>
-            {
-                _queueManager?.ClearCompleted();
-                RefreshQueueDisplay();
-            };
-            _queueControlPanel.SortRequested += (_, sortType) => SortQueue(sortType);
-            _queueControlPanel.FilterChanged += (_, status) => FilterQueue(status);
-            _queueControlPanel.AutoStartChanged += (_, value) =>
-            {
-                if (_queueManager != null)
-                {
-                    _queueManager.AutoStartNextItem = value;
-                }
-            };
-            _queueControlPanel.StopOnErrorChanged += (_, value) =>
-            {
-                if (_queueManager != null)
-                {
-                    _queueManager.StopOnError = value;
-                }
-            };
-            _queueControlPanel.MaxConcurrentChanged += (_, value) =>
-            {
-                if (_queueManager != null)
-                {
-                    _queueManager.MaxConcurrentConversions = value;
-                }
-            };
+            // Ensure binding source exists and is hooked up to the current binding list from IMainView
+            _queueBindingSource ??= new BindingSource();
+            var bindingList = _queueItemsBinding ?? new System.ComponentModel.BindingList<Converter.Application.ViewModels.QueueItemViewModel>();
+            _queueBindingSource.DataSource = bindingList;
 
-            _queueItemsPanel = new FlowLayoutPanel
+            _queueGrid = new DataGridView
             {
                 Dock = DockStyle.Fill,
-                AutoScroll = true,
-                FlowDirection = FlowDirection.TopDown,
-                WrapContents = false,
-                Padding = new Padding(5),
-                BackColor = Color.WhiteSmoke
+                AutoGenerateColumns = false,
+                ReadOnly = true,
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                MultiSelect = false,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                BackgroundColor = Color.White,
+                BorderStyle = BorderStyle.None
             };
 
-            host.Controls.Add(_queueItemsPanel);
-            host.Controls.Add(_queueControlPanel);
+            _queueGrid.DataSource = _queueBindingSource;
+
+            // Columns mapped to QueueItemViewModel
+            _queueGrid.Columns.Clear();
+            _queueGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                DataPropertyName = nameof(Converter.Application.ViewModels.QueueItemViewModel.FileName),
+                HeaderText = "Файл",
+                FillWeight = 40
+            });
+            _queueGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                DataPropertyName = nameof(Converter.Application.ViewModels.QueueItemViewModel.Status),
+                HeaderText = "Статус",
+                FillWeight = 20
+            });
+            _queueGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                DataPropertyName = nameof(Converter.Application.ViewModels.QueueItemViewModel.Progress),
+                HeaderText = "%",
+                FillWeight = 10
+            });
+            _queueGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                DataPropertyName = nameof(Converter.Application.ViewModels.QueueItemViewModel.ErrorMessage),
+                HeaderText = "Ошибка",
+                FillWeight = 30
+            });
+
+            // Layout: simple panel with padding, grid fills all available space inside tab
+            host.Controls.Add(_queueGrid);
         }
 
-        private void OnQueueItemAdded(object? sender, QueueItem item)
-        {
-            if (InvokeRequired)
-            {
-                BeginInvoke(new Action(() => OnQueueItemAdded(sender, item)));
-                return;
-            }
-
-            if (_queueItemsPanel == null)
-            {
-                return;
-            }
-
-            if (_queueFilterStatus.HasValue && item.Status != _queueFilterStatus.Value)
-            {
-                return;
-            }
-
-            if (_queueItemsPanel.Controls.OfType<QueueItemControl>().Any(c => c.Item.Id == item.Id))
-            {
-                return;
-            }
-
-            _queueItemsPanel.Controls.Add(CreateQueueItemControl(item));
-            UpdateQueueStatistics();
-        }
-
-        private void OnQueueItemRemoved(object? sender, QueueItem item)
-        {
-            if (InvokeRequired)
-            {
-                BeginInvoke(new Action(() => OnQueueItemRemoved(sender, item)));
-                return;
-            }
-
-            if (_queueItemsPanel == null)
-            {
-                return;
-            }
-
-            var control = _queueItemsPanel.Controls
-                .OfType<QueueItemControl>()
-                .FirstOrDefault(c => c.Item.Id == item.Id);
-
-            if (control != null)
-            {
-                _queueItemsPanel.Controls.Remove(control);
-                control.Dispose();
-            }
-
-            _queueItemLookup.Remove(item.FilePath);
-            UpdateQueueStatistics();
-        }
-
-        private void OnQueueItemStatusChanged(object? sender, QueueItem item)
-        {
-            if (InvokeRequired)
-            {
-                BeginInvoke(new Action(() => OnQueueItemStatusChanged(sender, item)));
-                return;
-            }
-
-            if (_queueItemsPanel == null)
-            {
-                return;
-            }
-
-            var control = _queueItemsPanel.Controls
-                .OfType<QueueItemControl>()
-                .FirstOrDefault(c => c.Item.Id == item.Id);
-
-            control?.UpdateDisplay();
-            UpdateQueueStatistics();
-
-            if (_queueFilterStatus.HasValue)
-            {
-                FilterQueue(_queueFilterStatus);
-            }
-        }
-
-        private void OnQueueItemProgressChanged(object? sender, QueueItem item)
-        {
-            if (InvokeRequired)
-            {
-                BeginInvoke(new Action(() => OnQueueItemProgressChanged(sender, item)));
-                return;
-            }
-
-            if (_queueItemsPanel == null)
-            {
-                return;
-            }
-
-            var control = _queueItemsPanel.Controls
-                .OfType<QueueItemControl>()
-                .FirstOrDefault(c => c.Item.Id == item.Id);
-
-            control?.UpdateDisplay();
-        }
-
-        private void OnQueueCompleted(object? sender, EventArgs e)
-        {
-            if (InvokeRequired)
-            {
-                BeginInvoke(new Action(() => OnQueueCompleted(sender, e)));
-                return;
-            }
-
-            var stats = _queueManager?.GetStatistics();
-            if (stats == null)
-            {
-                return;
-            }
-
-            MessageBox.Show(
-                this,
-                "Все файлы обработаны!",
-                "Конвертация завершена",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
-
-            ShowStatisticsDialog(stats);
-        }
-
-        private void OnQueueError(object? sender, string message)
-        {
-            if (InvokeRequired)
-            {
-                BeginInvoke(new Action(() => OnQueueError(sender, message)));
-                return;
-            }
-
-            MessageBox.Show(
-                this,
-                $"Произошла ошибка: {message}",
-                "Ошибка",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
-        }
-
-        private QueueItemControl CreateQueueItemControl(QueueItem item)
-        {
-            var control = new QueueItemControl(item);
-            control.MoveUpClicked += (_, id) =>
-            {
-                _queueManager?.MoveItemUp(id);
-                RefreshQueueDisplay();
-            };
-            control.MoveDownClicked += (_, id) =>
-            {
-                _queueManager?.MoveItemDown(id);
-                RefreshQueueDisplay();
-            };
-            control.StarToggled += (_, id) =>
-            {
-                _queueManager?.ToggleStarred(id);
-                RefreshQueueDisplay();
-            };
-            control.CancelClicked += (_, id) => _queueManager?.CancelItem(id);
-            control.PriorityChanged += (_, data) =>
-            {
-                _queueManager?.SetItemPriority(data.Id, data.Priority);
-                RefreshQueueDisplay();
-            };
-            return control;
-        }
-
-        private void SortQueue(string sortType)
-        {
-            if (_queueManager == null)
-            {
-                return;
-            }
-
-            switch (sortType)
-            {
-                case "priority":
-                    _queueManager.SortByPriority();
-                    break;
-                case "size":
-                    _queueManager.SortBySize();
-                    break;
-                case "duration":
-                    _queueManager.SortByDuration();
-                    break;
-                case "date":
-                    _queueManager.SortByAddedDate();
-                    break;
-            }
-
-            RefreshQueueDisplay();
-        }
-
-        private void FilterQueue(ConversionStatus? status)
-        {
-            if (_queueManager == null)
-            {
-                return;
-            }
-
-            _queueFilterStatus = status;
-            RefreshQueueDisplay(GetFilteredQueueItems());
-        }
-
-        private void RefreshQueueDisplay(IEnumerable<QueueItem>? items = null)
-        {
-            if (_queueItemsPanel == null || _queueManager == null)
-            {
-                return;
-            }
-
-            var source = items ?? GetFilteredQueueItems();
-            _queueItemsPanel.SuspendLayout();
-            _queueItemsPanel.Controls.Clear();
-            foreach (var item in source)
-            {
-                _queueItemsPanel.Controls.Add(CreateQueueItemControl(item));
-            }
-            _queueItemsPanel.ResumeLayout();
-            UpdateQueueStatistics();
-        }
-
-        private IEnumerable<QueueItem> GetFilteredQueueItems()
-        {
-            if (_queueManager == null)
-            {
-                return Array.Empty<QueueItem>();
-            }
-
-            if (!_queueFilterStatus.HasValue)
-            {
-                return _queueManager.GetQueue();
-            }
-
-            if (_queueFilterStatus == ConversionStatus.Processing)
-            {
-                return _queueManager.GetQueue()
-                    .Where(x => x.Status == ConversionStatus.Processing || x.Status == ConversionStatus.Paused)
-                    .ToList();
-            }
-
-            return _queueManager.FilterByStatus(_queueFilterStatus.Value);
-        }
-
-        private void UpdateQueueStatistics()
-        {
-            if (_queueManager == null || _queueControlPanel == null)
-            {
-                return;
-            }
-
-            var stats = _queueManager.GetStatistics();
-            _queueControlPanel.UpdateStatistics(stats);
-        }
-
-        private void ShowStatisticsDialog(QueueStatistics stats)
-        {
-            using var dialog = new StatisticsDialog(stats);
-            dialog.ShowDialog(this);
-        }
 
         private async Task<Converter.Models.ConversionResult> ConvertQueueItemAsync(QueueItem item, IProgress<int> progress, CancellationToken cancellationToken)
         {
@@ -1676,24 +1405,6 @@ namespace Converter
 
                 // Asynchronously probe file info
                 _ = ProbeFileAsync(fileItem, path);
-
-                if (_queueManager != null)
-                {
-                    var info = new System.IO.FileInfo(path);
-                    var settings = CreateConversionSettings();
-                    var format = settings.ContainerFormat ?? (cbFormat.SelectedItem?.ToString() ?? "mp4");
-                    var queueItem = new QueueItem
-                    {
-                        FilePath = path,
-                        OutputPath = GenerateOutputPath(path, format),
-                        FileSizeBytes = info.Exists ? info.Length : 0,
-                        Duration = TimeSpan.Zero,
-                        AddedAt = DateTime.Now,
-                        Settings = settings
-                    };
-                    _queueManager.AddItem(queueItem);
-                    _queueItemLookup[path] = queueItem.Id;
-                }
             }
 
             AppendLog($"Добавлено файлов: {paths.Length}");
@@ -1795,12 +1506,6 @@ namespace Converter
                 _dragDropPanel?.RemoveFile(item.FilePath, notify: false);
             }
 
-            if (_queueItemLookup.TryGetValue(item.FilePath, out var id))
-            {
-                _queueManager?.RemoveItem(id);
-                _queueItemLookup.Remove(item.FilePath);
-            }
-
             UpdateEditorButtonState();
         }
 
@@ -1819,10 +1524,7 @@ namespace Converter
         private void ClearAllFiles()
         {
             filesPanel.Controls.Clear();
-            _queueManager?.ClearQueue();
-            _queueItemLookup.Clear();
             _dragDropPanel?.ClearFiles(notify: false);
-            UpdateQueueStatistics();
             DebounceEstimate();
             UpdateEditorButtonState();
         }
@@ -1852,19 +1554,6 @@ namespace Converter
                 await EnsureFfmpegAsync();
                 var info = await FFmpeg.GetMediaInfo(path);
                 var v = info.VideoStreams?.FirstOrDefault();
-
-                if (_queueItemLookup.TryGetValue(path, out var queueId))
-                {
-                    var fileInfo = new System.IO.FileInfo(path);
-                    _queueManager?.UpdateItem(queueId, q =>
-                    {
-                        q.Duration = info.Duration;
-                        if (fileInfo.Exists)
-                        {
-                            q.FileSizeBytes = fileInfo.Length;
-                        }
-                    });
-                }
 
                 this.BeginInvoke(new Action(() =>
                 {
@@ -1899,17 +1588,10 @@ namespace Converter
             {
                 filesPanel.Controls.Remove(item);
                 item.Dispose();
-
-                if (_queueItemLookup.TryGetValue(item.FilePath, out var id))
-                {
-                    _queueManager?.RemoveItem(id);
-                    _queueItemLookup.Remove(item.FilePath);
-                }
             }
 
             AppendLog($"Удалено файлов: {selectedItems.Count}");
             DebounceEstimate();
-            UpdateQueueStatistics();
         }
 
         private void cbFormat_SelectedIndexChanged(object? sender, EventArgs e)
