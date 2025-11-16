@@ -345,7 +345,8 @@ namespace Converter
             _btnOpenEditor.Enabled = false;
             _btnOpenEditor.Click += OnOpenEditorClick;
 
-            btnAddFiles.Click += (s, e) => AddFilesRequested?.Invoke(this, EventArgs.Empty);
+            btnAddFiles.Click += async (s, e) =>
+                await RaiseAsync(AddFilesRequested, EventArgs.Empty, "Failed to add files");
             btnRemoveSelected.Click += btnRemoveSelected_Click;
             btnClearAll.Click += (s, e) => ClearAllFiles();
 
@@ -1274,7 +1275,8 @@ namespace Converter
             btnStart.BackColor = Color.FromArgb(0, 120, 215);
             btnStart.ForeColor = Color.White;
             btnStart.FlatAppearance.BorderSize = 0;
-            btnStart.Click += (s, e) => StartConversionRequested?.Invoke(this, EventArgs.Empty);
+            btnStart.Click += async (s, e) =>
+                await RaiseAsync(StartConversionRequested, EventArgs.Empty, "Failed to start conversion");
 
             btnStop = CreateStyledButton("⏹ Остановить", 180);
             btnStop.Top = _estimatePanel.Bottom + 10;
@@ -1284,7 +1286,8 @@ namespace Converter
             btnStop.ForeColor = Color.White;
             btnStop.Enabled = false;
             btnStop.FlatAppearance.BorderSize = 0;
-            btnStop.Click += (s, e) => CancelConversionRequested?.Invoke(this, EventArgs.Empty);
+            btnStop.Click += async (s, e) =>
+                await RaiseAsync(CancelConversionRequested, EventArgs.Empty, "Failed to cancel conversion");
 
             _btnNotificationSettings = CreateStyledButton("🔔 Уведомления", 310);
             _btnNotificationSettings.Top = _estimatePanel.Bottom + 10;
@@ -2698,7 +2701,10 @@ namespace Converter
                 {
                     AppendLog("FFmpeg cmd: " + conv.Build());
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    HandleUiError(ex, "Failed to log FFmpeg command");
+                }
 
                 await conv.Start(cancellationToken);
                 AppendLog($"✅ Завершено: {fileName}");
@@ -2900,24 +2906,19 @@ namespace Converter
 
         private void AppendLog(string message)
         {
-            try
+            if (txtLog == null || txtLog.IsDisposed)
             {
-                if (txtLog?.InvokeRequired == true)
-                {
-                    txtLog.BeginInvoke(new Action(() => AppendLog(message)));
-                    return;
-                }
-                
-                if (txtLog != null)
-                {
-                    var timestamp = DateTime.Now.ToString("HH:mm:ss");
-                    txtLog.AppendText($"[{timestamp}] {message}{Environment.NewLine}");
-                }
+                return;
             }
-            catch (Exception ex)
+
+            if (txtLog.InvokeRequired)
             {
-                Debug.WriteLine(ex);
+                txtLog.BeginInvoke(new Action(() => AppendLog(message)));
+                return;
             }
+
+            var timestamp = DateTime.Now.ToString("HH:mm:ss");
+            txtLog.AppendText($"[{timestamp}] {message}{Environment.NewLine}");
         }
 
         private class FileConversionInfo

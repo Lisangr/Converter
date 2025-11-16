@@ -22,6 +22,8 @@ public sealed class MainPresenter : IDisposable
     private readonly ILogger<MainPresenter> _logger;
     private CancellationTokenSource? _cts;
     private bool _disposed;
+    private bool _initialized;
+    private bool _eventsSubscribed;
 
     public MainPresenter(
         IMainView view,
@@ -39,83 +41,120 @@ public sealed class MainPresenter : IDisposable
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _presetRepository = presetRepository ?? throw new ArgumentNullException(nameof(presetRepository));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-
-        InitializeAsync().ConfigureAwait(false);
     }
 
-    private async Task InitializeAsync()
+    public async Task InitializeAsync(CancellationToken ct = default)
     {
+        ThrowIfDisposed();
+        if (_initialized)
+        {
+            return;
+        }
+
+        EnsureEventSubscriptions();
+        _view.SetBusy(true);
         try
         {
-            // Load settings and presets
-            var ffmpegPath = await _settingsStore.GetFfmpegPathAsync();
+            ct.ThrowIfCancellationRequested();
+
+            var ffmpegPath = await _settingsStore.GetFfmpegPathAsync().ConfigureAwait(false);
             if (!string.IsNullOrEmpty(ffmpegPath))
             {
                 _view.FfmpegPath = ffmpegPath;
             }
 
-            var presets = await _presetRepository.GetAllPresetsAsync();
+            var presets = await _presetRepository.GetAllPresetsAsync().ConfigureAwait(false);
             _view.AvailablePresets = new ObservableCollection<ConversionProfile>(presets);
+            if (_view.SelectedPreset == null && _view.AvailablePresets.Any())
+            {
+                _view.SelectedPreset = _view.AvailablePresets.First();
+            }
 
-            // Subscribe to view events
-            _view.AddFilesRequested += OnAddFilesRequested;
-            _view.StartConversionRequested += OnStartRequested;
-            _view.CancelConversionRequested += OnCancelRequested;
-            _view.PresetSelected += OnPresetSelected;
-            _view.SettingsChanged += OnSettingsChanged;
+            var snapshot = _queue.Snapshot();
+            _view.SetQueueItems(snapshot.Select(ToDto));
 
-            // Subscribe to queue events
-            _queue.ItemChanged += OnQueueItemChanged;
-            _queue.QueueCompleted += OnQueueCompleted;
-
+            _initialized = true;
             _logger.LogInformation("MainPresenter initialized successfully");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error initializing MainPresenter");
             _view.ShowError($"Failed to initialize application: {ex.Message}");
+            throw;
+        }
+        finally
+        {
+            _view.SetBusy(false);
         }
     }
 
-    private async void OnAddFilesRequested(object? sender, EventArgs e)
+    private void EnsureEventSubscriptions()
+    {
+        if (_eventsSubscribed)
+        {
+            return;
+        }
+
+        _view.AddFilesRequested += OnAddFilesRequestedAsync;
+        _view.StartConversionRequested += OnStartRequestedAsync;
+        _view.CancelConversionRequested += OnCancelRequestedAsync;
+        _view.PresetSelected += OnPresetSelected;
+        _view.SettingsChanged += OnSettingsChangedAsync;
+
+        _queue.ItemChanged += OnQueueItemChanged;
+        _queue.QueueCompleted += OnQueueCompleted;
+
+        _eventsSubscribed = true;
+    }
+
+    private async Task OnAddFilesRequestedAsync(object? sender, EventArgs e)
     {
         try
         {
-            var files = _view.ShowOpenMultipleFilesDialog("Select media files", 
-                "Media Files|*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.mp3;*.wav;*.aac|All Files|*.*");
-            
-            if (files == null || !files.Any()) return;
+            var files = _view.ShowOpenMultipleFilesDialog(
+                "Select media files",
+                "Media Files|*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.mp3;*.wav;*.aac|All Files|*.*")
+                .ToArray();
+
+            if (files.Length == 0)
+            {
+                return;
+            }
+
+            var preset = _view.SelectedPreset ?? _view.AvailablePresets.FirstOrDefault();
+            if (preset == null)
+            {
+                _view.ShowError("Please select a preset before adding files.");
+                return;
+            }
 
             var outputFolder = _view.OutputFolder;
-            if (string.IsNullOrEmpty(outputFolder))
+            if (string.IsNullOrWhiteSpace(outputFolder))
             {
                 outputFolder = _view.ShowFolderBrowserDialog("Select output folder");
-                if (string.IsNullOrEmpty(outputFolder)) return;
+                if (string.IsNullOrWhiteSpace(outputFolder))
+                {
+                    return;
+                }
                 _view.OutputFolder = outputFolder;
             }
 
-            foreach (var file in files)
+            var presetSnapshot = preset;
+            var preparedItems = await Task.Run(() =>
+                BuildQueueItems(files, outputFolder!, presetSnapshot));
+
+            if (preparedItems.Count == 0)
             {
-                var fileInfo = new FileInfo(file);
-                var item = new QueueItemModel
-                {
-                    Id = Guid.NewGuid(),
-                    FilePath = file,
-                    FileSizeBytes = fileInfo.Length,
-                    Status = "Pending",
-                    Priority = 3, // Normal priority
-                    OutputPath = Path.Combine(outputFolder, Path.ChangeExtension(fileInfo.Name, ".mp4")),
-                    Duration = TimeSpan.Zero, // Will be updated later
-                    Progress = 0,
-                    IsStarred = false,
-                    ErrorMessage = null
-                };
-                
-                _queue.Enqueue(item);
-                _logger.LogInformation("Added file to queue: {File}", file);
+                return;
             }
 
-            _notifications.Info("Files added", $"Added {files.Count()} file(s) to the queue");
+            _queue.EnqueueMany(preparedItems);
+            foreach (var item in preparedItems)
+            {
+                _logger.LogInformation("Added file to queue: {File}", item.FilePath);
+            }
+
+            _notifications.Info("Files added", $"Added {preparedItems.Count} file(s) to the queue");
         }
         catch (Exception ex)
         {
@@ -124,7 +163,36 @@ public sealed class MainPresenter : IDisposable
         }
     }
 
-    private async void OnStartRequested(object? sender, EventArgs e)
+    private static List<QueueItemModel> BuildQueueItems(IEnumerable<string> files, string outputFolder, ConversionProfile preset)
+    {
+        var items = new List<QueueItemModel>();
+        foreach (var file in files)
+        {
+            var fileInfo = new FileInfo(file);
+            var fileSize = fileInfo.Exists ? fileInfo.Length : 0;
+            var outputPath = Path.Combine(outputFolder, Path.ChangeExtension(Path.GetFileName(file), ".mp4"));
+
+            items.Add(new QueueItemModel
+            {
+                Id = Guid.NewGuid(),
+                FilePath = file,
+                FileSizeBytes = fileSize,
+                Status = QueueItemStatuses.Pending,
+                Priority = 3,
+                OutputPath = outputPath,
+                Duration = TimeSpan.Zero,
+                Progress = 0,
+                IsStarred = false,
+                ErrorMessage = null,
+                Profile = preset,
+                EnqueuedAtUtc = DateTime.UtcNow
+            });
+        }
+
+        return items;
+    }
+
+    private async Task OnStartRequestedAsync(object? sender, EventArgs e)
     {
         try
         {
@@ -149,7 +217,7 @@ public sealed class MainPresenter : IDisposable
         }
     }
 
-    private void OnCancelRequested(object? sender, EventArgs e)
+    private Task OnCancelRequestedAsync(object? sender, EventArgs e)
     {
         try
         {
@@ -163,23 +231,14 @@ public sealed class MainPresenter : IDisposable
             _logger.LogError(ex, "Error cancelling operation");
             _view.ShowError($"Failed to cancel operation: {ex.Message}");
         }
+
+        return Task.CompletedTask;
     }
 
-    private void OnQueueItemChanged(object? sender, QueueItemModel item)
+    private void OnQueueItemChanged(object? sender, QueueItemSnapshot item)
     {
-        _view.UpdateQueueItem(new QueueItemDto(
-            item.Id,
-            item.FilePath,
-            item.FileSizeBytes,
-            item.Duration,
-            item.Progress,
-            item.Status,
-            item.IsStarred,
-            item.Priority,
-            item.OutputPath,
-            item.ErrorMessage
-        ));
-        
+        _view.UpdateQueueItem(ToDto(item));
+
         if (item.Status == "Completed")
         {
             _notifications.Info("Conversion complete", $"Completed: {Path.GetFileName(item.FilePath)}");
@@ -211,13 +270,13 @@ public sealed class MainPresenter : IDisposable
         }
     }
 
-    private async void OnSettingsChanged(object? sender, EventArgs e)
+    private async Task OnSettingsChangedAsync(object? sender, EventArgs e)
     {
         try
         {
             if (!string.IsNullOrEmpty(_view.FfmpegPath))
             {
-                await _settingsStore.SetFfmpegPathAsync(_view.FfmpegPath);
+                await _settingsStore.SetFfmpegPathAsync(_view.FfmpegPath).ConfigureAwait(false);
                 _logger.LogInformation("FFmpeg path updated: {Path}", _view.FfmpegPath);
             }
         }
@@ -228,30 +287,46 @@ public sealed class MainPresenter : IDisposable
         }
     }
 
+    private static QueueItemDto ToDto(QueueItemSnapshot item) => new(
+        item.Id,
+        item.FilePath,
+        item.FileSizeBytes,
+        item.Duration,
+        item.Progress,
+        item.Status,
+        item.IsStarred,
+        item.Priority,
+        item.OutputPath,
+        item.ErrorMessage);
+
     public void Dispose()
     {
         if (!_disposed)
         {
             _disposed = true;
             _cts?.Dispose();
-            
-            // Unsubscribe from events
-            if (_view != null)
-            {
-                _view.AddFilesRequested -= OnAddFilesRequested;
-                _view.StartConversionRequested -= OnStartRequested;
-                _view.CancelConversionRequested -= OnCancelRequested;
-                _view.PresetSelected -= OnPresetSelected;
-                _view.SettingsChanged -= OnSettingsChanged;
-            }
 
-            if (_queue != null)
+            if (_eventsSubscribed)
             {
+                _view.AddFilesRequested -= OnAddFilesRequestedAsync;
+                _view.StartConversionRequested -= OnStartRequestedAsync;
+                _view.CancelConversionRequested -= OnCancelRequestedAsync;
+                _view.PresetSelected -= OnPresetSelected;
+                _view.SettingsChanged -= OnSettingsChangedAsync;
+
                 _queue.ItemChanged -= OnQueueItemChanged;
                 _queue.QueueCompleted -= OnQueueCompleted;
             }
 
             _logger.LogInformation("MainPresenter disposed");
+        }
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(nameof(MainPresenter));
         }
     }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Converter.Models;
 using Converter.Services;
@@ -17,11 +18,11 @@ namespace Converter
         private Button? _themeMenuButton;
         private bool _themeInitialized;
 
-        public event EventHandler? AddFilesRequested;
-        public event EventHandler? StartConversionRequested;
-        public event EventHandler? CancelConversionRequested;
+        public event AsyncEventHandler? AddFilesRequested;
+        public event AsyncEventHandler? StartConversionRequested;
+        public event AsyncEventHandler? CancelConversionRequested;
         public event EventHandler<ConversionProfile>? PresetSelected;
-        public event EventHandler? SettingsChanged;
+        public event AsyncEventHandler? SettingsChanged;
 
         private string _ffmpegPath = string.Empty;
         public string FfmpegPath
@@ -70,14 +71,13 @@ namespace Converter
         public void SetBusy(bool isBusy)
         {
             if (InvokeRequired) { BeginInvoke(new Action(() => SetBusy(isBusy))); return; }
-            try
+            RunSafe("Failed to update busy state", () =>
             {
                 Cursor = isBusy ? Cursors.WaitCursor : Cursors.Default;
                 if (btnStart != null) btnStart.Enabled = !isBusy;
                 if (btnAddFiles != null) btnAddFiles.Enabled = !isBusy;
                 if (btnStop != null) btnStop.Enabled = isBusy;
-            }
-            catch { }
+            });
         }
 
         public void SetQueueItems(IEnumerable<QueueItemDto> items)
@@ -95,12 +95,19 @@ namespace Converter
         public void SetGlobalProgress(int percent, string status)
         {
             if (InvokeRequired) { BeginInvoke(new Action(() => SetGlobalProgress(percent, status))); return; }
-            try
+            RunSafe("Failed to update progress", () =>
             {
-                if (progressBarTotal != null) progressBarTotal.Value = Math.Max(progressBarTotal.Minimum, Math.Min(progressBarTotal.Maximum, percent));
-                if (lblStatusTotal != null) lblStatusTotal.Text = status;
-            }
-            catch { }
+                if (progressBarTotal != null)
+                {
+                    var clamped = Math.Max(progressBarTotal.Minimum, Math.Min(progressBarTotal.Maximum, percent));
+                    progressBarTotal.Value = clamped;
+                }
+
+                if (lblStatusTotal != null)
+                {
+                    lblStatusTotal.Text = status;
+                }
+            });
         }
 
         public void ShowError(string message)
@@ -247,41 +254,75 @@ namespace Converter
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             ThemeManager.Instance.ThemeChanged -= OnThemeChanged;
-            try
-            {
-                _queueManager?.StopQueue();
-            }
-            catch { }
 
-            try
+            RunSafe("Failed to stop queue manager", () => _queueManager?.StopQueue());
+            RunSafe("Failed to dispose estimate debounce", () =>
             {
                 _estimateDebounce?.Stop();
                 _estimateDebounce?.Dispose();
-            }
-            catch { }
-
-            try
+                _estimateDebounce = null;
+            });
+            RunSafe("Failed to dispose estimate token", () =>
             {
                 _estimateCts?.Cancel();
                 _estimateCts?.Dispose();
-            }
-            catch { }
-
-            try
+                _estimateCts = null;
+            });
+            RunSafe("Failed to dispose cancellation token", () =>
             {
                 _cancellationTokenSource?.Cancel();
                 _cancellationTokenSource?.Dispose();
+                _cancellationTokenSource = null;
+            });
+            RunSafe("Failed to dispose thumbnail service", () => _thumbnailService?.Dispose());
+            RunSafe("Failed to dispose notification service", () => _notificationService?.Dispose());
+
+            base.OnFormClosed(e);
+        }
+
+        private async Task RaiseAsync(AsyncEventHandler? handler, EventArgs args, string context)
+        {
+            if (handler == null)
+            {
+                return;
             }
-            catch { }
 
             try
             {
-                _thumbnailService?.Dispose();
+                await handler(this, args);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                HandleUiError(ex, context);
+            }
+        }
 
-            _notificationService?.Dispose();
-            base.OnFormClosed(e);
+        private void RunSafe(string context, Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                HandleUiError(ex, context);
+            }
+        }
+
+        private void HandleUiError(Exception ex, string context)
+        {
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => HandleUiError(ex, context)));
+                return;
+            }
+
+            AppendLog($"⚠️ {context}: {ex.Message}");
         }
 
         private void OnThemeControlsResize(object? sender, EventArgs e) => PositionThemeControls();

@@ -30,6 +30,9 @@ namespace Converter
                 .AddSingleton<IConversionCommandBuilder, ConversionCommandBuilder>()
                 .AddSingleton<IFFmpegExecutor, FFmpegExecutor>()
                 .AddSingleton<IConversionOrchestrator, ConversionOrchestrator>()
+                .AddSingleton<IConversionQueue, ConversionQueueManager>()
+                .AddSingleton<ISchedulingStrategy, PrioritySchedulingStrategy>()
+                .AddSingleton<IProgressReporter, QueueProgressReporter>()
                 .AddSingleton<IQueueService, QueueService>()
                 .AddSingleton<INotificationGateway, NotificationGateway>()
                 .AddSingleton<IThumbnailProvider, ThumbnailProvider>()
@@ -47,6 +50,8 @@ namespace Converter
                 services.GetRequiredService<ISettingsStore>(),
                 services.GetRequiredService<IPresetRepository>(),
                 services.GetRequiredService<ILogger<MainPresenter>>());
+
+            presenter.InitializeAsync().GetAwaiter().GetResult();
 
             System.Windows.Forms.Application.Run((Form)view);
         }
