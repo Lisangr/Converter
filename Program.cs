@@ -1,6 +1,7 @@
 using System;
 using System.Windows.Forms;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Converter.Application.Abstractions;
 using Converter.Application.Presenters;
@@ -8,6 +9,8 @@ using Converter.Application.Services;
 using Converter.Application.ViewModels;
 using Converter.Infrastructure;
 using Converter.UI;
+using Microsoft.Extensions.Configuration;
+using System.IO;
 
 namespace Converter
 {
@@ -18,6 +21,11 @@ namespace Converter
         {
             System.Windows.Forms.Application.EnableVisualStyles();
             System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
+
+            var configuration = new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                .Build();
 
             var services = new ServiceCollection()
                 .AddLogging(configure => 
@@ -31,10 +39,12 @@ namespace Converter
                 .AddSingleton<IProfileProvider, ProfileProvider>()
                 .AddSingleton<IOutputPathBuilder, OutputPathBuilder>()
                 .AddSingleton<IProgressReporter, UiProgressReporter>()
-                .AddSingleton<IQueueProcessor, QueueProcessor>()
+                .AddSingleton<IThemeService, ThemeService>()
+                .AddSingleton<IQueueProcessor, ChannelQueueProcessor>()
+                .AddHostedService(provider => (ChannelQueueProcessor)provider.GetRequiredService<IQueueProcessor>())
                 .AddSingleton<IFilePicker, WinFormsFilePicker>()
                 .AddSingleton<IFolderPicker, WinFormsFolderPicker>()
-                .AddInfrastructureServices()
+                .AddInfrastructureServices(configuration)
                 .BuildServiceProvider();
 
             try

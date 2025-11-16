@@ -347,9 +347,9 @@ namespace Converter
             _btnOpenEditor.Click += OnOpenEditorClick;
 
             // IMainView: прокидываем в событие AddFilesRequested, реализованное в Form1.cs
-            btnAddFiles.Click += (s, e) => AddFilesRequested?.Invoke(this, EventArgs.Empty);
+            btnAddFiles.Click += btnAddFiles_Click;
             btnRemoveSelected.Click += btnRemoveSelected_Click;
-            btnClearAll.Click += (s, e) => ClearAllFiles();
+            btnClearAll.Click += btnClearAll_Click;
 
             panelLeftTop.Controls.AddRange(new Control[]
             {
@@ -1332,7 +1332,7 @@ namespace Converter
         private void Form1_DragDrop(object? sender, DragEventArgs e)
         {
             if (e.Data?.GetData(DataFormats.FileDrop) is string[] files)
-                AddFilesToList(files);
+                FilesDropped?.Invoke(this, files);
         }
 
         private void ListView_DragEnter(object? sender, DragEventArgs e)
@@ -1373,9 +1373,7 @@ namespace Converter
                 Multiselect = true
             };
             if (ofd.ShowDialog(this) == DialogResult.OK)
-            {
-                AddFilesToList(ofd.FileNames);
-            }
+                FilesDropped?.Invoke(this, ofd.FileNames);
         }
 
         private async void AddFilesToList(string[] paths, bool syncDragDropPanel = true)
@@ -1582,16 +1580,12 @@ namespace Converter
 
         private void btnRemoveSelected_Click(object? sender, EventArgs e)
         {
-            var selectedItems = filesPanel.Controls.OfType<FileListItem>().Where(item => item.BackColor == Color.LightBlue).ToList();
+            RemoveSelectedFilesRequested?.Invoke(this, EventArgs.Empty);
+        }
 
-            foreach (var item in selectedItems)
-            {
-                filesPanel.Controls.Remove(item);
-                item.Dispose();
-            }
-
-            AppendLog($"Удалено файлов: {selectedItems.Count}");
-            DebounceEstimate();
+        private void btnClearAll_Click(object? sender, EventArgs e)
+        {
+            ClearAllFilesRequested?.Invoke(this, EventArgs.Empty);
         }
 
         private void cbFormat_SelectedIndexChanged(object? sender, EventArgs e)

@@ -6,9 +6,11 @@
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing && (components != null))
+            if (disposing)
             {
-                components.Dispose();
+                // dispose managed resources defined in Form1.cs
+                DisposeManagedResources();
+                components?.Dispose();
             }
             base.Dispose(disposing);
         }

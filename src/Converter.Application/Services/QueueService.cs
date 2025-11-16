@@ -4,7 +4,6 @@ using Converter.Domain.Models;
 using Microsoft.Extensions.Logging;
 using Converter.Application.Abstractions;
 using Converter.Application.DTOs;
-using Converter.Domain.Models;
 
 namespace Converter.Application.Services;
 

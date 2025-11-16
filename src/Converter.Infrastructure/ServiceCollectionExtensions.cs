@@ -1,12 +1,27 @@
+// ServiceCollectionExtensions.cs
+using Converter.Application.Abstractions;
+using Converter.Infrastructure.Ffmpeg;
+using Converter.Infrastructure.Notifications;
+using Converter.Infrastructure.Persistence;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Converter.Infrastructure
 {
     public static class ServiceCollectionExtensions
     {
-        public static IServiceCollection AddInfrastructureServices(this IServiceCollection services)
+        public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
         {
-            // TODO: register infrastructure services (repositories, FFmpeg adapters, notifications, etc.)
+            // FFmpeg services
+            services.AddSingleton<IFFmpegExecutor, FFmpegExecutor>();
+            services.AddSingleton<IThumbnailProvider, ThumbnailProvider>();
+            
+            // Other infrastructure services
+            services.AddSingleton<INotificationGateway, NotificationGateway>();
+            services.Configure<SettingsOptions>(configuration.GetSection("Settings"));
+            services.AddSingleton<ISettingsStore, JsonSettingsStore>();
+            
             return services;
         }
     }

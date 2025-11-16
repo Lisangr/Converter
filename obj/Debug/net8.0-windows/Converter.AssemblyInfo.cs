@@ -14,12 +14,12 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Converter")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a66ae6ebce11322830c0d018233bade6ec69f817")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f9928779c83d1b0b22d6213d8db3cb4b9d241459")]
 [assembly: System.Reflection.AssemblyProductAttribute("Converter")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Converter")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
 [assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
-[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows10.0.22621.0")]
 
 // Создано классом WriteCodeFragment MSBuild.
 

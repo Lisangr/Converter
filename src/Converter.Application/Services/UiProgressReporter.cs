@@ -41,7 +41,7 @@ namespace Converter.Application.Services
             }
         }
 
-        public void ReportItemProgress(QueueItem item, int progress, string status = null)
+        public void ReportItemProgress(QueueItem item, int progress, string? status = null)
         {
             try
             {
@@ -64,7 +64,7 @@ namespace Converter.Application.Services
             }
         }
 
-        public void ReportGlobalProgress(int progress, string status = null)
+        public void ReportGlobalProgress(int progress, string? status = null)
         {
             try
             {

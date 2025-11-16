@@ -12,6 +12,9 @@ namespace Converter.Application.Abstractions
         event EventHandler CancelConversionRequested;
         event EventHandler<Converter.Models.ConversionProfile> PresetSelected;
         event EventHandler SettingsChanged;
+        event EventHandler<string[]>? FilesDropped;
+        event EventHandler? RemoveSelectedFilesRequested;
+        event EventHandler? ClearAllFilesRequested;
 
         // Properties
         string FfmpegPath { get; set; }

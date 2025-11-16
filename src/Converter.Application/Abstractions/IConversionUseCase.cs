@@ -7,6 +7,6 @@ namespace Converter.Application.Abstractions
 {
     public interface IConversionUseCase
     {
-        Task<ConversionResult> ExecuteAsync(QueueItem item, IProgress<int> progress = null, CancellationToken cancellationToken = default);
+        Task<ConversionResult> ExecuteAsync(QueueItem item, IProgress<int>? progress = null, CancellationToken cancellationToken = default);
     }
 }

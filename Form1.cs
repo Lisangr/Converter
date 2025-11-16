@@ -16,6 +16,7 @@ namespace Converter
         private ThemeSelectorControl? _themeSelector;
         private Button? _themeMenuButton;
         private bool _themeInitialized;
+        private readonly IThemeService _themeService;
 
         // IMainView events
         public event EventHandler? AddFilesRequested;
@@ -23,6 +24,9 @@ namespace Converter
         public event EventHandler? CancelConversionRequested;
         public event EventHandler<Converter.Models.ConversionProfile>? PresetSelected;
         public event EventHandler? SettingsChanged;
+        public event EventHandler<string[]>? FilesDropped;
+        public event EventHandler? RemoveSelectedFilesRequested;
+        public event EventHandler? ClearAllFilesRequested;
 
         private string _ffmpegPath = string.Empty;
         public string FfmpegPath
@@ -81,8 +85,9 @@ namespace Converter
             set => SetStatusText(value);
         }
 
-        public Form1()
+        public Form1(IThemeService themeService)
         {
+            _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
             InitializeComponent();
             _notificationSettings = LoadNotificationSettings();
             _notificationService = new NotificationService(_notificationSettings);
@@ -180,12 +185,14 @@ namespace Converter
 
             btnStart.Tag = "AccentButton";
 
-            ThemeManager.Instance.ThemeChanged -= OnThemeChanged;
-            ThemeManager.Instance.ThemeChanged += OnThemeChanged;
-            ThemeManager.Instance.ApplyTheme(this);
-            UpdateCustomControlsTheme(ThemeManager.Instance.CurrentTheme);
+            _themeService.ThemeChanged -= OnThemeChanged;
+            _themeService.ThemeChanged += OnThemeChanged;
 
-            _themeSelector = new ThemeSelectorControl
+            // применяем текущую тему ко всей форме
+            _themeService.ApplyTheme(this);
+            UpdateCustomControlsTheme(_themeService.CurrentTheme);
+
+            _themeSelector = new ThemeSelectorControl(_themeService)
             {
                 Visible = false,
                 Anchor = AnchorStyles.Top | AnchorStyles.Right
@@ -224,7 +231,7 @@ namespace Converter
                 return;
             }
 
-            ThemeManager.Instance.ApplyTheme(this);
+            _themeService.ApplyTheme(this);
             UpdateCustomControlsTheme(theme);
             Refresh();
         }
@@ -255,9 +262,10 @@ namespace Converter
             }
         }
 
-        protected override void OnFormClosed(FormClosedEventArgs e)
+        private void DisposeManagedResources()
         {
-            ThemeManager.Instance.ThemeChanged -= OnThemeChanged;
+            _themeService.ThemeChanged -= OnThemeChanged;
+
             try
             {
                 _estimateDebounce?.Stop();
@@ -285,8 +293,11 @@ namespace Converter
             }
             catch { }
 
-            _notificationService?.Dispose();
-            base.OnFormClosed(e);
+            try
+            {
+                _notificationService?.Dispose();
+            }
+            catch { }
         }
 
         private void OnThemeControlsResize(object? sender, EventArgs e) => PositionThemeControls();

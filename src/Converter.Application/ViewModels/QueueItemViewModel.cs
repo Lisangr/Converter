@@ -7,7 +7,9 @@ namespace Converter.Application.ViewModels
     {
         public Guid Id { get; init; }
         public string FileName { get; init; } = string.Empty;
+        public string FilePath { get; init; } = string.Empty;
         public long FileSizeBytes { get; init; }
+        public bool IsSelected { get; set; }
 
         public ConversionStatus Status { get; set; }
         public int Progress { get; set; }
@@ -22,7 +24,8 @@ namespace Converter.Application.ViewModels
             return new QueueItemViewModel
             {
                 Id = item.Id,
-                FileName = item.FileName,
+                FileName = Path.GetFileName(item.FilePath),
+                FilePath = item.FilePath,
                 FileSizeBytes = item.FileSizeBytes,
                 Status = item.Status,
                 Progress = item.Progress,

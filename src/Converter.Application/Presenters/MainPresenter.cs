@@ -58,6 +58,16 @@ namespace Converter.Application.Presenters
             _queueProcessor.ItemFailed += OnItemFailed;
             _queueProcessor.ProgressChanged += OnProgressChanged;
             _queueProcessor.QueueCompleted += OnQueueCompleted;
+            
+            // Subscribe to view events via async adapters
+            _view.AddFilesRequested += MakeAsyncEventHandler(OnAddFilesRequestedAsync, "adding files");
+            _view.StartConversionRequested += MakeAsyncEventHandler(OnStartConversionRequestedAsync, "starting conversion");
+            _view.CancelConversionRequested += MakeAsyncEventHandler(OnCancelConversionRequestedAsync, "canceling conversion");
+            _view.PresetSelected += OnPresetSelected;
+            _view.FilesDropped += MakeAsyncEventHandler(OnFilesDroppedAsync, "adding dropped files");
+            _view.RemoveSelectedFilesRequested += MakeAsyncEventHandler(OnRemoveSelectedFilesRequestedAsync, "removing selected files");
+            _view.ClearAllFilesRequested += MakeAsyncEventHandler(OnClearAllFilesRequestedAsync, "clearing all files");
+            _view.SettingsChanged += OnSettingsChanged;
         }
 
         public async Task InitializeAsync()
@@ -66,17 +76,33 @@ namespace Converter.Application.Presenters
 
             try
             {
-                await LoadSettingsAsync();
-                await LoadPresetsAsync();
-                // Bind view to ViewModel collections
+                _view.IsBusy = true;
+                _view.StatusText = "Initializing application...";
+                
+                // Load settings and presets in parallel
+                await Task.WhenAll(
+                    LoadSettingsAsync(),
+                    LoadPresetsAsync()
+                );
+                
+                // Initialize UI bindings
                 _view.QueueItemsBinding = _viewModel.QueueItems;
-                SubscribeToViewEvents();
+                
+                // Load initial queue
                 await LoadQueueAsync();
+                
+                _view.StatusText = "Ready";
+                _logger.LogInformation("MainPresenter initialized successfully");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error initializing MainPresenter");
                 _view.ShowError($"Failed to start application: {ex.Message}");
+                throw; // Re-throw to allow the application to handle the error
+            }
+            finally
+            {
+                _view.IsBusy = false;
             }
         }
 
@@ -101,15 +127,6 @@ namespace Converter.Application.Presenters
             var defaultProfile = await _profileProvider.GetDefaultProfileAsync();
             _view.SelectedPreset = defaultProfile;
             _viewModel.SelectedPreset = defaultProfile;
-        }
-
-        private void SubscribeToViewEvents()
-        {
-            _view.AddFilesRequested += OnAddFilesRequested;
-            _view.StartConversionRequested += OnStartConversionRequested;
-            _view.CancelConversionRequested += OnCancelConversionRequested;
-            _view.PresetSelected += OnPresetSelected;
-            _view.SettingsChanged += OnSettingsChanged;
         }
 
         private void OnPresetSelected(object? sender, Converter.Models.ConversionProfile profile)
@@ -148,11 +165,14 @@ namespace Converter.Application.Presenters
             }
         }
 
-        private async void OnAddFilesRequested(object? sender, EventArgs e)
+        private async Task OnAddFilesRequestedAsync(object? sender, EventArgs e)
         {
             try
             {
+                _view.IsBusy = true;
+                _view.StatusText = "Adding files...";
                 _logger.LogInformation("Adding files to queue");
+                
                 var filePaths = _filePicker.PickFiles(
                     "Select files to convert", 
                     "Video Files|*.mp4;*.avi;*.mkv;*.mov;*.wmv|All Files|*.*");
@@ -160,14 +180,22 @@ namespace Converter.Application.Presenters
                 if (filePaths == null || !filePaths.Any())
                 {
                     _logger.LogInformation("No files selected");
+                    _view.StatusText = "No files selected";
                     return;
                 }
 
-                var items = new List<QueueItem>();
+                var addedCount = 0;
                 foreach (var filePath in filePaths)
                 {
                     try
                     {
+                        if (!File.Exists(filePath)) continue;
+                        if (_viewModel.QueueItems.Any(item => item.FilePath == filePath)) 
+                        {
+                            _logger.LogInformation("File already in queue: {FilePath}", filePath);
+                            continue;
+                        }
+
                         var fileInfo = new FileInfo(filePath);
                         var item = new QueueItem
                         {
@@ -178,7 +206,8 @@ namespace Converter.Application.Presenters
                             AddedAt = DateTime.UtcNow
                         };
                         
-                        items.Add(item);
+                        await _queueRepository.AddAsync(item);
+                        addedCount++;
                         _logger.LogDebug("Added file to queue: {FilePath}", filePath);
                     }
                     catch (Exception ex)
@@ -188,10 +217,15 @@ namespace Converter.Application.Presenters
                     }
                 }
 
-                if (items.Any())
+                if (addedCount > 0)
                 {
-                    await _queueRepository.AddRangeAsync(items);
-                    _view.ShowInfo($"Added {items.Count} file(s) to the queue");
+                    _view.StatusText = $"Added {addedCount} file(s) to queue";
+                    _view.ShowInfo($"Added {addedCount} file(s) to the queue");
+                    await LoadQueueAsync();
+                }
+                else
+                {
+                    _view.StatusText = "No new files were added to the queue";
                 }
             }
             catch (Exception ex)
@@ -199,9 +233,13 @@ namespace Converter.Application.Presenters
                 _logger.LogError(ex, "Error in OnAddFilesRequested");
                 _view.ShowError($"Failed to add files: {ex.Message}");
             }
+            finally
+            {
+                _view.IsBusy = false;
+            }
         }
 
-        private async void OnStartConversionRequested(object? sender, EventArgs e)
+        private async Task OnStartConversionRequestedAsync(object? sender, EventArgs e)
         {
             try
             {
@@ -223,7 +261,7 @@ namespace Converter.Application.Presenters
             }
         }
 
-        private async void OnCancelConversionRequested(object? sender, EventArgs e)
+        private async Task OnCancelConversionRequestedAsync(object? sender, EventArgs e)
         {
             try
             {
@@ -257,7 +295,7 @@ namespace Converter.Application.Presenters
             }
         }
 
-        private void OnItemAdded(object sender, QueueItem item)
+        private void OnItemAdded(object? sender, QueueItem item)
         {
             InvokeOnUiThread(() =>
             {
@@ -267,7 +305,7 @@ namespace Converter.Application.Presenters
             });
         }
 
-        private void OnItemUpdated(object sender, QueueItem item)
+        private void OnItemUpdated(object? sender, QueueItem item)
         {
             InvokeOnUiThread(() =>
             {
@@ -277,7 +315,7 @@ namespace Converter.Application.Presenters
             });
         }
 
-        private void OnItemRemoved(object sender, Guid itemId)
+        private void OnItemRemoved(object? sender, Guid itemId)
         {
             InvokeOnUiThread(() =>
             {
@@ -333,7 +371,7 @@ namespace Converter.Application.Presenters
             });
         }
 
-        private void OnProgressChanged(object sender, QueueProgressEventArgs e)
+        private void OnProgressChanged(object? sender, QueueProgressEventArgs e)
         {
             InvokeOnUiThread(() =>
             {
@@ -355,7 +393,7 @@ namespace Converter.Application.Presenters
             });
         }
 
-        private void OnQueueCompleted(object sender, EventArgs e)
+        private void OnQueueCompleted(object? sender, EventArgs e)
         {
             InvokeOnUiThread(() =>
             {
@@ -363,6 +401,152 @@ namespace Converter.Application.Presenters
                 _view.IsBusy = false;
                 _view.ShowInfo("All items have been processed");
             });
+        }
+
+        private async Task OnFilesDroppedAsync(object? sender, string[] files)
+        {
+            var addedCount = 0;
+            foreach (var file in files)
+            {
+                if (!File.Exists(file)) continue;
+                if (_viewModel.QueueItems.Any(item => item.FilePath == file)) continue;
+                
+                var item = new QueueItem
+                {
+                    Id = Guid.NewGuid(),
+                    FilePath = file,
+                    FileSizeBytes = new FileInfo(file).Length,
+                    Status = ConversionStatus.Pending,
+                    AddedAt = DateTime.UtcNow
+                };
+                
+                await _queueRepository.AddAsync(item);
+                addedCount++;
+            }
+            
+            if (addedCount > 0)
+            {
+                _view.StatusText = $"Добавлено файлов: {addedCount}";
+                await LoadQueueAsync();
+            }
+        }
+
+        private async Task OnRemoveSelectedFilesRequestedAsync(object? sender, EventArgs e)
+        {
+            var selectedItems = _viewModel.QueueItems
+                .Where(item => item.IsSelected)
+                .ToList();
+
+            if (selectedItems.Count == 0)
+            {
+                _view.ShowInfo("No files selected for removal");
+                return;
+            }
+
+            try
+            {
+                _view.IsBusy = true;
+                _view.StatusText = $"Removing {selectedItems.Count} file(s)...";
+                _logger.LogInformation("Removing {Count} selected files from queue", selectedItems.Count);
+
+                foreach (var item in selectedItems)
+                {
+                    try
+                    {
+                        await _queueRepository.RemoveAsync(item.Id);
+                        _logger.LogDebug("Removed file from queue: {FilePath}", item.FilePath);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error removing file from queue: {FilePath}", item.FilePath);
+                        _view.ShowError($"Error removing '{item.FileName}': {ex.Message}");
+                    }
+                }
+
+                _view.StatusText = $"Removed {selectedItems.Count} file(s) from queue";
+                _view.ShowInfo($"Removed {selectedItems.Count} file(s) from the queue");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in OnRemoveSelectedFilesRequested");
+                _view.ShowError($"Failed to remove files: {ex.Message}");
+            }
+            finally
+            {
+                _view.IsBusy = false;
+            }
+        }
+
+        private async Task OnClearAllFilesRequestedAsync(object? sender, EventArgs e)
+        {
+            if (_viewModel.QueueItems.Count == 0)
+            {
+                _view.ShowInfo("Queue is already empty");
+                return;
+            }
+
+            try
+            {
+                _view.IsBusy = true;
+                _view.StatusText = "Clearing all files from queue...";
+                _logger.LogInformation("Clearing all files from queue");
+
+                var allItems = _viewModel.QueueItems.ToList();
+                foreach (var item in allItems)
+                {
+                    try
+                    {
+                        await _queueRepository.RemoveAsync(item.Id);
+                        _logger.LogDebug("Removed file from queue: {FilePath}", item.FilePath);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error removing file from queue: {FilePath}", item.FilePath);
+                        _view.ShowError($"Error removing '{item.FileName}': {ex.Message}");
+                    }
+                }
+
+                _view.StatusText = "Queue cleared";
+                _view.ShowInfo("All files have been removed from the queue");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in OnClearAllFilesRequested");
+                _view.ShowError($"Failed to clear queue: {ex.Message}");
+            }
+            finally
+            {
+                _view.IsBusy = false;
+            }
+        }
+
+        private EventHandler MakeAsyncEventHandler(Func<object?, EventArgs, Task> handler, string operation)
+        {
+            return (sender, args) =>
+            {
+                _ = HandleViewEventAsync(() => handler(sender, args), operation);
+            };
+        }
+
+        private EventHandler<string[]> MakeAsyncEventHandler(Func<object?, string[], Task> handler, string operation)
+        {
+            return (sender, files) =>
+            {
+                _ = HandleViewEventAsync(() => handler(sender, files), operation);
+            };
+        }
+
+        private async Task HandleViewEventAsync(Func<Task> action, string operation)
+        {
+            try
+            {
+                await action().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unhandled error while {Operation}", operation);
+                _view.ShowError($"An unexpected error occurred while {operation}: {ex.Message}");
+            }
         }
 
         public void Dispose()
