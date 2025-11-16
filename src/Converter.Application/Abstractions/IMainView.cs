@@ -1,36 +1,38 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using Converter.Application.DTOs;
 
-namespace Converter.Application.Abstractions;
-
-public interface IMainView
+namespace Converter.Application.Abstractions
 {
-    // Events
-    event Func<object, EventArgs, Task> AddFilesRequested;
-    event Func<object, EventArgs, Task> StartConversionRequested;
-    event Func<object, EventArgs, Task> CancelConversionRequested;
-    event Func<object, ConversionProfile, Task> PresetSelected;
-    event Func<object, EventArgs, Task> SettingsChanged;
+    public interface IMainView
+    {
+        // Events
+        event EventHandler AddFilesRequested;
+        event EventHandler StartConversionRequested;
+        event EventHandler CancelConversionRequested;
+        event EventHandler<Converter.Models.ConversionProfile> PresetSelected;
+        event EventHandler SettingsChanged;
 
-    // Properties
-    string FfmpegPath { get; set; }
-    string OutputFolder { get; set; }
-    ObservableCollection<ConversionProfile> AvailablePresets { get; set; }
-    ConversionProfile? SelectedPreset { get; set; }
-    
-    // Methods
-    void SetQueueItems(IEnumerable<QueueItemDto> items);
-    void UpdateQueueItem(QueueItemDto item);
-    void SetGlobalProgress(int percent, string status);
-    void ShowError(string message);
-    void ShowInfo(string message);
-    void UpdatePresetControls(ConversionProfile preset);
-    void SetBusy(bool isBusy);
-    
-    // File dialogs
-    string? ShowOpenFileDialog(string title, string filter);
-    string? ShowFolderBrowserDialog(string description);
-    IEnumerable<string> ShowOpenMultipleFilesDialog(string title, string filter);
+        // Properties
+        string FfmpegPath { get; set; }
+        string OutputFolder { get; set; }
+        ObservableCollection<Converter.Models.ConversionProfile> AvailablePresets { get; set; }
+        Converter.Models.ConversionProfile? SelectedPreset { get; set; }
+        
+        // Methods
+        void AddQueueItem(Converter.Models.QueueItem item);
+        void UpdateQueueItem(Converter.Models.QueueItem item);
+        void UpdateQueueItemProgress(Guid itemId, int progress);
+        void RemoveQueueItem(Guid itemId);
+        void UpdateQueue(IEnumerable<Converter.Models.QueueItem> items);
+        void SetStatusText(string status);
+        void SetBusy(bool isBusy);
+        void ShowError(string message);
+        void ShowInfo(string message);
+        
+        // File dialogs
+        string[] ShowOpenFileDialog(string title, string filter);
+        string? ShowFolderBrowserDialog(string description);
+        IEnumerable<string> ShowOpenMultipleFilesDialog(string title, string filter);
+    }
 }

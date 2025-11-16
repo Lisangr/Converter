@@ -56,7 +56,7 @@ namespace Converter.Services
             }
         }
 
-        public void NotifyConversionComplete(ConversionResult result)
+        public void NotifyConversionComplete(NotificationSummary result)
         {
             if (result == null)
             {
@@ -102,7 +102,7 @@ namespace Converter.Services
 
         public void ResetProgressNotifications() => _notifiedMilestones.Clear();
 
-        public void ShowAdvancedNotification(ConversionResult result)
+        public void ShowAdvancedNotification(NotificationSummary result)
         {
             if (!_settings.DesktopNotificationsEnabled)
             {
@@ -147,7 +147,7 @@ namespace Converter.Services
         public bool ShowProgressNotifications { get; set; }
     }
 
-    public class ConversionResult
+    public class NotificationSummary
     {
         public bool Success { get; set; }
         public int ProcessedFiles { get; set; }
@@ -158,9 +158,9 @@ namespace Converter.Services
         public string? ErrorMessage { get; set; }
         public long? OutputSize { get; set; }
 
-        public ConversionResult() { }
+        public NotificationSummary() { }
 
-        public ConversionResult(bool success, long? outputSize, string? errorMessage)
+        public NotificationSummary(bool success, long? outputSize, string? errorMessage)
         {
             Success = success;
             OutputSize = outputSize;

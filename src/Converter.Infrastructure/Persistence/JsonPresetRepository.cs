@@ -4,6 +4,7 @@ using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Converter.Application.Abstractions;
+using Converter.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Converter.Infrastructure.Persistence
@@ -14,7 +15,7 @@ namespace Converter.Infrastructure.Persistence
         private readonly ILogger<JsonPresetRepository> _logger;
         private readonly JsonSerializerOptions _jsonOptions;
         private bool _disposed;
-        private List<ConversionProfile>? _cachedPresets;
+        private List<Converter.Models.ConversionProfile>? _cachedPresets;
 
         public JsonPresetRepository(ILogger<JsonPresetRepository> logger)
         {
@@ -32,7 +33,7 @@ namespace Converter.Infrastructure.Persistence
             _logger.LogInformation("Presets file path: {Path}", _presetsPath);
         }
 
-        public async Task<IReadOnlyList<ConversionProfile>> GetAllPresetsAsync()
+        public async Task<IReadOnlyList<Converter.Models.ConversionProfile>> GetAllPresetsAsync()
         {
             if (_cachedPresets != null)
                 return _cachedPresets;
@@ -47,7 +48,7 @@ namespace Converter.Infrastructure.Persistence
                 }
 
                 await using var fs = File.OpenRead(_presetsPath);
-                _cachedPresets = await JsonSerializer.DeserializeAsync<List<ConversionProfile>>(fs, _jsonOptions) 
+                _cachedPresets = await JsonSerializer.DeserializeAsync<List<Converter.Models.ConversionProfile>>(fs, _jsonOptions) 
                                ?? GetDefaultPresets();
                 
                 return _cachedPresets;
@@ -59,11 +60,11 @@ namespace Converter.Infrastructure.Persistence
             }
         }
 
-        public async Task SavePresetAsync(ConversionProfile preset)
+        public async Task SavePresetAsync(Converter.Models.ConversionProfile preset)
         {
             if (preset == null) throw new ArgumentNullException(nameof(preset));
 
-            var presets = new List<ConversionProfile>((await GetAllPresetsAsync())!);
+            var presets = new List<Converter.Models.ConversionProfile>((await GetAllPresetsAsync())!);
             var existingIndex = presets.FindIndex(p => p.Name == preset.Name);
             
             if (existingIndex >= 0)
@@ -82,7 +83,7 @@ namespace Converter.Infrastructure.Persistence
             if (string.IsNullOrWhiteSpace(presetName))
                 throw new ArgumentException("Preset name cannot be empty", nameof(presetName));
 
-            var presets = new List<ConversionProfile>((await GetAllPresetsAsync())!);
+            var presets = new List<Converter.Models.ConversionProfile>((await GetAllPresetsAsync())!);
             var count = presets.RemoveAll(p => p.Name == presetName);
             
             if (count > 0)
@@ -107,18 +108,66 @@ namespace Converter.Infrastructure.Persistence
             }
         }
 
-        private static List<ConversionProfile> GetDefaultPresets()
+        private static List<Converter.Models.ConversionProfile> GetDefaultPresets()
+{
+    return new List<Converter.Models.ConversionProfile>
+    {
+        new() 
         {
-            return new List<ConversionProfile>
-            {
-                new("MP4 (H.264, 1080p)", "libx264", "aac", "192k", 23),
-                new("MP4 (H.265, 4K)", "libx265", "aac", "256k", 28),
-                new("WebM (VP9, 720p)", "libvpx-vp9", "libopus", "128k", 30),
-                new("MP3 (High Quality)", "copy", "libmp3lame", "320k", 0),
-                new("AAC (High Quality)", "copy", "aac", "256k", 0)
-            };
+            Id = Guid.NewGuid().ToString(),
+            Name = "MP4 (H.264, 1080p)",
+            VideoCodec = "libx264",
+            AudioCodec = "aac",
+            AudioBitrate = 192,
+            CRF = 23,
+            Width = 1920,
+            Height = 1080,
+            Format = "mp4"
+        },
+        new() 
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = "MP4 (H.265, 4K)",
+            VideoCodec = "libx265",
+            AudioCodec = "aac",
+            AudioBitrate = 256,
+            CRF = 28,
+            Width = 3840,
+            Height = 2160,
+            Format = "mp4"
+        },
+        new() 
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = "WebM (VP9, 720p)",
+            VideoCodec = "libvpx-vp9",
+            AudioCodec = "libopus",
+            AudioBitrate = 128,
+            CRF = 30,
+            Width = 1280,
+            Height = 720,
+            Format = "webm"
+        },
+        new() 
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = "MP3 (High Quality)",
+            VideoCodec = null,
+            AudioCodec = "libmp3lame",
+            AudioBitrate = 320,
+            Format = "mp3"
+        },
+        new() 
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = "AAC (High Quality)",
+            VideoCodec = null,
+            AudioCodec = "aac",
+            AudioBitrate = 256,
+            Format = "m4a"
         }
-
+    };
+}
         public void Dispose()
         {
             if (!_disposed)

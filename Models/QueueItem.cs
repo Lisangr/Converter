@@ -100,3 +100,11 @@ public class ConversionSettings
     public int? Threads { get; set; }
     public AudioProcessingOptions? AudioProcessing { get; set; }
 }
+
+public enum QueueItemStatus
+{
+    Pending,
+    Processing,
+    Completed,
+    Failed
+}

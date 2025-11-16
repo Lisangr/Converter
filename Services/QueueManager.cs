@@ -391,7 +391,7 @@ public class QueueManager
             {
                 item.Status = ConversionStatus.Completed;
                 item.Progress = 100;
-                item.OutputFileSizeBytes = result.OutputSize;
+                item.OutputFileSizeBytes = result.OutputFileSize;
             }
             else
             {
@@ -719,6 +719,10 @@ public class QueueManager
         }
 
         var outputSize = Math.Max(0, item.FileSizeBytes - random.Next(0, (int)Math.Max(1, item.FileSizeBytes / 10)));
-        return new ConversionResult { Success = true, ProcessedFiles = 1, SpaceSaved = outputSize };
+        return new ConversionResult
+        {
+            Success = true,
+            OutputFileSize = outputSize
+        };
     }
 }

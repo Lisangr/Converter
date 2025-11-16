@@ -99,6 +99,7 @@ namespace Converter
         private FlowLayoutPanel? _queueItemsPanel;
         private readonly Dictionary<string, Guid> _queueItemLookup = new(StringComparer.OrdinalIgnoreCase);
         private ConversionStatus? _queueFilterStatus;
+
         protected override void OnLoad(EventArgs e)
         {
             base.OnLoad(e);
@@ -345,6 +346,7 @@ namespace Converter
             _btnOpenEditor.Enabled = false;
             _btnOpenEditor.Click += OnOpenEditorClick;
 
+            // IMainView: прокидываем в событие AddFilesRequested, реализованное в Form1.cs
             btnAddFiles.Click += (s, e) => AddFilesRequested?.Invoke(this, EventArgs.Empty);
             btnRemoveSelected.Click += btnRemoveSelected_Click;
             btnClearAll.Click += (s, e) => ClearAllFiles();
@@ -818,7 +820,7 @@ namespace Converter
             dialog.ShowDialog(this);
         }
 
-        private async Task<ConversionResult> ConvertQueueItemAsync(QueueItem item, IProgress<int> progress, CancellationToken cancellationToken)
+        private async Task<Converter.Models.ConversionResult> ConvertQueueItemAsync(QueueItem item, IProgress<int> progress, CancellationToken cancellationToken)
         {
             try
             {
@@ -855,7 +857,12 @@ namespace Converter
                     outputSize = new System.IO.FileInfo(output).Length;
                 }
 
-                return new ConversionResult(true, outputSize, null);
+                return new Converter.Models.ConversionResult
+                {
+                    Success = true,
+                    OutputFileSize = outputSize ?? 0,
+                    OutputPath = output
+                };
             }
             catch (OperationCanceledException)
             {
@@ -863,14 +870,22 @@ namespace Converter
             }
             catch (Exception ex)
             {
-                return new ConversionResult(false, null, ex.Message);
+                return new Converter.Models.ConversionResult
+                {
+                    Success = false,
+                    ErrorMessage = ex.Message
+                };
             }
         }
 
         private void BuildPresetsTab()
         {
-            var mainPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10) };
-            
+            var mainPanel = new Panel
+            {
+                Dock = DockStyle.Fill,
+                Padding = new Padding(10)
+            };
+
             // Создаем вложенный TabControl для категорий пресетов
             var categoryTabControl = new TabControl
             {
@@ -878,43 +893,48 @@ namespace Converter
                 Appearance = TabAppearance.FlatButtons,
                 Multiline = true
             };
-            
+
             if (_presetService != null)
             {
                 var presets = _presetService.GetAllPresets();
                 AppendLog($"Загружено пресетов из сервиса: {presets.Count}");
-                
+
                 // Группируем по категориям
                 var groups = presets
                     .GroupBy(p => string.IsNullOrWhiteSpace(p.Category) ? "Прочее" : p.Category)
                     .OrderBy(g => g.Key);
-                
+
                 foreach (var group in groups)
                 {
                     // Создаем вкладку для категории
                     var categoryTab = new TabPage(group.Key);
-                    var categoryPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(15), AutoScroll = true };
-                    
+                    var categoryPanel = new Panel
+                    {
+                        Dock = DockStyle.Fill,
+                        Padding = new Padding(15),
+                        AutoScroll = true
+                    };
+
                     // Сохраняем пресеты для пересборки
                     var presetsList = group.ToList();
-                    
+
                     // Функция для пересборки кнопок
                     Action rebuildButtons = () =>
                     {
                         categoryPanel.SuspendLayout();
                         categoryPanel.Controls.Clear();
-                        
+
                         int y = 10;
                         int buttonWidth = 180;
                         int buttonHeight = 40;
                         int spacing = 10;
-                        
+
                         // Вычисляем количество кнопок в ряду адаптивно
                         int maxButtonsPerRow = Math.Max(1, (categoryPanel.ClientSize.Width - 30) / (buttonWidth + spacing));
-                        
+
                         int x = 10;
                         int buttonsInCurrentRow = 0;
-                        
+
                         foreach (var preset in presetsList)
                         {
                             var btn = new Button
@@ -1274,6 +1294,7 @@ namespace Converter
             btnStart.BackColor = Color.FromArgb(0, 120, 215);
             btnStart.ForeColor = Color.White;
             btnStart.FlatAppearance.BorderSize = 0;
+            // IMainView: запуск конвертации
             btnStart.Click += (s, e) => StartConversionRequested?.Invoke(this, EventArgs.Empty);
 
             btnStop = CreateStyledButton("⏹ Остановить", 180);
@@ -1284,6 +1305,7 @@ namespace Converter
             btnStop.ForeColor = Color.White;
             btnStop.Enabled = false;
             btnStop.FlatAppearance.BorderSize = 0;
+            // IMainView: отмена/остановка
             btnStop.Click += (s, e) => CancelConversionRequested?.Invoke(this, EventArgs.Empty);
 
             _btnNotificationSettings = CreateStyledButton("🔔 Уведомления", 310);
@@ -2028,7 +2050,7 @@ namespace Converter
                 else
                 {
                     AppendLog("⚠ Конвертация отменена пользователем");
-                    _notificationService?.NotifyConversionComplete(new ConversionResult
+                    _notificationService?.NotifyConversionComplete(new NotificationSummary
                     {
                         Success = false,
                         ErrorMessage = "Конвертация отменена пользователем.",
@@ -2039,7 +2061,7 @@ namespace Converter
             catch (OperationCanceledException)
             {
                 AppendLog("⚠ Конвертация отменена");
-                _notificationService?.NotifyConversionComplete(new ConversionResult
+                _notificationService?.NotifyConversionComplete(new NotificationSummary
                 {
                     Success = false,
                     ErrorMessage = "Конвертация отменена пользователем.",
@@ -2050,7 +2072,7 @@ namespace Converter
             {
                 AppendLog($"❌ Критическая ошибка: {ex.Message}");
                 MessageBox.Show(this, $"Ошибка: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                _notificationService?.NotifyConversionComplete(new ConversionResult
+                _notificationService?.NotifyConversionComplete(new NotificationSummary
                 {
                     Success = false,
                     ErrorMessage = ex.Message,
@@ -2310,7 +2332,7 @@ namespace Converter
                 .Where(x => x.Status == ConversionStatus.Completed)
                 .ToList();
 
-            var summary = new ConversionResult
+            var summary = new NotificationSummary
             {
                 Success = result.failed == 0,
                 ProcessedFiles = successfulItems.Count,

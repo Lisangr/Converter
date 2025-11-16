@@ -6,7 +6,6 @@ using Converter.Models;
 using Converter.Services;
 using Converter.UI.Controls;
 using Converter.Application.Abstractions;
-using Converter.Application.DTOs;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
@@ -18,11 +17,12 @@ namespace Converter
         private Button? _themeMenuButton;
         private bool _themeInitialized;
 
-        public event Func<object, EventArgs, Task>? AddFilesRequested;
-        public event Func<object, EventArgs, Task>? StartConversionRequested;
-        public event Func<object, EventArgs, Task>? CancelConversionRequested;
-        public event Func<object, ConversionProfile, Task>? PresetSelected;
-        public event Func<object, EventArgs, Task>? SettingsChanged;
+        // IMainView events
+        public event EventHandler? AddFilesRequested;
+        public event EventHandler? StartConversionRequested;
+        public event EventHandler? CancelConversionRequested;
+        public event EventHandler<Converter.Models.ConversionProfile>? PresetSelected;
+        public event EventHandler? SettingsChanged;
 
         private string _ffmpegPath = string.Empty;
         public string FfmpegPath
@@ -38,18 +38,18 @@ namespace Converter
             set { _outputFolder = value ?? string.Empty; }
         }
 
-        public ObservableCollection<ConversionProfile> AvailablePresets { get; set; } = new();
+        public ObservableCollection<Converter.Models.ConversionProfile> AvailablePresets { get; set; } = new();
 
-        private ConversionProfile? _selectedPreset;
-        public ConversionProfile? SelectedPreset
+        private Converter.Models.ConversionProfile? _selectedPreset;
+        public Converter.Models.ConversionProfile? SelectedPreset
         {
             get => _selectedPreset;
             set
             {
                 _selectedPreset = value;
-                if (value != null && PresetSelected != null)
+                if (value != null)
                 {
-                    _ = PresetSelected.Invoke(this, value);
+                    PresetSelected?.Invoke(this, value);
                 }
             }
         }
@@ -61,13 +61,14 @@ namespace Converter
             _notificationService = new NotificationService(_notificationSettings);
         }
 
-        public void UpdatePresetControls(ConversionProfile preset)
+        public void UpdatePresetControls(Converter.Models.ConversionProfile preset)
         {
             // minimal placeholder: reflect selected preset name in title/status
             if (InvokeRequired) { BeginInvoke(new Action(() => UpdatePresetControls(preset))); return; }
             AppendLog($"Preset: {preset.Name} · {preset.VideoCodec}/{preset.AudioCodec}");
         }
 
+        // IMainView: global busy state
         public void SetBusy(bool isBusy)
         {
             if (InvokeRequired) { BeginInvoke(new Action(() => SetBusy(isBusy))); return; }
@@ -80,30 +81,82 @@ namespace Converter
             }
             catch { }
         }
-
-        public void SetQueueItems(IEnumerable<QueueItemDto> items)
+        // IMainView: queue view API (bridge to existing queue UI)
+        public void AddQueueItem(QueueItem item)
         {
-            if (InvokeRequired) { BeginInvoke(new Action(() => SetQueueItems(items))); return; }
-            // TODO: map DTOs to UI controls; minimal no-op for now
+            // Reuse existing queue UI: behave like external "item added" event
+            if (InvokeRequired) { BeginInvoke(new Action(() => AddQueueItem(item))); return; }
+            if (_queueManager != null)
+            {
+                _queueManager.AddItem(item);
+                RefreshQueueDisplay();
+            }
         }
 
-        public void UpdateQueueItem(QueueItemDto item)
+        public void UpdateQueueItem(QueueItem item)
         {
             if (InvokeRequired) { BeginInvoke(new Action(() => UpdateQueueItem(item))); return; }
-            // TODO: update corresponding UI control
+
+            if (_queueManager != null)
+            {
+                _queueManager.UpdateItem(item.Id, q =>
+                {
+                    q.Status = item.Status;
+                    q.Progress = item.Progress;
+                    q.ErrorMessage = item.ErrorMessage;
+                    q.OutputPath = item.OutputPath;
+                    q.OutputFileSizeBytes = item.OutputFileSizeBytes;
+                });
+                RefreshQueueDisplay();
+            }
         }
 
-        public void SetGlobalProgress(int percent, string status)
+        public void UpdateQueueItemProgress(Guid itemId, int progress)
         {
-            if (InvokeRequired) { BeginInvoke(new Action(() => SetGlobalProgress(percent, status))); return; }
+            if (InvokeRequired) { BeginInvoke(new Action(() => UpdateQueueItemProgress(itemId, progress))); return; }
+
+            if (_queueManager != null)
+            {
+                _queueManager.UpdateItem(itemId, q => q.Progress = progress);
+                RefreshQueueDisplay();
+            }
+        }
+
+        public void RemoveQueueItem(Guid itemId)
+        {
+            if (InvokeRequired) { BeginInvoke(new Action(() => RemoveQueueItem(itemId))); return; }
+
+            _queueManager?.RemoveItem(itemId);
+            RefreshQueueDisplay();
+        }
+
+        public void UpdateQueue(IEnumerable<QueueItem> items)
+        {
+            if (InvokeRequired) { BeginInvoke(new Action(() => UpdateQueue(items))); return; }
+
+            if (_queueManager != null)
+            {
+                // Сбросить очередь и добавить новые элементы как Pending
+                _queueManager.ClearQueue();
+                _queueManager.AddItems(items);
+                RefreshQueueDisplay();
+            }
+        }
+
+        public void SetStatusText(string status)
+        {
+            if (InvokeRequired) { BeginInvoke(new Action(() => SetStatusText(status))); return; }
+
+            // Минимально: показываем статус в логах и при наличии статус-лейбла внизу
+            AppendLog(status);
             try
             {
-                if (progressBarTotal != null) progressBarTotal.Value = Math.Max(progressBarTotal.Minimum, Math.Min(progressBarTotal.Maximum, percent));
                 if (lblStatusTotal != null) lblStatusTotal.Text = status;
             }
             catch { }
         }
 
+        // IMainView: notifications
         public void ShowError(string message)
         {
             if (InvokeRequired) { BeginInvoke(new Action(() => ShowError(message))); return; }
@@ -116,16 +169,17 @@ namespace Converter
             AppendLog($"ℹ {message}");
         }
 
-        public string? ShowOpenFileDialog(string title, string filter)
+        // IMainView: file dialogs
+        public string[] ShowOpenFileDialog(string title, string filter)
         {
             using var dlg = new OpenFileDialog
             {
                 Title = title,
                 Filter = filter,
                 CheckFileExists = true,
-                Multiselect = false
+                Multiselect = true
             };
-            return dlg.ShowDialog(this) == DialogResult.OK ? dlg.FileName : null;
+            return dlg.ShowDialog(this) == DialogResult.OK ? dlg.FileNames : Array.Empty<string>();
         }
 
         public IEnumerable<string> ShowOpenMultipleFilesDialog(string title, string filter)

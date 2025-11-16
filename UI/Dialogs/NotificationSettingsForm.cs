@@ -221,7 +221,7 @@ namespace Converter.UI.Dialogs
             };
 
             using var service = new NotificationService(testSettings);
-            var result = new ConversionResult
+            var result = new NotificationSummary
             {
                 Success = true,
                 ProcessedFiles = 5,
