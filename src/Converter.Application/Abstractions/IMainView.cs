@@ -1,21 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Threading.Tasks;
 
 namespace Converter.Application.Abstractions;
-
-public delegate Task AsyncEventHandler(object? sender, EventArgs args);
-public delegate Task AsyncEventHandler<in TEventArgs>(object? sender, TEventArgs args);
 
 public interface IMainView
 {
     // Events
-    event AsyncEventHandler AddFilesRequested;
-    event AsyncEventHandler StartConversionRequested;
-    event AsyncEventHandler CancelConversionRequested;
+    event EventHandler AddFilesRequested;
+    event EventHandler StartConversionRequested;
+    event EventHandler CancelConversionRequested;
     event EventHandler<ConversionProfile> PresetSelected;
-    event AsyncEventHandler SettingsChanged;
+    event EventHandler SettingsChanged;
 
     // Properties
     string FfmpegPath { get; set; }

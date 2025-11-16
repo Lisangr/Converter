@@ -9,8 +9,17 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Xabe.FFmpeg;
 using Xabe.FFmpeg.Downloader;
+using Converter.Application.Abstractions;
+using Converter.Application.Builders;
+using Converter.Application.Presenters;
+using Converter.Application.Services;
+using Converter.Infrastructure.Ffmpeg;
+using Converter.Infrastructure.Notifications;
+using Converter.Infrastructure.Persistence;
 using Converter.Models;
 using Converter.Services;
 using Converter.UI;
@@ -19,6 +28,44 @@ using Converter.UI.Dialogs;
 
 namespace Converter
 {
+    internal static class Program
+    {
+        [STAThread]
+        private static void Main()
+        {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+
+            var services = new ServiceCollection()
+                .AddLogging(configure =>
+                    configure.AddDebug()
+                             .SetMinimumLevel(LogLevel.Debug))
+                .AddSingleton<IConversionCommandBuilder, ConversionCommandBuilder>()
+                .AddSingleton<IFFmpegExecutor, FFmpegExecutor>()
+                .AddSingleton<IConversionOrchestrator, ConversionOrchestrator>()
+                .AddSingleton<IQueueService, QueueService>()
+                .AddSingleton<INotificationGateway, NotificationGateway>()
+                .AddSingleton<IThumbnailProvider, ThumbnailProvider>()
+                .AddSingleton<ISettingsStore, FileSettingsStore>()
+                .AddSingleton<IPresetRepository, JsonPresetRepository>()
+                .BuildServiceProvider();
+
+            var view = new Form1() as IMainView;
+            var presenter = new MainPresenter(
+                view,
+                services.GetRequiredService<IQueueService>(),
+                services.GetRequiredService<IConversionOrchestrator>(),
+                services.GetRequiredService<INotificationGateway>(),
+                services.GetRequiredService<ISettingsStore>(),
+                services.GetRequiredService<IPresetRepository>(),
+                services.GetRequiredService<ILogger<MainPresenter>>());
+
+            presenter.InitializeAsync().GetAwaiter().GetResult();
+
+            Application.Run((Form)view!);
+        }
+    }
+
     public partial class Form1 : Form
     {
         private SplitContainer splitContainerMain = null!;
@@ -345,8 +392,7 @@ namespace Converter
             _btnOpenEditor.Enabled = false;
             _btnOpenEditor.Click += OnOpenEditorClick;
 
-            btnAddFiles.Click += async (s, e) =>
-                await RaiseAsync(AddFilesRequested, EventArgs.Empty, "Failed to add files");
+            btnAddFiles.Click += (s, e) => AddFilesRequested?.Invoke(this, EventArgs.Empty);
             btnRemoveSelected.Click += btnRemoveSelected_Click;
             btnClearAll.Click += (s, e) => ClearAllFiles();
 
@@ -1275,8 +1321,7 @@ namespace Converter
             btnStart.BackColor = Color.FromArgb(0, 120, 215);
             btnStart.ForeColor = Color.White;
             btnStart.FlatAppearance.BorderSize = 0;
-            btnStart.Click += async (s, e) =>
-                await RaiseAsync(StartConversionRequested, EventArgs.Empty, "Failed to start conversion");
+            btnStart.Click += (s, e) => StartConversionRequested?.Invoke(this, EventArgs.Empty);
 
             btnStop = CreateStyledButton("⏹ Остановить", 180);
             btnStop.Top = _estimatePanel.Bottom + 10;
@@ -1286,8 +1331,7 @@ namespace Converter
             btnStop.ForeColor = Color.White;
             btnStop.Enabled = false;
             btnStop.FlatAppearance.BorderSize = 0;
-            btnStop.Click += async (s, e) =>
-                await RaiseAsync(CancelConversionRequested, EventArgs.Empty, "Failed to cancel conversion");
+            btnStop.Click += (s, e) => CancelConversionRequested?.Invoke(this, EventArgs.Empty);
 
             _btnNotificationSettings = CreateStyledButton("🔔 Уведомления", 310);
             _btnNotificationSettings.Top = _estimatePanel.Bottom + 10;
@@ -2701,10 +2745,7 @@ namespace Converter
                 {
                     AppendLog("FFmpeg cmd: " + conv.Build());
                 }
-                catch (Exception ex)
-                {
-                    HandleUiError(ex, "Failed to log FFmpeg command");
-                }
+                catch { }
 
                 await conv.Start(cancellationToken);
                 AppendLog($"✅ Завершено: {fileName}");
@@ -2906,19 +2947,24 @@ namespace Converter
 
         private void AppendLog(string message)
         {
-            if (txtLog == null || txtLog.IsDisposed)
+            try
             {
-                return;
+                if (txtLog?.InvokeRequired == true)
+                {
+                    txtLog.BeginInvoke(new Action(() => AppendLog(message)));
+                    return;
+                }
+                
+                if (txtLog != null)
+                {
+                    var timestamp = DateTime.Now.ToString("HH:mm:ss");
+                    txtLog.AppendText($"[{timestamp}] {message}{Environment.NewLine}");
+                }
             }
-
-            if (txtLog.InvokeRequired)
+            catch (Exception ex)
             {
-                txtLog.BeginInvoke(new Action(() => AppendLog(message)));
-                return;
+                Debug.WriteLine(ex);
             }
-
-            var timestamp = DateTime.Now.ToString("HH:mm:ss");
-            txtLog.AppendText($"[{timestamp}] {message}{Environment.NewLine}");
         }
 
         private class FileConversionInfo
