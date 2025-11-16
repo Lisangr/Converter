@@ -1,17 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using Converter.Application.DTOs;
 
 namespace Converter.Application.Abstractions;
 
 public interface IMainView
 {
     // Events
-    event EventHandler AddFilesRequested;
-    event EventHandler StartConversionRequested;
-    event EventHandler CancelConversionRequested;
-    event EventHandler<ConversionProfile> PresetSelected;
-    event EventHandler SettingsChanged;
+    event Func<object, EventArgs, Task> AddFilesRequested;
+    event Func<object, EventArgs, Task> StartConversionRequested;
+    event Func<object, EventArgs, Task> CancelConversionRequested;
+    event Func<object, ConversionProfile, Task> PresetSelected;
+    event Func<object, EventArgs, Task> SettingsChanged;
 
     // Properties
     string FfmpegPath { get; set; }
@@ -33,16 +34,3 @@ public interface IMainView
     string? ShowFolderBrowserDialog(string description);
     IEnumerable<string> ShowOpenMultipleFilesDialog(string title, string filter);
 }
-
-public sealed record QueueItemDto(
-    Guid Id, 
-    string FilePath, 
-    long FileSizeBytes, 
-    TimeSpan Duration, 
-    int Progress, 
-    string Status, 
-    bool IsStarred, 
-    int Priority, 
-    string? OutputPath, 
-    string? ErrorMessage
-);

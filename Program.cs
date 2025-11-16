@@ -23,6 +23,23 @@ namespace Converter
             System.Windows.Forms.Application.EnableVisualStyles();
             System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
             
+            try
+            {
+                var mainForm = InitializeApplication().GetAwaiter().GetResult();
+                System.Windows.Forms.Application.Run(mainForm);
+            }
+            catch (Exception ex)
+            {
+                System.Windows.Forms.MessageBox.Show($"Fatal error during application startup: {ex.Message}", 
+                    "Application Error", 
+                    System.Windows.Forms.MessageBoxButtons.OK, 
+                    System.Windows.Forms.MessageBoxIcon.Error);
+                Environment.Exit(1);
+            }
+        }
+
+        private static async Task<Form> InitializeApplication()
+        {
             var services = new ServiceCollection()
                 .AddLogging(configure => 
                     configure.AddDebug()
@@ -48,7 +65,10 @@ namespace Converter
                 services.GetRequiredService<IPresetRepository>(),
                 services.GetRequiredService<ILogger<MainPresenter>>());
 
-            System.Windows.Forms.Application.Run((Form)view);
+            // Initialize the presenter asynchronously
+            await presenter.StartAsync();
+            
+            return (Form)view;
         }
     }
 }

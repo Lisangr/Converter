@@ -8,13 +8,15 @@ using System.Collections.ObjectModel;
 using Microsoft.Extensions.Logging;
 using Converter.Application.Abstractions;
 using Converter.Application.Builders;
+using Converter.Application.DTOs;
+using Converter.Domain.Models;
 
 namespace Converter.Application.Presenters;
 
 public sealed class MainPresenter : IDisposable
 {
     private readonly IMainView _view;
-    private readonly IQueueService _queue;
+    private readonly IQueueService _queueService;
     private readonly IConversionOrchestrator _orchestrator;
     private readonly INotificationGateway _notifications;
     private readonly ISettingsStore _settingsStore;
@@ -23,38 +25,45 @@ public sealed class MainPresenter : IDisposable
     private CancellationTokenSource? _cts;
     private bool _disposed;
 
-    public MainPresenter(
-        IMainView view,
-        IQueueService queue,
-        IConversionOrchestrator orchestrator,
-        INotificationGateway notifications,
-        ISettingsStore settingsStore,
-        IPresetRepository presetRepository,
-        ILogger<MainPresenter> logger)
-    {
-        _view = view ?? throw new ArgumentNullException(nameof(view));
-        _queue = queue ?? throw new ArgumentNullException(nameof(queue));
-        _orchestrator = orchestrator ?? throw new ArgumentNullException(nameof(orchestrator));
-        _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
-        _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
-        _presetRepository = presetRepository ?? throw new ArgumentNullException(nameof(presetRepository));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+public MainPresenter(
+    IMainView view,
+    IQueueService queueService,
+    IConversionOrchestrator orchestrator,
+    INotificationGateway notifications,
+    ISettingsStore settingsStore,
+    IPresetRepository presetRepository,
+    ILogger<MainPresenter> logger)
+{
+    _view = view ?? throw new ArgumentNullException(nameof(view));
+    _queueService = queueService ?? throw new ArgumentNullException(nameof(queueService));
+    _orchestrator = orchestrator ?? throw new ArgumentNullException(nameof(orchestrator));
+    _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
+    _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
+    _presetRepository = presetRepository ?? throw new ArgumentNullException(nameof(presetRepository));
+    _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        InitializeAsync().ConfigureAwait(false);
-    }
+    // Subscribe to queue events
+    _queueService.ItemChanged += OnQueueItemChanged;
+    _queueService.QueueCompleted += OnQueueCompleted;
+}
 
-    private async Task InitializeAsync()
+    public async Task StartAsync()
     {
         try
         {
-            // Load settings and presets
-            var ffmpegPath = await _settingsStore.GetFfmpegPathAsync();
+            // Load settings and presets asynchronously
+            var ffmpegTask = _settingsStore.GetFfmpegPathAsync();
+            var presetsTask = _presetRepository.GetAllPresetsAsync();
+
+            await Task.WhenAll(ffmpegTask, presetsTask);
+
+            var ffmpegPath = await ffmpegTask;
             if (!string.IsNullOrEmpty(ffmpegPath))
             {
                 _view.FfmpegPath = ffmpegPath;
             }
 
-            var presets = await _presetRepository.GetAllPresetsAsync();
+            var presets = await presetsTask;
             _view.AvailablePresets = new ObservableCollection<ConversionProfile>(presets);
 
             // Subscribe to view events
@@ -64,58 +73,63 @@ public sealed class MainPresenter : IDisposable
             _view.PresetSelected += OnPresetSelected;
             _view.SettingsChanged += OnSettingsChanged;
 
-            // Subscribe to queue events
-            _queue.ItemChanged += OnQueueItemChanged;
-            _queue.QueueCompleted += OnQueueCompleted;
-
             _logger.LogInformation("MainPresenter initialized successfully");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error initializing MainPresenter");
             _view.ShowError($"Failed to initialize application: {ex.Message}");
+            throw; // Re-throw to allow proper error handling in the calling code
         }
     }
 
-    private async void OnAddFilesRequested(object? sender, EventArgs e)
+    private async Task OnAddFilesRequested(object? sender, EventArgs e)
     {
         try
         {
             var files = _view.ShowOpenMultipleFilesDialog("Select media files", 
                 "Media Files|*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.mp3;*.wav;*.aac|All Files|*.*");
             
-            if (files == null || !files.Any()) return;
+            if (files == null || !files.Any()) 
+            {
+                await Task.CompletedTask;
+                return;
+            }
 
             var outputFolder = _view.OutputFolder;
             if (string.IsNullOrEmpty(outputFolder))
             {
                 outputFolder = _view.ShowFolderBrowserDialog("Select output folder");
-                if (string.IsNullOrEmpty(outputFolder)) return;
+                if (string.IsNullOrEmpty(outputFolder)) 
+                {
+                    await Task.CompletedTask;
+                    return;
+                }
                 _view.OutputFolder = outputFolder;
             }
 
-            foreach (var file in files)
+            var items = files.Select(file => 
             {
                 var fileInfo = new FileInfo(file);
-                var item = new QueueItemModel
+                return new QueueItem
                 {
                     Id = Guid.NewGuid(),
                     FilePath = file,
                     FileSizeBytes = fileInfo.Length,
-                    Status = "Pending",
-                    Priority = 3, // Normal priority
+                    Status = ConversionStatus.Pending,
+                    Priority = 3,
                     OutputPath = Path.Combine(outputFolder, Path.ChangeExtension(fileInfo.Name, ".mp4")),
-                    Duration = TimeSpan.Zero, // Will be updated later
+                    Duration = TimeSpan.Zero,
                     Progress = 0,
                     IsStarred = false,
-                    ErrorMessage = null
+                    ErrorMessage = null,
+                    AddedAt = DateTime.Now
                 };
-                
-                _queue.Enqueue(item);
-                _logger.LogInformation("Added file to queue: {File}", file);
-            }
+            }).ToList();
 
-            _notifications.Info("Files added", $"Added {files.Count()} file(s) to the queue");
+            _queueService.EnqueueMany(items);
+            _logger.LogInformation("Added {Count} files to queue", items.Count);
+            _notifications.Info("Files added", $"Added {items.Count} file(s) to the queue");
         }
         catch (Exception ex)
         {
@@ -124,21 +138,17 @@ public sealed class MainPresenter : IDisposable
         }
     }
 
-    private async void OnStartRequested(object? sender, EventArgs e)
+    private async Task OnStartRequested(object? sender, EventArgs e)
     {
         try
         {
-            _view.SetBusy(true);
             _cts = new CancellationTokenSource();
-            await _queue.StartAsync(_cts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            _view.ShowInfo("Operation was cancelled");
+            await _queueService.StartAsync(_cts.Token);
+            _view.SetGlobalProgress(0, "Conversion started...");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error starting conversion queue");
+            _logger.LogError(ex, "Error starting conversion");
             _view.ShowError($"Failed to start conversion: {ex.Message}");
         }
         finally
@@ -149,14 +159,15 @@ public sealed class MainPresenter : IDisposable
         }
     }
 
-    private void OnCancelRequested(object? sender, EventArgs e)
+    private async Task OnCancelRequested(object? sender, EventArgs e)
     {
         try
         {
             _cts?.Cancel();
-            _queue.Stop();
+            _queueService.Stop();
             _view.SetGlobalProgress(0, "Operation cancelled");
             _view.ShowInfo("Conversion cancelled by user");
+            await Task.CompletedTask;
         }
         catch (Exception ex)
         {
@@ -165,28 +176,26 @@ public sealed class MainPresenter : IDisposable
         }
     }
 
-    private void OnQueueItemChanged(object? sender, QueueItemModel item)
+    private void OnQueueItemChanged(QueueItem item)
     {
-        _view.UpdateQueueItem(new QueueItemDto(
-            item.Id,
-            item.FilePath,
-            item.FileSizeBytes,
-            item.Duration,
-            item.Progress,
-            item.Status,
-            item.IsStarred,
-            item.Priority,
-            item.OutputPath,
-            item.ErrorMessage
-        ));
-        
-        if (item.Status == "Completed")
+        try
         {
-            _notifications.Info("Conversion complete", $"Completed: {Path.GetFileName(item.FilePath)}");
+            var items = _queueService.GetQueueItemDtos();
+            _view.SetQueueItems(items);
+
+            if (item.Status == ConversionStatus.Completed)
+            {
+                _notifications.Info("Conversion complete", $"Completed: {Path.GetFileName(item.FilePath)}");
+            }
+            else if (item.Status == ConversionStatus.Failed && !string.IsNullOrEmpty(item.ErrorMessage))
+            {
+                _notifications.Error("Conversion failed", $"Failed: {Path.GetFileName(item.FilePath)}\n{item.ErrorMessage}");
+            }
         }
-        else if (item.Status == "Failed" && !string.IsNullOrEmpty(item.ErrorMessage))
+        catch (Exception ex)
         {
-            _notifications.Error("Conversion failed", $"Failed: {Path.GetFileName(item.FilePath)}\n{item.ErrorMessage}");
+            _logger.LogError(ex, "Error handling queue item changed event");
+            _view.ShowError($"Error updating queue: {ex.Message}");
         }
     }
 
@@ -196,22 +205,24 @@ public sealed class MainPresenter : IDisposable
         _notifications.Info("All done", "All conversions have been completed");
     }
 
-    private void OnPresetSelected(object? sender, ConversionProfile preset)
+    private Task OnPresetSelected(object? sender, ConversionProfile preset)
     {
         try
         {
-            if (preset == null) return;
+            if (preset == null) return Task.CompletedTask;
             _view.UpdatePresetControls(preset);
             _logger.LogInformation("Preset selected: {PresetName}", preset.Name);
+            return Task.CompletedTask;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error applying preset");
             _view.ShowError($"Failed to apply preset: {ex.Message}");
+            return Task.FromException(ex);
         }
     }
 
-    private async void OnSettingsChanged(object? sender, EventArgs e)
+    private async Task OnSettingsChanged(object? sender, EventArgs e)
     {
         try
         {
@@ -235,7 +246,7 @@ public sealed class MainPresenter : IDisposable
             _disposed = true;
             _cts?.Dispose();
             
-            // Unsubscribe from events
+            // Unsubscribe from view events
             if (_view != null)
             {
                 _view.AddFilesRequested -= OnAddFilesRequested;
@@ -245,10 +256,12 @@ public sealed class MainPresenter : IDisposable
                 _view.SettingsChanged -= OnSettingsChanged;
             }
 
-            if (_queue != null)
+            // Unsubscribe from queue events
+            if (_queueService != null)
             {
-                _queue.ItemChanged -= OnQueueItemChanged;
-                _queue.QueueCompleted -= OnQueueCompleted;
+                _queueService.ItemChanged -= OnQueueItemChanged;
+                _queueService.QueueCompleted -= OnQueueCompleted;
+                (_queueService as IDisposable)?.Dispose();
             }
 
             _logger.LogInformation("MainPresenter disposed");

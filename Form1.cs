@@ -6,6 +6,7 @@ using Converter.Models;
 using Converter.Services;
 using Converter.UI.Controls;
 using Converter.Application.Abstractions;
+using Converter.Application.DTOs;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
@@ -17,11 +18,11 @@ namespace Converter
         private Button? _themeMenuButton;
         private bool _themeInitialized;
 
-        public event EventHandler? AddFilesRequested;
-        public event EventHandler? StartConversionRequested;
-        public event EventHandler? CancelConversionRequested;
-        public event EventHandler<ConversionProfile>? PresetSelected;
-        public event EventHandler? SettingsChanged;
+        public event Func<object, EventArgs, Task>? AddFilesRequested;
+        public event Func<object, EventArgs, Task>? StartConversionRequested;
+        public event Func<object, EventArgs, Task>? CancelConversionRequested;
+        public event Func<object, ConversionProfile, Task>? PresetSelected;
+        public event Func<object, EventArgs, Task>? SettingsChanged;
 
         private string _ffmpegPath = string.Empty;
         public string FfmpegPath
@@ -46,9 +47,9 @@ namespace Converter
             set
             {
                 _selectedPreset = value;
-                if (value != null)
+                if (value != null && PresetSelected != null)
                 {
-                    PresetSelected?.Invoke(this, value);
+                    _ = PresetSelected.Invoke(this, value);
                 }
             }
         }

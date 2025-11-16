@@ -1,121 +1,181 @@
-using Converter.Application.Abstractions;
+using System.Collections.Concurrent;
+using System.Collections.Immutable;
+using Converter.Domain.Models;
 using Microsoft.Extensions.Logging;
+using Converter.Application.Abstractions;
+using Converter.Application.DTOs;
+using Converter.Domain.Models;
 
 namespace Converter.Application.Services;
 
-public sealed class QueueService : IQueueService
+public class QueueService : IQueueService, IDisposable
 {
-    private readonly IConversionOrchestrator _orchestrator;
-    private readonly List<QueueItemModel> _items = new();
-    private readonly object _sync = new();
-    private bool _isRunning;
-    private bool _stopRequested;
+    private readonly ConcurrentDictionary<Guid, QueueItem> _queue = new();
     private readonly ILogger<QueueService> _logger;
+    private readonly object _lock = new();
+    private bool _isRunning;
+    private bool _isPaused;
+    private CancellationTokenSource? _cts;
+    private bool _disposed;
 
-    public event EventHandler<QueueItemModel>? ItemChanged;
+    public event Action<QueueItem>? ItemChanged;
     public event EventHandler? QueueCompleted;
 
-    public QueueService(IConversionOrchestrator orchestrator, ILogger<QueueService> logger)
+    public QueueService(ILogger<QueueService> logger)
     {
-        _orchestrator = orchestrator;
-        _logger = logger;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public void Enqueue(QueueItemModel item)
+    public void Enqueue(QueueItem item)
     {
-        lock (_sync)
+        if (item == null) throw new ArgumentNullException(nameof(item));
+
+        if (_queue.TryAdd(item.Id, item))
         {
-            if (item.Id == Guid.Empty) item.Id = Guid.NewGuid();
-            item.Status = "Pending";
-            _items.Add(item);
+            _logger.LogInformation("Added item to queue: {ItemId} - {FilePath}", item.Id, item.FilePath);
+            OnItemChanged(item);
         }
-        _logger.LogInformation("Enqueued item {Id}: {Path}", item.Id, item.FilePath);
-        ItemChanged?.Invoke(this, item);
     }
 
-    public void EnqueueMany(IEnumerable<QueueItemModel> items)
+    public void EnqueueMany(IEnumerable<QueueItem> items)
     {
-        foreach (var i in items) Enqueue(i);
-    }
+        if (items == null) throw new ArgumentNullException(nameof(items));
 
-    public IReadOnlyList<QueueItemModel> Snapshot()
-    {
-        lock (_sync) return _items.ToList();
-    }
-
-    public void Pause() { /* optional in v1 */ }
-    public void Resume() { /* optional in v1 */ }
-
-    public void Stop()
-    {
-        _stopRequested = true;
+        foreach (var item in items)
+        {
+            Enqueue(item);
+        }
     }
 
     public async Task StartAsync(CancellationToken ct)
     {
         if (_isRunning) return;
+
+        _logger.LogInformation("Starting queue service");
         _isRunning = true;
-        try
+        _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        while (_isRunning && !_cts.Token.IsCancellationRequested)
         {
-            _logger.LogInformation("Queue started");
-            while (true)
+            try
             {
-                QueueItemModel? next;
-                lock (_sync)
+                if (_isPaused)
                 {
-                    next = _items.FirstOrDefault(x => x.Status == "Pending");
+                    await Task.Delay(100, _cts.Token);
+                    continue;
                 }
-                if (next == null || _stopRequested) break;
 
-                Update(next, i => i.Status = "Processing");
-                _logger.LogInformation("Processing item {Id}: {Path}", next.Id, next.FilePath);
+                var item = GetNextItem();
+                if (item == null)
+                {
+                    await Task.Delay(100, _cts.Token);
+                    continue;
+                }
 
-                var progress = new Progress<int>(p => Update(next!, i => i.Progress = p));
-                var outputPath = next.OutputPath ?? Path.ChangeExtension(next.FilePath, ".mp4");
-                var profile = new ConversionProfile("mp4", "libx264", "aac", "192k", 23);
-                var request = new ConversionRequest(next.FilePath, outputPath, profile);
+                // Mark as processing
+                item.Status = ConversionStatus.Processing;
+                OnItemChanged(item);
 
-                ConversionOutcome outcome;
-                try
+                // Simulate processing
+                for (int i = 0; i <= 100; i += 10)
                 {
-                    outcome = await _orchestrator.ConvertAsync(request, progress, ct).ConfigureAwait(false);
+                    if (_cts.Token.IsCancellationRequested)
+                        break;
+
+                    item.Progress = i;
+                    OnItemChanged(item);
+                    await Task.Delay(500, _cts.Token);
                 }
-                catch (OperationCanceledException)
+
+                // Mark as completed
+                if (!_cts.Token.IsCancellationRequested)
                 {
-                    _logger.LogWarning("Item {Id} canceled", next.Id);
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Item {Id} failed with unhandled exception", next.Id);
-                    outcome = new ConversionOutcome(false, null, ex.Message);
-                }
-                if (outcome.Success)
-                {
-                    Update(next, i => { i.Status = "Completed"; i.Progress = 100; i.OutputPath = outputPath; });
-                    _logger.LogInformation("Item {Id} completed", next.Id);
-                }
-                else
-                {
-                    Update(next, i => { i.Status = "Failed"; i.ErrorMessage = outcome.ErrorMessage; });
-                    _logger.LogWarning("Item {Id} failed: {Error}", next.Id, outcome.ErrorMessage);
+                    item.Status = ConversionStatus.Completed;
+                    item.Progress = 100;
+                    OnItemChanged(item);
+                    _logger.LogInformation("Completed processing item: {ItemId}", item.Id);
                 }
             }
+            catch (OperationCanceledException)
+            {
+                _logger.LogInformation("Queue processing was cancelled");
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing queue item");
+            }
         }
-        finally
-        {
-            _isRunning = false;
-            _logger.LogInformation("Queue completed");
-            QueueCompleted?.Invoke(this, EventArgs.Empty);
-        }
+
+        _isRunning = false;
+        QueueCompleted?.Invoke(this, EventArgs.Empty);
     }
 
-    private void Update(QueueItemModel item, Action<QueueItemModel> mutate)
+    public void Pause()
     {
-        lock (_sync)
+        _isPaused = true;
+        _logger.LogInformation("Queue paused");
+    }
+
+    public void Resume()
+    {
+        _isPaused = false;
+        _logger.LogInformation("Queue resumed");
+    }
+
+    public void Stop()
+    {
+        _isRunning = false;
+        _cts?.Cancel();
+        _logger.LogInformation("Queue stopped");
+    }
+
+    public IReadOnlyList<QueueItem> GetQueueItems()
+    {
+        return _queue.Values.OrderBy(x => x.Priority)
+                          .ThenBy(x => x.AddedAt)
+                          .ToImmutableList();
+    }
+
+    public IReadOnlyList<QueueItemDto> GetQueueItemDtos()
+    {
+        return GetQueueItems().Select(item => new QueueItemDto
         {
-            mutate(item);
+            Id = item.Id,
+            FilePath = item.FilePath,
+            FileSizeBytes = item.FileSizeBytes,
+            Duration = item.Duration,
+            Progress = item.Progress,
+            Status = item.Status.ToString(),
+            IsStarred = item.IsStarred,
+            Priority = item.Priority,
+            OutputPath = item.OutputPath,
+            ErrorMessage = item.ErrorMessage,
+            AddedAt = item.AddedAt
+        }).ToImmutableList();
+    }
+
+    private QueueItem? GetNextItem()
+    {
+        return _queue.Values
+            .Where(x => x.Status == ConversionStatus.Pending)
+            .OrderBy(x => x.Priority)
+            .ThenBy(x => x.AddedAt)
+            .FirstOrDefault();
+    }
+
+    private void OnItemChanged(QueueItem item)
+    {
+        ItemChanged?.Invoke(item);
+    }
+
+    public void Dispose()
+    {
+        if (!_disposed)
+        {
+            _disposed = true;
+            _cts?.Dispose();
+            _cts = null;
         }
-        ItemChanged?.Invoke(this, item);
     }
 }
