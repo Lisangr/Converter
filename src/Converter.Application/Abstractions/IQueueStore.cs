@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Converter.Models;
+using Converter.Domain.Models;
 
 namespace Converter.Application.Abstractions
 {

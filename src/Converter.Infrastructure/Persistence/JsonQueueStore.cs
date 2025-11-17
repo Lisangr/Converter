@@ -7,7 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Converter.Application.Abstractions;
-using Converter.Models;
+using Converter.Domain.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Converter.Infrastructure.Persistence

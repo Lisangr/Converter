@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Converter.Models;
+using Converter.Domain.Models;
 
 namespace Converter.Application.Abstractions
 {

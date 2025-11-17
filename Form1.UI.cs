@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Xabe.FFmpeg;
 using Xabe.FFmpeg.Downloader;
+using Converter.Domain.Models;
 using Converter.Models;
 using Converter.Services;
 using Converter.UI;

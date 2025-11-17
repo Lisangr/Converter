@@ -1,4 +1,4 @@
-using Converter.Models;
+using Converter.Domain.Models;
 using System;
 using System.Threading;
 using System.Threading.Tasks;

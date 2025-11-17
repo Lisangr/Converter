@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Converter.Domain.Models;
 using Converter.Models;
 
 namespace Converter.Services;

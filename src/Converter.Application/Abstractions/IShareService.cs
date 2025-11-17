@@ -2,6 +2,7 @@ namespace Converter.Application.Abstractions;
 
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Converter.Domain.Models;
 using Converter.Models;
 
 public interface IShareService

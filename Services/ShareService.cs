@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Converter.Application.Abstractions;
+using Converter.Domain.Models;
 using Converter.Models;
 
 namespace Converter.Services;

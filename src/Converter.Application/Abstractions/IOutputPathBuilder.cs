@@ -1,12 +1,13 @@
 using System;
+using Converter.Domain.Models;
 using Converter.Models;
 
 namespace Converter.Application.Abstractions
 {
     public interface IOutputPathBuilder
     {
-        string BuildOutputPath(Converter.Models.QueueItem item, string outputDirectory, string fileExtension);
-        string BuildOutputPath(Converter.Models.QueueItem item, Converter.Models.ConversionProfile profile);
+        string BuildOutputPath(QueueItem item, string outputDirectory, string fileExtension);
+        string BuildOutputPath(QueueItem item, ConversionProfile profile);
         string GenerateUniqueFileName(string basePath);
     }
 }
