@@ -9,6 +9,7 @@ using Converter.Application.Services;
 using Converter.Application.ViewModels;
 using Converter.Infrastructure;
 using Converter.Infrastructure.Ffmpeg;
+using Converter.Services;
 using Converter.UI;
 using Microsoft.Extensions.Configuration;
 using System.IO;
@@ -40,6 +41,7 @@ namespace Converter
                 .AddSingleton<IProfileProvider, ProfileProvider>()
                 .AddSingleton<IOutputPathBuilder, OutputPathBuilder>()
                 .AddSingleton<IProgressReporter, UiProgressReporter>()
+                .AddSingleton<IThemeManager, ThemeManager>()
                 .AddSingleton<IThemeService, ThemeService>()
                 .AddSingleton<IQueueProcessor, ChannelQueueProcessor>()
                 .AddSingleton<IFilePicker, WinFormsFilePicker>()

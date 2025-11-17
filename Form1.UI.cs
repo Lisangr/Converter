@@ -380,7 +380,7 @@ namespace Converter
             leftContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 240F));
             leftContent.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
-            _dragDropPanel = new DragDropPanel
+            _dragDropPanel = new DragDropPanel(_themeService)
             {
                 Dock = DockStyle.Fill,
                 AutoScroll = true,
@@ -1002,7 +1002,13 @@ namespace Converter
             progressBarCurrent = new ProgressBar { Left = 0, Top = 70, Width = panelTop.Width - 20, Height = 15, Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top };
 
             // Estimate panel (above buttons)
-            _estimatePanel = new UI.Controls.EstimatePanel { Left = 0, Top = 95, Width = panelTop.Width - 20, Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top };
+            _estimatePanel = new UI.Controls.EstimatePanel(_themeService)
+            {
+                Left = 0,
+                Top = 95,
+                Width = panelTop.Width - 20,
+                Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top
+            };
             _estimatePanel.ShowPerformanceBar = true;
             panelTop.Controls.Add(_estimatePanel);
 
@@ -1377,7 +1383,7 @@ namespace Converter
                 if (filesPanel.Controls.OfType<FileListItem>().Any(item => item.FilePath == path))
                     continue;
 
-                var fileItem = new FileListItem(path);
+                var fileItem = new FileListItem(path, _themeService);
                 fileItem.RemoveClicked += (s, e) => RemoveFileFromList(fileItem);
                 fileItem.DoubleClicked += (s, e) => OpenVideoInPlayer(fileItem.FilePath);
                 fileItem.RefreshThumbnailRequested += (s, e) =>

@@ -4,6 +4,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
+using Converter.Application.Abstractions;
 
 namespace Converter.UI
 {
@@ -14,12 +15,14 @@ namespace Converter.UI
     {
         private readonly Label _placeholderLabel;
         private readonly List<VideoThumbnailControl> _thumbnails = new();
+        private readonly IThemeService _themeService;
 
         public event EventHandler<string[]>? FilesAdded;
         public event EventHandler<string>? FileRemoved;
 
-        public DragDropPanel()
+        public DragDropPanel(IThemeService themeService)
         {
+            _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
             AllowDrop = true;
             AutoScroll = true;
             BackColor = Color.FromArgb(240, 240, 240);
@@ -63,7 +66,7 @@ namespace Converter.UI
                     continue;
                 }
 
-                var thumbnail = new VideoThumbnailControl(filePath);
+                var thumbnail = new VideoThumbnailControl(filePath, _themeService);
                 thumbnail.RemoveRequested += (_, _) => RemoveThumbnail(thumbnail);
                 _thumbnails.Add(thumbnail);
                 Controls.Add(thumbnail);

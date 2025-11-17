@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
+using Converter.Application.Abstractions;
 using Converter.Models;
-using Converter.Services;
 
 namespace Converter.UI.Dialogs
 {
@@ -17,9 +17,11 @@ namespace Converter.UI.Dialogs
         private readonly Button _btnSave;
         private readonly Button _btnCancel;
         private readonly List<Theme> _darkThemes;
+        private readonly IThemeManager _themeManager;
 
-        public ThemeSettingsDialog()
+        public ThemeSettingsDialog(IThemeManager themeManager)
         {
+            _themeManager = themeManager ?? throw new ArgumentNullException(nameof(themeManager));
             Text = "Настройки темы";
             Size = new Size(460, 360);
             StartPosition = FormStartPosition.CenterParent;
@@ -162,7 +164,7 @@ namespace Converter.UI.Dialogs
 
         private void LoadCurrentSettings()
         {
-            var manager = ThemeManager.Instance;
+            var manager = _themeManager;
             _timeDarkStart.Value = DateTime.Today.Add(manager.DarkModeStart);
             _timeDarkEnd.Value = DateTime.Today.Add(manager.DarkModeEnd);
             _numAnimationSpeed.Value = manager.AnimationDuration;
@@ -178,7 +180,7 @@ namespace Converter.UI.Dialogs
 
         private void OnSave(object? sender, EventArgs e)
         {
-            var manager = ThemeManager.Instance;
+            var manager = _themeManager;
             manager.DarkModeStart = _timeDarkStart.Value.TimeOfDay;
             manager.DarkModeEnd = _timeDarkEnd.Value.TimeOfDay;
             manager.AnimationDuration = (int)_numAnimationSpeed.Value;

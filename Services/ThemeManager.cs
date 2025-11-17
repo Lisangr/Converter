@@ -3,20 +3,16 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
+using Converter.Application.Abstractions;
 using Converter.Models;
 
 namespace Converter.Services
 {
-    public delegate void ThemeTransitionProgressEventHandler(object? sender, float progress);
-
     /// <summary>
     /// Управляет текущей темой, анимациями и автоматическим переключением.
     /// </summary>
-    public class ThemeManager
+    public class ThemeManager : IThemeManager
     {
-        private static ThemeManager? _instance;
-        public static ThemeManager Instance => _instance ??= new ThemeManager();
-
         public Theme CurrentTheme { get; private set; }
         public event EventHandler<Theme>? ThemeChanged;
         public event ThemeTransitionProgressEventHandler? ThemeTransitionProgress;
@@ -92,7 +88,7 @@ namespace Converter.Services
             }
         }
 
-        private ThemeManager()
+        public ThemeManager()
         {
             LoadSettings();
             CurrentTheme = LoadSavedTheme();
@@ -473,6 +469,17 @@ namespace Converter.Services
             Properties.Settings.Default.DarkModeStart = DarkModeStart.ToString();
             Properties.Settings.Default.DarkModeEnd = DarkModeEnd.ToString();
             Properties.Settings.Default.Save();
+        }
+
+        public void Dispose()
+        {
+            _transitionTimer?.Stop();
+            _transitionTimer?.Dispose();
+            _transitionTimer = null;
+
+            _autoSwitchTimer?.Stop();
+            _autoSwitchTimer?.Dispose();
+            _autoSwitchTimer = null;
         }
     }
 }
