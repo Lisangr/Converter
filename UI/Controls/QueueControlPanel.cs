@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using Converter.Domain.Models;
 using Converter.Models;
 
 namespace Converter.UI.Controls;

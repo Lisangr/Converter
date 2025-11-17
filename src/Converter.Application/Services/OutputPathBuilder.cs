@@ -54,7 +54,7 @@ namespace Converter.Application.Services
             return outputPath;
         }
 
-        public string BuildOutputPath(QueueItem item, ConversionProfile profile)
+        public string BuildOutputPath(QueueItem item, Models.ConversionProfile profile)
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
             if (profile == null) throw new ArgumentNullException(nameof(profile));

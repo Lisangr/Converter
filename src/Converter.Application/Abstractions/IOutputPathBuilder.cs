@@ -7,7 +7,7 @@ namespace Converter.Application.Abstractions
     public interface IOutputPathBuilder
     {
         string BuildOutputPath(QueueItem item, string outputDirectory, string fileExtension);
-        string BuildOutputPath(QueueItem item, ConversionProfile profile);
+        string BuildOutputPath(QueueItem item, Models.ConversionProfile profile);
         string GenerateUniqueFileName(string basePath);
     }
 }
