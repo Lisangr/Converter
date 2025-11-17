@@ -1380,7 +1380,10 @@ namespace Converter
                 var fileItem = new FileListItem(path);
                 fileItem.RemoveClicked += (s, e) => RemoveFileFromList(fileItem);
                 fileItem.DoubleClicked += (s, e) => OpenVideoInPlayer(fileItem.FilePath);
-                fileItem.RefreshThumbnailRequested += (s, e) => RefreshThumbnail(fileItem, e.Position);
+                fileItem.RefreshThumbnailRequested += (s, e) =>
+                {
+                    _ = RefreshThumbnail(fileItem, e.Position, _lifecycleCts.Token);
+                };
 
                 filesPanel.Controls.Add(fileItem);
 
@@ -1390,10 +1393,10 @@ namespace Converter
                 }
 
                 // Asynchronously load thumbnail
-                _ = LoadThumbnailAsync(fileItem);
+                _ = LoadThumbnailAsync(fileItem, _lifecycleCts.Token);
 
                 // Asynchronously probe file info
-                _ = ProbeFileAsync(fileItem, path);
+                _ = ProbeFileAsync(fileItem, path, _lifecycleCts.Token);
             }
 
             AppendLog($"Добавлено файлов: {paths.Length}");
@@ -1469,35 +1472,85 @@ namespace Converter
             return bmp;
         }
 
-        private async Task LoadThumbnailAsync(FileListItem item)
+        private async Task LoadThumbnailAsync(FileListItem item, CancellationToken ct)
         {
+            if (item == null || string.IsNullOrEmpty(item.FilePath) || item.IsDisposed)
+            {
+                return;
+            }
+
             try
             {
+                if (ct.IsCancellationRequested || IsDisposed)
+                {
+                    return;
+                }
+
                 item.Thumbnail = CreatePlaceholderThumbnail(120, 90, "⏳");
 
-                using var stream = await _thumbnailProvider.GetThumbnailAsync(item.FilePath, 120, 90, CancellationToken.None);
+                using var stream = await _thumbnailProvider.GetThumbnailAsync(item.FilePath, 120, 90, ct);
+                if (ct.IsCancellationRequested || item.IsDisposed || IsDisposed)
+                {
+                    return;
+                }
                 item.Thumbnail = Image.FromStream(stream);
+            }
+            catch (OperationCanceledException)
+            {
+                // Ignore cancellation during shutdown
+            }
+            catch (ObjectDisposedException)
+            {
+                // Control disposed while awaiting thumbnail
             }
             catch (Exception ex)
             {
-                item.Thumbnail = CreatePlaceholderThumbnail(120, 90, "❌");
-                AppendLog($"Ошибка загрузки превью: {ex.Message}");
+                if (!ct.IsCancellationRequested && !item.IsDisposed)
+                {
+                    item.Thumbnail = CreatePlaceholderThumbnail(120, 90, "❌");
+                    AppendLog($"Ошибка загрузки превью: {ex.Message}");
+                }
             }
         }
 
-        private async Task RefreshThumbnail(FileListItem item, TimeSpan position)
+        private async Task RefreshThumbnail(FileListItem item, TimeSpan position, CancellationToken ct)
         {
+            if (item == null || item.IsDisposed)
+            {
+                return;
+            }
+
             try
             {
+                if (ct.IsCancellationRequested || IsDisposed)
+                {
+                    return;
+                }
+
                 item.Thumbnail = CreatePlaceholderThumbnail(120, 90, "⏳");
 
-                using var stream = await _thumbnailProvider.GetThumbnailAsync(item.FilePath, 120, 90, CancellationToken.None);
+                using var stream = await _thumbnailProvider.GetThumbnailAsync(item.FilePath, 120, 90, ct);
+                if (ct.IsCancellationRequested || item.IsDisposed || IsDisposed)
+                {
+                    return;
+                }
                 item.Thumbnail = Image.FromStream(stream);
+            }
+            catch (OperationCanceledException)
+            {
+                // Ignore cancellation
+            }
+            catch (ObjectDisposedException)
+            {
+                // Control disposed
             }
             catch (Exception ex)
             {
-                item.Thumbnail = CreatePlaceholderThumbnail(120, 90, "❌");
-                AppendLog($"Ошибка обновления превью: {ex.Message}");
+                if (!ct.IsCancellationRequested && !item.IsDisposed)
+                {
+                    item.Thumbnail = CreatePlaceholderThumbnail(120, 90, "❌");
+                    AppendLog($"Ошибка обновления превью: {ex.Message}");
+                }
             }
         }
 
@@ -1553,16 +1606,40 @@ namespace Converter
             }
         }
 
-        private async Task ProbeFileAsync(FileListItem item, string path)
+        private async Task ProbeFileAsync(FileListItem item, string path, CancellationToken ct)
         {
             try
             {
+                if (ct.IsCancellationRequested || item.IsDisposed || IsDisposed)
+                {
+                    return;
+                }
+
                 await EnsureFfmpegAsync();
+                if (ct.IsCancellationRequested || item.IsDisposed || IsDisposed)
+                {
+                    return;
+                }
+
                 var info = await FFmpeg.GetMediaInfo(path);
+                if (ct.IsCancellationRequested || item.IsDisposed || IsDisposed)
+                {
+                    return;
+                }
                 var v = info.VideoStreams?.FirstOrDefault();
+
+                if (!IsHandleCreated)
+                {
+                    return;
+                }
 
                 this.BeginInvoke(new Action(() =>
                 {
+                    if (ct.IsCancellationRequested || item.IsDisposed || IsDisposed)
+                    {
+                        return;
+                    }
+
                     if (v != null)
                     {
                         item.SetVideoDuration(info.Duration);
@@ -1580,9 +1657,16 @@ namespace Converter
                     DebounceEstimate();
                 }));
             }
+            catch (OperationCanceledException)
+            {
+                // Ignore cancellation when shutting down
+            }
             catch (Exception ex)
             {
-                AppendLog($"Ошибка анализа {System.IO.Path.GetFileName(path)}: {ex.Message}");
+                if (!ct.IsCancellationRequested)
+                {
+                    AppendLog($"Ошибка анализа {System.IO.Path.GetFileName(path)}: {ex.Message}");
+                }
             }
         }
 

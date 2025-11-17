@@ -28,8 +28,8 @@ namespace Converter
                 .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
                 .Build();
 
-            var services = new ServiceCollection()
-                .AddLogging(configure => 
+            using var services = new ServiceCollection()
+                .AddLogging(configure =>
                     configure.AddDebug()
                             .SetMinimumLevel(LogLevel.Information))
                 .AddSingleton<IMainView, Form1>()

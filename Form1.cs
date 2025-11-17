@@ -8,6 +8,8 @@ using Converter.UI.Controls;
 using Converter.Application.Abstractions;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Converter
 {
@@ -20,6 +22,7 @@ namespace Converter
         private readonly INotificationService _notificationService;
         private readonly IThumbnailProvider _thumbnailProvider;
         private readonly IShareService _shareService;
+        private readonly CancellationTokenSource _lifecycleCts = new();
 
         // IMainView events
         public event EventHandler? AddFilesRequested;
@@ -273,9 +276,31 @@ namespace Converter
             }
         }
 
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            CancelBackgroundOperations();
+            base.OnFormClosing(e);
+        }
+
+        private void CancelBackgroundOperations()
+        {
+            try
+            {
+                if (!_lifecycleCts.IsCancellationRequested)
+                {
+                    _lifecycleCts.Cancel();
+                }
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
         private void DisposeManagedResources()
         {
             _themeService.ThemeChanged -= OnThemeChanged;
+            CancelBackgroundOperations();
 
             try
             {
@@ -289,7 +314,31 @@ namespace Converter
                 _estimateCts?.Cancel();
                 _estimateCts?.Dispose();
             }
-            catch { }            
+            catch { }
+
+            try
+            {
+                _lifecycleCts.Dispose();
+            }
+            catch { }
+
+            try
+            {
+                _notificationService.Dispose();
+            }
+            catch { }
+
+            try
+            {
+                _themeService.Dispose();
+            }
+            catch { }
+
+            try
+            {
+                _thumbnailProvider.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+            catch { }
         }
 
         private void OnThemeControlsResize(object? sender, EventArgs e) => PositionThemeControls();
