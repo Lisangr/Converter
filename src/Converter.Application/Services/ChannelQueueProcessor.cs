@@ -28,6 +28,7 @@ namespace Converter.Application.Services
     public class ChannelQueueProcessor : IQueueProcessor, IAsyncDisposable, IDisposable
     {
         private readonly IQueueRepository _queueRepository;
+        private readonly IQueueStore _queueStore;
         private readonly IConversionUseCase _conversionUseCase;
         private readonly ILogger<ChannelQueueProcessor> _logger;
         private readonly Channel<QueueCommand> _commandChannel;
@@ -48,10 +49,12 @@ namespace Converter.Application.Services
 
         public ChannelQueueProcessor(
             IQueueRepository queueRepository,
+            IQueueStore queueStore,
             IConversionUseCase conversionUseCase,
             ILogger<ChannelQueueProcessor> logger)
         {
             _queueRepository = queueRepository ?? throw new ArgumentNullException(nameof(queueRepository));
+            _queueStore = queueStore ?? throw new ArgumentNullException(nameof(queueStore));
             _conversionUseCase = conversionUseCase ?? throw new ArgumentNullException(nameof(conversionUseCase));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
@@ -148,17 +151,18 @@ namespace Converter.Application.Services
             if (item == null) 
                 throw new ArgumentNullException(nameof(item));
 
-            var shouldSyncFinalState = true;
-
             try
             {
-                if (!await _queueRepository.TryReserveAsync(item, cancellationToken).ConfigureAwait(false))
+                if (!await _queueStore.TryReserveAsync(item.Id, cancellationToken).ConfigureAwait(false))
                 {
-                    shouldSyncFinalState = false;
                     _logger.LogDebug("Item {ItemId} was already reserved or processed, skipping", item.Id);
                     return;
                 }
 
+                item.Status = ConversionStatus.Processing;
+                item.StartedAt = DateTime.UtcNow;
+                await _queueRepository.UpdateAsync(item);
+                
                 ItemStarted?.Invoke(this, item);
                 _logger.LogInformation("Started processing item {ItemId}", item.Id);
 
@@ -169,31 +173,26 @@ namespace Converter.Application.Services
 
                 if (result.Success)
                 {
-                    await _queueRepository.CompleteAsync(
-                        item,
-                        ConversionStatus.Completed,
-                        null,
-                        result.OutputFileSize,
-                        DateTime.UtcNow,
-                        cancellationToken).ConfigureAwait(false);
+                    item.Status = ConversionStatus.Completed;
+                    item.CompletedAt = DateTime.UtcNow;
+                    item.OutputFileSizeBytes = result.OutputFileSize;
+
+                    await _queueStore.CompleteAsync(item.Id, ConversionStatus.Completed, null, result.OutputFileSize, item.CompletedAt, cancellationToken)
+                        .ConfigureAwait(false);
 
                     _logger.LogInformation("Successfully processed item {ItemId}", item.Id);
                     ItemCompleted?.Invoke(this, item);
-                    shouldSyncFinalState = false;
                 }
                 else
                 {
-                    await _queueRepository.CompleteAsync(
-                        item,
-                        ConversionStatus.Failed,
-                        result.ErrorMessage,
-                        null,
-                        DateTime.UtcNow,
-                        cancellationToken).ConfigureAwait(false);
+                    item.Status = ConversionStatus.Failed;
+                    item.ErrorMessage = result.ErrorMessage;
+
+                    await _queueStore.CompleteAsync(item.Id, ConversionStatus.Failed, result.ErrorMessage, null, DateTime.UtcNow, cancellationToken)
+                        .ConfigureAwait(false);
 
                     _logger.LogError("Failed to process item {ItemId}: {Error}", item.Id, result.ErrorMessage);
                     ItemFailed?.Invoke(this, item);
-                    shouldSyncFinalState = false;
                 }
             }
             catch (OperationCanceledException)
@@ -204,25 +203,18 @@ namespace Converter.Application.Services
             }
             catch (Exception ex)
             {
-                await _queueRepository.CompleteAsync(
-                    item,
-                    ConversionStatus.Failed,
-                    ex.Message,
-                    null,
-                    DateTime.UtcNow,
-                    cancellationToken).ConfigureAwait(false);
+                item.Status = ConversionStatus.Failed;
+                item.ErrorMessage = ex.Message;
+                await _queueStore.CompleteAsync(item.Id, ConversionStatus.Failed, ex.Message, null, DateTime.UtcNow, cancellationToken)
+                    .ConfigureAwait(false);
 
                 _logger.LogError(ex, "Error processing item {ItemId}", item.Id);
                 ItemFailed?.Invoke(this, item);
-                shouldSyncFinalState = false;
                 throw;
             }
             finally
             {
-                if (shouldSyncFinalState)
-                {
-                    await _queueRepository.UpdateAsync(item);
-                }
+                await _queueRepository.UpdateAsync(item);
             }
         }
 

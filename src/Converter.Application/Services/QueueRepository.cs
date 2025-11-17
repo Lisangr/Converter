@@ -9,7 +9,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using Converter.Application.Abstractions;
 using Converter.Domain.Models;
@@ -20,63 +19,28 @@ namespace Converter.Application.Services
     public class QueueRepository : IQueueRepository
     {
         private readonly ConcurrentDictionary<Guid, QueueItem> _items = new();
-        private readonly IQueueStore _queueStore;
         private readonly ILogger<QueueRepository> _logger;
-        private readonly Task _initializationTask;
 
         public event EventHandler<QueueItem> ItemAdded;
         public event EventHandler<QueueItem> ItemUpdated;
         public event EventHandler<Guid> ItemRemoved;
 
-        public QueueRepository(IQueueStore queueStore, ILogger<QueueRepository> logger)
+        public QueueRepository(ILogger<QueueRepository> logger)
         {
-            _queueStore = queueStore ?? throw new ArgumentNullException(nameof(queueStore));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-
-            _initializationTask = LoadInitialItemsAsync();
         }
 
-        private async Task LoadInitialItemsAsync()
-        {
-            try
-            {
-                await foreach (var item in _queueStore.GetAllAsync())
-                {
-                    _items[item.Id] = item;
-                }
-
-                _logger.LogInformation("Initialized queue repository with {Count} items", _items.Count);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to load queue items from persistent store");
-                throw;
-            }
-        }
-
-        private Task EnsureInitializedAsync() => _initializationTask;
-
-        public async Task AddAsync(QueueItem item)
+        public Task AddAsync(QueueItem item)
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
 
-            await EnsureInitializedAsync().ConfigureAwait(false);
-
             if (_items.TryAdd(item.Id, item))
             {
-                try
-                {
-                    await _queueStore.AddAsync(item).ConfigureAwait(false);
-                }
-                catch
-                {
-                    _items.TryRemove(item.Id, out _);
-                    throw;
-                }
-
                 _logger.LogInformation("Added item {ItemId} to queue", item.Id);
                 ItemAdded?.Invoke(this, item);
             }
+
+            return Task.CompletedTask;
         }
 
         public Task AddRangeAsync(IEnumerable<QueueItem> items)
@@ -85,25 +49,13 @@ namespace Converter.Application.Services
             return Task.WhenAll(items.Select(AddAsync));
         }
 
-        public async Task UpdateAsync(QueueItem item)
+        public Task UpdateAsync(QueueItem item)
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
-
-            await EnsureInitializedAsync().ConfigureAwait(false);
 
             if (_items.TryGetValue(item.Id, out var existingItem))
             {
                 _items[item.Id] = item;
-                try
-                {
-                    await _queueStore.UpdateAsync(item).ConfigureAwait(false);
-                }
-                catch
-                {
-                    _items[item.Id] = existingItem;
-                    throw;
-                }
-
                 _logger.LogDebug("Updated item {ItemId} in queue", item.Id);
                 ItemUpdated?.Invoke(this, item);
             }
@@ -111,27 +63,14 @@ namespace Converter.Application.Services
             {
                 _logger.LogWarning("Attempted to update non-existent item {ItemId}", item.Id);
             }
+
+            return Task.CompletedTask;
         }
 
-        public async Task RemoveAsync(Guid id)
+        public Task RemoveAsync(Guid id)
         {
-            await EnsureInitializedAsync().ConfigureAwait(false);
-
-            if (_items.TryRemove(id, out var removedItem))
+            if (_items.TryRemove(id, out _))
             {
-                try
-                {
-                    await _queueStore.RemoveAsync(id).ConfigureAwait(false);
-                }
-                catch
-                {
-                    if (removedItem != null)
-                    {
-                        _items.TryAdd(id, removedItem);
-                    }
-                    throw;
-                }
-
                 _logger.LogInformation("Removed item {ItemId} from queue", id);
                 ItemRemoved?.Invoke(this, id);
             }
@@ -139,92 +78,34 @@ namespace Converter.Application.Services
             {
                 _logger.LogWarning("Attempted to remove non-existent item {ItemId}", id);
             }
+
+            return Task.CompletedTask;
         }
 
-        public async Task<QueueItem> GetByIdAsync(Guid id)
+        public Task<QueueItem> GetByIdAsync(Guid id)
         {
-            await EnsureInitializedAsync().ConfigureAwait(false);
             _items.TryGetValue(id, out var item);
-            return item;
+            return Task.FromResult(item);
         }
 
-        public async Task<IReadOnlyList<QueueItem>> GetAllAsync()
+        public Task<IReadOnlyList<QueueItem>> GetAllAsync()
         {
-            await EnsureInitializedAsync().ConfigureAwait(false);
-            return _items.Values.OrderBy(x => x.AddedAt).ToList();
+            return Task.FromResult<IReadOnlyList<QueueItem>>(
+                _items.Values.OrderBy(x => x.AddedAt).ToList());
         }
 
-        public async Task<IReadOnlyList<QueueItem>> GetPendingItemsAsync()
+        public Task<IReadOnlyList<QueueItem>> GetPendingItemsAsync()
         {
-            await EnsureInitializedAsync().ConfigureAwait(false);
-            return _items.Values
-                .Where(x => x.Status == ConversionStatus.Pending)
-                .OrderBy(x => x.AddedAt)
-                .ToList();
+            return Task.FromResult<IReadOnlyList<QueueItem>>(
+                _items.Values
+                    .Where(x => x.Status == ConversionStatus.Pending)
+                    .OrderBy(x => x.AddedAt)
+                    .ToList());
         }
 
-        public async Task<int> GetPendingCountAsync()
+        public Task<int> GetPendingCountAsync()
         {
-            await EnsureInitializedAsync().ConfigureAwait(false);
-            return _items.Values.Count(x => x.Status == ConversionStatus.Pending);
-        }
-
-        public async Task<bool> TryReserveAsync(QueueItem item, CancellationToken cancellationToken = default)
-        {
-            if (item == null) throw new ArgumentNullException(nameof(item));
-
-            await EnsureInitializedAsync().ConfigureAwait(false);
-
-            if (!await _queueStore.TryReserveAsync(item.Id, cancellationToken).ConfigureAwait(false))
-            {
-                _logger.LogDebug("Failed to reserve queue item {ItemId}: already processing", item.Id);
-                return false;
-            }
-
-            item.Status = ConversionStatus.Processing;
-            item.StartedAt = DateTime.UtcNow;
-
-            _items[item.Id] = item;
-            ItemUpdated?.Invoke(this, item);
-
-            _logger.LogInformation("Reserved queue item {ItemId} for processing", item.Id);
-            return true;
-        }
-
-        public async Task CompleteAsync(
-            QueueItem item,
-            ConversionStatus finalStatus,
-            string? errorMessage = null,
-            long? outputFileSizeBytes = null,
-            DateTime? completedAt = null,
-            CancellationToken cancellationToken = default)
-        {
-            if (item == null) throw new ArgumentNullException(nameof(item));
-
-            await EnsureInitializedAsync().ConfigureAwait(false);
-
-            var completionTime = completedAt ?? DateTime.UtcNow;
-
-            try
-            {
-                await _queueStore.CompleteAsync(item.Id, finalStatus, errorMessage, outputFileSizeBytes, completionTime, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to persist completion for queue item {ItemId}", item.Id);
-                throw;
-            }
-
-            item.Status = finalStatus;
-            item.ErrorMessage = errorMessage;
-            item.OutputFileSizeBytes = outputFileSizeBytes;
-            item.CompletedAt = completionTime;
-
-            _items[item.Id] = item;
-            ItemUpdated?.Invoke(this, item);
-
-            _logger.LogInformation("Persisted completion for queue item {ItemId} with status {Status}", item.Id, finalStatus);
+            return Task.FromResult(_items.Values.Count(x => x.Status == ConversionStatus.Pending));
         }
     }
 }
