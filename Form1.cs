@@ -17,6 +17,9 @@ namespace Converter
         private Button? _themeMenuButton;
         private bool _themeInitialized;
         private readonly IThemeService _themeService;
+        private readonly INotificationService _notificationService;
+        private readonly IThumbnailProvider _thumbnailProvider;
+        private readonly IShareService _shareService;
 
         // IMainView events
         public event EventHandler? AddFilesRequested;
@@ -85,12 +88,20 @@ namespace Converter
             set => SetStatusText(value);
         }
 
-        public Form1(IThemeService themeService)
+        public Form1(
+            IThemeService themeService,
+            INotificationService notificationService,
+            IThumbnailProvider thumbnailProvider,
+            IShareService shareService)
         {
             _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
+            _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
+            _thumbnailProvider = thumbnailProvider ?? throw new ArgumentNullException(nameof(thumbnailProvider));
+            _shareService = shareService ?? throw new ArgumentNullException(nameof(shareService));
+
             InitializeComponent();
-            _notificationSettings = LoadNotificationSettings();
-            _notificationService = new NotificationService(_notificationSettings);
+
+            _notificationSettings = _notificationService.GetSettings();
         }
 
         public void UpdatePresetControls(Converter.Models.ConversionProfile preset)
@@ -278,26 +289,7 @@ namespace Converter
                 _estimateCts?.Cancel();
                 _estimateCts?.Dispose();
             }
-            catch { }
-
-            try
-            {
-                _cancellationTokenSource?.Cancel();
-                _cancellationTokenSource?.Dispose();
-            }
-            catch { }
-
-            try
-            {
-                _thumbnailService?.Dispose();
-            }
-            catch { }
-
-            try
-            {
-                _notificationService?.Dispose();
-            }
-            catch { }
+            catch { }            
         }
 
         private void OnThemeControlsResize(object? sender, EventArgs e) => PositionThemeControls();

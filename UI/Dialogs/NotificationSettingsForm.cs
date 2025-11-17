@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.IO;
+using System.Media;
 using System.Windows.Forms;
 using Converter.Services;
 
@@ -193,15 +194,21 @@ namespace Converter.UI.Dialogs
         {
             try
             {
-                var testSettings = new NotificationSettings
+                if (!_chkSoundEnabled.Checked)
                 {
-                    SoundEnabled = true,
-                    UseCustomSound = _chkCustomSound.Checked,
-                    CustomSoundPath = _txtCustomSoundPath.Text
-                };
+                    SystemSounds.Beep.Play();
+                    return;
+                }
 
-                using var service = new NotificationService(testSettings);
-                service.PlayCompletionSound();
+                if (_chkCustomSound.Checked && !string.IsNullOrWhiteSpace(_txtCustomSoundPath.Text) && File.Exists(_txtCustomSoundPath.Text))
+                {
+                    using var player = new SoundPlayer(_txtCustomSoundPath.Text);
+                    player.Play();
+                }
+                else
+                {
+                    SystemSounds.Asterisk.Play();
+                }
             }
             catch (Exception ex)
             {
@@ -211,25 +218,36 @@ namespace Converter.UI.Dialogs
 
         private void BtnTestNotification_Click(object? sender, EventArgs e)
         {
-            var testSettings = new NotificationSettings
+            try
             {
-                DesktopNotificationsEnabled = _chkDesktopNotifications.Checked,
-                SoundEnabled = _chkSoundEnabled.Checked,
-                UseCustomSound = _chkCustomSound.Checked,
-                CustomSoundPath = _txtCustomSoundPath.Text,
-                ShowProgressNotifications = _chkProgressNotifications.Checked
-            };
+                if (_chkDesktopNotifications.Checked)
+                {
+                    MessageBox.Show(
+                        this,
+                        "Тестовое уведомление о завершении конвертации\n\nФайлов обработано: 5\nСэкономлено: 150 МБ",
+                        "Тестовое уведомление",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                }
 
-            using var service = new NotificationService(testSettings);
-            var result = new NotificationSummary
+                // Одновременно тестируем звук
+                if (_chkSoundEnabled.Checked)
+                {
+                    if (_chkCustomSound.Checked && !string.IsNullOrWhiteSpace(_txtCustomSoundPath.Text) && File.Exists(_txtCustomSoundPath.Text))
+                    {
+                        using var player = new SoundPlayer(_txtCustomSoundPath.Text);
+                        player.Play();
+                    }
+                    else
+                    {
+                        SystemSounds.Asterisk.Play();
+                    }
+                }
+            }
+            catch (Exception ex)
             {
-                Success = true,
-                ProcessedFiles = 5,
-                SpaceSaved = 150L * 1024 * 1024,
-                Duration = TimeSpan.FromMinutes(3).Add(TimeSpan.FromSeconds(45)),
-                OutputFolder = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
-            };
-            service.NotifyConversionComplete(result);
+                MessageBox.Show($"Ошибка тестового уведомления: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void BtnSave_Click(object? sender, EventArgs e)

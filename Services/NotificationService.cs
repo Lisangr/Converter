@@ -3,18 +3,28 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Media;
+using Converter.Application.Abstractions;
 
 namespace Converter.Services
 {
-    public class NotificationService : IDisposable
+    public class NotificationService : INotificationService, IDisposable
     {
-        private readonly NotificationSettings _settings;
+        private readonly INotificationSettingsStore _settingsStore;
+        private NotificationSettings _settings;
         private readonly HashSet<int> _notifiedMilestones = new();
         private SoundPlayer? _soundPlayer;
+        public NotificationService(INotificationSettingsStore settingsStore)
+        {
+            _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
+            _settings = _settingsStore.Load();
+        }
 
-        public NotificationService(NotificationSettings settings)
+        public NotificationSettings GetSettings() => _settings;
+
+        public void UpdateSettings(NotificationSettings settings)
         {
             _settings = settings ?? new NotificationSettings();
+            _settingsStore.Save(_settings);
         }
 
         public void ShowDesktopNotification(string title, string message, string? imagePath = null, string? folderPath = null)

@@ -144,11 +144,53 @@ namespace Converter.Infrastructure.Ffmpeg
 
         private string? ResolveFfmpegExecutable()
         {
-            if (!string.IsNullOrWhiteSpace(_ffmpegPath) && File.Exists(_ffmpegPath)) 
-                return _ffmpegPath;
-                
-            var exeName = OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg";
-            return exeName; // Let OS resolve from PATH
+            // 1) Explicit path provided via constructor (can be file or directory)
+            if (!string.IsNullOrWhiteSpace(_ffmpegPath))
+            {
+                try
+                {
+                    if (Directory.Exists(_ffmpegPath))
+                    {
+                        var exeName = OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg";
+                        var candidate = Path.Combine(_ffmpegPath, exeName);
+                        if (File.Exists(candidate))
+                        {
+                            return candidate;
+                        }
+                    }
+                    else if (File.Exists(_ffmpegPath))
+                    {
+                        return _ffmpegPath;
+                    }
+                }
+                catch
+                {
+                    // Fallback to other strategies
+                }
+            }
+
+            // 2) Per-user location used by FfmpegBootstrapService
+            try
+            {
+                var baseDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Converter",
+                    "ffmpeg");
+                var exeName = OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg";
+                var localExe = Path.Combine(baseDir, exeName);
+                if (File.Exists(localExe))
+                {
+                    return localExe;
+                }
+            }
+            catch
+            {
+                // Ignore and fall back to PATH
+            }
+
+            // 3) Let OS resolve from PATH
+            var fallbackExeName = OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg";
+            return fallbackExeName;
         }
 
         public void Dispose()

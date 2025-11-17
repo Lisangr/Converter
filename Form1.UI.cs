@@ -28,12 +28,9 @@ namespace Converter
         private Button btnClearAll = null!;
         private FlowLayoutPanel filesPanel = null!;
         private DragDropPanel? _dragDropPanel;
-        private ThumbnailService _thumbnailService = null!;
-        private ShareService _shareService = new ShareService();
         private readonly List<QueueItem> _conversionHistory = new();
         private Button? _btnShare;
         private Button? _btnOpenEditor;
-        private NotificationService? _notificationService;
         private NotificationSettings _notificationSettings = new();
         private Button? _btnNotificationSettings;
 
@@ -79,9 +76,6 @@ namespace Converter
         private GroupBox groupLog = null!;
         private TextBox txtLog = null!;
 
-        private CancellationTokenSource? _cancellationTokenSource;
-        private bool _isProcessing = false;
-
         // Presets
         private PresetService _presetService = new PresetService();
         private PresetPanel? _presetPanel;
@@ -106,7 +100,6 @@ namespace Converter
             BuildUi();
             SetDefaults();
             InitializeAdvancedTheming();
-            _ = EnsureFfmpegAsync();
         }
 
         private void InitEstimateDebounce()
@@ -361,9 +354,6 @@ namespace Converter
             });
             UpdateShareButtonState();
             UpdateEditorButtonState();
-
-            // Initialize ThumbnailService
-            _thumbnailService = new ThumbnailService();
 
             // Files FlowLayoutPanel with FileListItem controls
             filesPanel = new FlowLayoutPanel
@@ -1460,19 +1450,36 @@ namespace Converter
             return int.TryParse(sanitized, out var parsed) ? parsed : null;
         }
 
+        private Image CreatePlaceholderThumbnail(int width, int height, string text)
+        {
+            var bmp = new Bitmap(width, height);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.Clear(Color.FromArgb(50, 50, 50));
+
+                using var font = new Font("Segoe UI", Math.Min(width, height) / 8);
+                var textSize = g.MeasureString(text, font);
+                var textX = (width - textSize.Width) / 2;
+                var textY = (height - textSize.Height) / 2;
+
+                g.DrawString(text, font, Brushes.White, textX, textY);
+            }
+
+            return bmp;
+        }
+
         private async Task LoadThumbnailAsync(FileListItem item)
         {
             try
             {
-                // Show loading placeholder
-                item.Thumbnail = _thumbnailService.CreatePlaceholderImage(120, 90, "⏳");
+                item.Thumbnail = CreatePlaceholderThumbnail(120, 90, "⏳");
 
-                var thumbnail = await _thumbnailService.GetThumbnailAsync(item.FilePath);
-                item.Thumbnail = thumbnail;
+                using var stream = await _thumbnailProvider.GetThumbnailAsync(item.FilePath, 120, 90, CancellationToken.None);
+                item.Thumbnail = Image.FromStream(stream);
             }
             catch (Exception ex)
             {
-                item.Thumbnail = _thumbnailService.CreatePlaceholderImage(120, 90, "❌");
+                item.Thumbnail = CreatePlaceholderThumbnail(120, 90, "❌");
                 AppendLog($"Ошибка загрузки превью: {ex.Message}");
             }
         }
@@ -1481,14 +1488,14 @@ namespace Converter
         {
             try
             {
-                item.Thumbnail = _thumbnailService.CreatePlaceholderImage(120, 90, "⏳");
+                item.Thumbnail = CreatePlaceholderThumbnail(120, 90, "⏳");
 
-                var thumbnail = await _thumbnailService.GetThumbnailAtPositionAsync(item.FilePath, position);
-                item.Thumbnail = thumbnail;
+                using var stream = await _thumbnailProvider.GetThumbnailAsync(item.FilePath, 120, 90, CancellationToken.None);
+                item.Thumbnail = Image.FromStream(stream);
             }
             catch (Exception ex)
             {
-                item.Thumbnail = _thumbnailService.CreatePlaceholderImage(120, 90, "❌");
+                item.Thumbnail = CreatePlaceholderThumbnail(120, 90, "❌");
                 AppendLog($"Ошибка обновления превью: {ex.Message}");
             }
         }
@@ -1658,239 +1665,6 @@ namespace Converter
             WireEstimateTriggers();
         }
 
-        private async void btnStart_Click(object? sender, EventArgs e)
-        {
-            if (_isProcessing)
-            {
-                MessageBox.Show(this, "Конвертация уже выполняется", "Внимание", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            if (filesPanel.Controls.Count == 0)
-            {
-                MessageBox.Show(this, "Добавьте файлы для конвертации", "Нет файлов", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-            
-            if (string.IsNullOrWhiteSpace(txtOutputFolder.Text))
-            {
-                MessageBox.Show(this, "Пожалуйста, укажите папку для сохранения файлов", "Папка не выбрана", 
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(txtOutputFolder.Text))
-            {
-                MessageBox.Show(this, "Укажите папку для сохранения", "Не указана папка", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
-            _isProcessing = true;
-            btnStart.Enabled = false;
-            btnStop.Enabled = true;
-            _cancellationTokenSource = new CancellationTokenSource();
-            var conversionStart = DateTime.Now;
-
-            try
-            {
-                await EnsureFfmpegAsync();
-                conversionStart = DateTime.Now;
-                _notificationService?.ResetProgressNotifications();
-                var result = await ProcessAllFilesAsync(_cancellationTokenSource.Token);
-
-                if (!_cancellationTokenSource.Token.IsCancellationRequested)
-                {
-                    if (result.failed == 0)
-                    {
-                        AppendLog("✅ Все файлы успешно обработаны!");
-                        MessageBox.Show(this, "Конвертация завершена успешно!", "Готово", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    }
-                    else
-                    {
-                        AppendLog($"⚠ Завершено с ошибками: успешно {result.ok} из {result.total}, ошибок {result.failed}");
-                        MessageBox.Show(this, $"Конвертация завершена с ошибками.\nУспешно: {result.ok}/{result.total}", "Готово", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    }
-
-                    PromptShareResults(result.processedItems);
-                    await SendCompletionNotificationAsync(result, conversionStart);
-
-                    if (MessageBox.Show(this, "Открыть папку с файлами?", "Готово", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-                    {
-                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                        {
-                            FileName = txtOutputFolder.Text,
-                            UseShellExecute = true
-                        });
-                    }
-                }
-                else
-                {
-                    AppendLog("⚠ Конвертация отменена пользователем");
-                    _notificationService?.NotifyConversionComplete(new NotificationSummary
-                    {
-                        Success = false,
-                        ErrorMessage = "Конвертация отменена пользователем.",
-                        OutputFolder = txtOutputFolder.Text
-                    });
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                AppendLog("⚠ Конвертация отменена");
-                _notificationService?.NotifyConversionComplete(new NotificationSummary
-                {
-                    Success = false,
-                    ErrorMessage = "Конвертация отменена пользователем.",
-                    OutputFolder = txtOutputFolder.Text
-                });
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"❌ Критическая ошибка: {ex.Message}");
-                MessageBox.Show(this, $"Ошибка: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                _notificationService?.NotifyConversionComplete(new NotificationSummary
-                {
-                    Success = false,
-                    ErrorMessage = ex.Message,
-                    OutputFolder = txtOutputFolder.Text
-                });
-            }
-            finally
-            {
-                _isProcessing = false;
-                btnStart.Enabled = true;
-                btnStop.Enabled = false;
-                progressBarTotal.Value = 0;
-                progressBarCurrent.Value = 0;
-                lblStatusTotal.Text = "Готов к конвертации";
-                lblStatusCurrent.Text = "Ожидание...";
-                UpdateShareButtonState();
-            }
-        }
-
-        private async Task<(int total, int ok, int failed, List<QueueItem> processedItems)> ProcessAllFilesAsync(CancellationToken cancellationToken)
-        {
-            var format = (cbFormat.SelectedItem?.ToString() ?? "MP4").ToLowerInvariant();
-            var vcodec = ExtractCodecName(cbVideoCodec.SelectedItem?.ToString() ?? "libx264");
-            var acodec = chkEnableAudio.Checked ? ExtractCodecName(cbAudioCodec.SelectedItem?.ToString() ?? "aac") : "none";
-            var abitrate = chkEnableAudio.Checked ? (cbAudioBitrate.SelectedItem?.ToString() ?? "192k") : "0k";
-            var crf = ExtractCRF(cbQuality.SelectedItem?.ToString() ?? "Хорошее (CRF 23)");
-
-            var items = filesPanel.Controls.OfType<FileListItem>().ToList();
-            var totalFiles = items.Count;
-            var processedFiles = 0;
-            var failedFiles = 0;
-            var processedItems = new List<QueueItem>();
-
-            foreach (var item in items)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                    break;
-
-                processedFiles++;
-                var inputPath = item.FilePath;
-                var fileName = System.IO.Path.GetFileNameWithoutExtension(inputPath);
-                var presetLabel = GetSelectedPresetLabel();
-                var inputInfo = new System.IO.FileInfo(inputPath);
-                var queueItem = new QueueItem
-                {
-                    FilePath = inputPath,
-                    OutputPath = GenerateOutputPath(inputPath, format),
-                    FileSizeBytes = inputInfo.Exists ? inputInfo.Length : 0,
-                    Status = ConversionStatus.Pending,
-                    AddedAt = DateTime.Now,
-                    Settings = new ConversionSettings
-                    {
-                        VideoCodec = vcodec,
-                        PresetName = presetLabel,
-                        ContainerFormat = format,
-                        AudioCodec = acodec,
-                        AudioBitrate = ParseBitrate(abitrate),
-                        EnableAudio = chkEnableAudio.Checked,
-                        AudioProcessing = _audioProcessingPanel?.GetOptions().Clone()
-                    }
-                };
-
-                // Update status
-                this.BeginInvoke(new Action(() =>
-                {
-                    item.IsConverting = true;
-                    item.BackColor = Color.LightYellow;
-                    lblStatusTotal.Text = $"Обработка файла {processedFiles} из {totalFiles}";
-                    progressBarTotal.Value = (int)((processedFiles - 1) * 100.0 / totalFiles);
-                    progressBarCurrent.Value = 0;
-                }));
-
-                var stopwatch = Stopwatch.StartNew();
-                queueItem.Status = ConversionStatus.Processing;
-                queueItem.StartedAt = DateTime.Now;
-
-                try
-                {
-                    var outputPath = queueItem.OutputPath ?? GenerateOutputPath(inputPath, format);
-                    queueItem.OutputPath = outputPath;
-                    await ConvertFileAsync(inputPath, outputPath, format, vcodec, acodec, abitrate, crf, cancellationToken, null);
-
-                    this.BeginInvoke(new Action(() =>
-                    {
-                        item.IsConverting = false;
-                        item.BackColor = Color.LightGreen;
-                    }));
-
-                    if (System.IO.File.Exists(outputPath))
-                    {
-                        var outputInfo = new System.IO.FileInfo(outputPath);
-                        queueItem.OutputFileSizeBytes = outputInfo.Length;
-                    }
-                    stopwatch.Stop();
-                    queueItem.ConversionDuration = stopwatch.Elapsed;
-                    queueItem.CompletedAt = DateTime.Now;
-                    queueItem.Status = ConversionStatus.Completed;
-                }
-                catch (OperationCanceledException)
-                {
-                    this.BeginInvoke(new Action(() =>
-                    {
-                        item.IsConverting = false;
-                        item.BackColor = Color.LightGray;
-                    }));
-                    stopwatch.Stop();
-                    queueItem.ConversionDuration = stopwatch.Elapsed;
-                    queueItem.CompletedAt = DateTime.Now;
-                    queueItem.Status = ConversionStatus.Cancelled;
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    failedFiles++;
-                    AppendLog($"❌ Ошибка обработки {fileName}: {ex.Message}");
-                    this.BeginInvoke(new Action(() =>
-                    {
-                        item.IsConverting = false;
-                        item.BackColor = Color.LightCoral;
-                    }));
-                    stopwatch.Stop();
-                    queueItem.ConversionDuration = stopwatch.Elapsed;
-                    queueItem.CompletedAt = DateTime.Now;
-                    queueItem.Status = ConversionStatus.Failed;
-                }
-                finally
-                {
-                    queueItem.CompletedAt ??= DateTime.Now;
-                    processedItems.Add(queueItem);
-                    _conversionHistory.Add(queueItem);
-                    _notificationService?.NotifyProgress(processedFiles, totalFiles);
-                }
-            }
-
-            this.BeginInvoke(new Action(() =>
-            {
-                progressBarTotal.Value = 100;
-                lblStatusTotal.Text = $"Завершено: {processedFiles} из {totalFiles}";
-            }));
-
-            return (totalFiles, totalFiles - failedFiles, failedFiles, processedItems);
-        }
 
         private void PromptShareResults(List<QueueItem> batchItems)
         {
@@ -1936,65 +1710,8 @@ namespace Converter
             if (settingsForm.ShowDialog(this) == DialogResult.OK)
             {
                 _notificationSettings = settingsForm.Settings;
-                SaveNotificationSettings(_notificationSettings);
-                _notificationService?.Dispose();
-                _notificationService = new NotificationService(_notificationSettings);
+                _notificationService.UpdateSettings(_notificationSettings);
             }
-        }
-
-        private NotificationSettings LoadNotificationSettings()
-        {
-            try
-            {
-                var path = GetNotificationSettingsPath();
-                if (File.Exists(path))
-                {
-                    var json = File.ReadAllText(path);
-                    var settings = JsonSerializer.Deserialize<NotificationSettings>(json);
-                    if (settings != null)
-                    {
-                        return settings;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Не удалось загрузить настройки уведомлений: {ex.Message}");
-            }
-
-            return new NotificationSettings();
-        }
-
-        private void SaveNotificationSettings(NotificationSettings settings)
-        {
-            try
-            {
-                var path = GetNotificationSettingsPath();
-                var directory = Path.GetDirectoryName(path);
-                if (!string.IsNullOrWhiteSpace(directory))
-                {
-                    Directory.CreateDirectory(directory);
-                }
-
-                var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions
-                {
-                    WriteIndented = true
-                });
-
-                File.WriteAllText(path, json);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Не удалось сохранить настройки уведомлений: {ex.Message}");
-            }
-        }
-
-        private string GetNotificationSettingsPath()
-        {
-            return Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Converter",
-                "notifications.json");
         }
 
         private async Task SendCompletionNotificationAsync((int total, int ok, int failed, List<QueueItem> processedItems) result, DateTime startTime)
@@ -2047,11 +1764,6 @@ namespace Converter
 
         private async Task<string?> GenerateNotificationThumbnailAsync(IEnumerable<QueueItem> items)
         {
-            if (_thumbnailService == null)
-            {
-                return null;
-            }
-
             var videoPath = items
                 .Select(i => i.OutputPath)
                 .FirstOrDefault(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path));
@@ -2063,12 +1775,15 @@ namespace Converter
 
             try
             {
-                var image = await _thumbnailService.GetThumbnailAsync(videoPath!);
+                using var stream = await _thumbnailProvider.GetThumbnailAsync(videoPath!, 320, 180, CancellationToken.None);
+                using var image = Image.FromStream(stream);
+
                 var previewDirectory = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "Converter",
                     "Notifications");
                 Directory.CreateDirectory(previewDirectory);
+
                 var previewPath = Path.Combine(previewDirectory, $"{Guid.NewGuid():N}.jpg");
                 using (var bitmap = new Bitmap(image))
                 {

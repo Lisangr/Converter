@@ -8,6 +8,7 @@ using Converter.Application.Presenters;
 using Converter.Application.Services;
 using Converter.Application.ViewModels;
 using Converter.Infrastructure;
+using Converter.Infrastructure.Ffmpeg;
 using Converter.UI;
 using Microsoft.Extensions.Configuration;
 using System.IO;
@@ -41,7 +42,6 @@ namespace Converter
                 .AddSingleton<IProgressReporter, UiProgressReporter>()
                 .AddSingleton<IThemeService, ThemeService>()
                 .AddSingleton<IQueueProcessor, ChannelQueueProcessor>()
-                .AddHostedService(provider => (ChannelQueueProcessor)provider.GetRequiredService<IQueueProcessor>())
                 .AddSingleton<IFilePicker, WinFormsFilePicker>()
                 .AddSingleton<IFolderPicker, WinFormsFolderPicker>()
                 .AddInfrastructureServices(configuration)
@@ -49,6 +49,10 @@ namespace Converter
 
             try
             {
+                // Ensure FFmpeg is available and configured before the UI is shown
+                var ffmpegBootstrap = services.GetRequiredService<FfmpegBootstrapService>();
+                ffmpegBootstrap.EnsureFfmpegAsync().GetAwaiter().GetResult();
+
                 var mainForm = services.GetRequiredService<IMainView>() as Form;
                 var presenter = services.GetRequiredService<MainPresenter>();
                 

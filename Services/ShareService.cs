@@ -9,11 +9,12 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Converter.Application.Abstractions;
 using Converter.Models;
 
 namespace Converter.Services;
 
-public class ShareService
+public class ShareService : IShareService
 {
     public ShareReport? GenerateReport(List<QueueItem> completedItems)
     {

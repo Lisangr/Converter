@@ -4,19 +4,36 @@ using System.Threading.Channels;
 using System.Threading.Tasks;
 using Converter.Application.Abstractions;
 using Converter.Models;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Converter.Application.Services
 {
-    public class ChannelQueueProcessor : IHostedService, IQueueProcessor, IAsyncDisposable, IDisposable
+    public enum QueueCommandType
+    {
+        ProcessItem
+    }
+
+    public sealed class QueueCommand
+    {
+        public QueueCommandType Type { get; }
+        public QueueItem Item { get; }
+
+        public QueueCommand(QueueCommandType type, QueueItem item)
+        {
+            Type = type;
+            Item = item ?? throw new ArgumentNullException(nameof(item));
+        }
+    }
+
+    public class ChannelQueueProcessor : IQueueProcessor, IAsyncDisposable, IDisposable
     {
         private readonly IQueueRepository _queueRepository;
+        private readonly IQueueStore _queueStore;
         private readonly IConversionUseCase _conversionUseCase;
         private readonly ILogger<ChannelQueueProcessor> _logger;
-        private readonly Channel<QueueItem> _queueChannel;
+        private readonly Channel<QueueCommand> _commandChannel;
         private readonly SemaphoreSlim _pauseLock = new(1, 1);
-        private readonly CancellationTokenSource _stoppingCts = new();
+        private CancellationTokenSource _processingCts;
         private Task _processingTask;
         private bool _isPaused;
         private bool _isProcessing;
@@ -32,19 +49,24 @@ namespace Converter.Application.Services
 
         public ChannelQueueProcessor(
             IQueueRepository queueRepository,
+            IQueueStore queueStore,
             IConversionUseCase conversionUseCase,
             ILogger<ChannelQueueProcessor> logger)
         {
             _queueRepository = queueRepository ?? throw new ArgumentNullException(nameof(queueRepository));
+            _queueStore = queueStore ?? throw new ArgumentNullException(nameof(queueStore));
             _conversionUseCase = conversionUseCase ?? throw new ArgumentNullException(nameof(conversionUseCase));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            
-            _queueChannel = Channel.CreateBounded<QueueItem>(new BoundedChannelOptions(1000)
+
+            _commandChannel = Channel.CreateBounded<QueueCommand>(new BoundedChannelOptions(1000)
             {
                 FullMode = BoundedChannelFullMode.Wait,
                 SingleReader = true,
                 SingleWriter = false
             });
+
+            _queueRepository.ItemAdded += OnItemAdded;
+            _queueRepository.ItemUpdated += OnItemUpdated;
         }
 
         public async Task StartProcessingAsync(CancellationToken cancellationToken = default)
@@ -54,25 +76,19 @@ namespace Converter.Application.Services
 
             _logger.LogInformation("Starting queue processor");
             _isProcessing = true;
-            _stoppingCts.Token.ThrowIfCancellationRequested();
-            
-            _processingTask = ProcessQueueAsync(_stoppingCts.Token);
-            
-            _ = Task.Run(async () => 
+
+            _processingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var token = _processingCts.Token;
+
+            _processingTask = ProcessQueueAsync(token);
+
+            var pendingItems = await _queueRepository.GetPendingItemsAsync();
+            foreach (var item in pendingItems)
             {
-                try
-                {
-                    await FeedQueueItemsAsync(_stoppingCts.Token);
-                }
-                catch (OperationCanceledException)
-                {
-                    // Expected during shutdown
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error feeding queue items");
-                }
-            }, _stoppingCts.Token);
+                EnqueueItem(item);
+            }
+
+            _logger.LogInformation("Queue processor started");
         }
 
         public async Task StopProcessingAsync()
@@ -81,9 +97,9 @@ namespace Converter.Application.Services
                 return;
 
             _logger.LogInformation("Stopping queue processor");
-            
-            _stoppingCts.Cancel();
-            
+
+            _processingCts?.Cancel();
+
             if (_processingTask != null)
             {
                 try
@@ -130,6 +146,12 @@ namespace Converter.Application.Services
 
             try
             {
+                if (!await _queueStore.TryReserveAsync(item.Id, cancellationToken).ConfigureAwait(false))
+                {
+                    _logger.LogDebug("Item {ItemId} was already reserved or processed, skipping", item.Id);
+                    return;
+                }
+
                 item.Status = ConversionStatus.Processing;
                 item.StartedAt = DateTime.UtcNow;
                 await _queueRepository.UpdateAsync(item);
@@ -148,6 +170,9 @@ namespace Converter.Application.Services
                     item.CompletedAt = DateTime.UtcNow;
                     item.OutputFileSizeBytes = result.OutputFileSize;
 
+                    await _queueStore.CompleteAsync(item.Id, ConversionStatus.Completed, null, result.OutputFileSize, item.CompletedAt, cancellationToken)
+                        .ConfigureAwait(false);
+
                     _logger.LogInformation("Successfully processed item {ItemId}", item.Id);
                     ItemCompleted?.Invoke(this, item);
                 }
@@ -155,6 +180,10 @@ namespace Converter.Application.Services
                 {
                     item.Status = ConversionStatus.Failed;
                     item.ErrorMessage = result.ErrorMessage;
+
+                    await _queueStore.CompleteAsync(item.Id, ConversionStatus.Failed, result.ErrorMessage, null, DateTime.UtcNow, cancellationToken)
+                        .ConfigureAwait(false);
+
                     _logger.LogError("Failed to process item {ItemId}: {Error}", item.Id, result.ErrorMessage);
                     ItemFailed?.Invoke(this, item);
                 }
@@ -169,6 +198,9 @@ namespace Converter.Application.Services
             {
                 item.Status = ConversionStatus.Failed;
                 item.ErrorMessage = ex.Message;
+                await _queueStore.CompleteAsync(item.Id, ConversionStatus.Failed, ex.Message, null, DateTime.UtcNow, cancellationToken)
+                    .ConfigureAwait(false);
+
                 _logger.LogError(ex, "Error processing item {ItemId}", item.Id);
                 ItemFailed?.Invoke(this, item);
                 throw;
@@ -183,7 +215,7 @@ namespace Converter.Application.Services
         {
             try
             {
-                await foreach (var item in _queueChannel.Reader.ReadAllAsync(stoppingToken))
+                await foreach (var command in _commandChannel.Reader.ReadAllAsync(stoppingToken))
                 {
                     try
                     {
@@ -192,12 +224,17 @@ namespace Converter.Application.Services
                         {
                             if (_isPaused)
                             {
-                                await _queueChannel.Writer.WriteAsync(item, stoppingToken);
                                 await Task.Delay(1000, stoppingToken);
+                                EnqueueItem(command.Item);
                                 continue;
                             }
 
-                            await ProcessItemAsync(item, stoppingToken);
+                            switch (command.Type)
+                            {
+                                case QueueCommandType.ProcessItem:
+                                    await ProcessItemAsync(command.Item, stoppingToken);
+                                    break;
+                            }
                         }
                         finally
                         {
@@ -213,7 +250,7 @@ namespace Converter.Application.Services
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Error processing queue item");
+                        _logger.LogError(ex, "Error processing queue command");
                     }
                 }
             }
@@ -232,45 +269,41 @@ namespace Converter.Application.Services
             }
         }
 
-        private async Task FeedQueueItemsAsync(CancellationToken stoppingToken)
+        private void EnqueueItem(QueueItem item)
         {
-            try
-            {
-                while (!stoppingToken.IsCancellationRequested)
-                {
-                    var items = await _queueRepository.GetPendingItemsAsync();
-                    foreach (var item in items)
-                    {
-                        if (stoppingToken.IsCancellationRequested)
-                            break;
+            if (item == null)
+                return;
 
-                        await _queueChannel.Writer.WriteAsync(item, stoppingToken);
-                    }
-
-                    await Task.Delay(1000, stoppingToken);
-                }
-            }
-            catch (OperationCanceledException)
+            var command = new QueueCommand(QueueCommandType.ProcessItem, item);
+            if (!_commandChannel.Writer.TryWrite(command))
             {
-                // Expected during shutdown
+                _logger.LogWarning("Failed to enqueue item {ItemId}: command channel is full", item.Id);
             }
         }
 
-        public async Task StartAsync(CancellationToken cancellationToken)
+        private void OnItemAdded(object sender, QueueItem item)
         {
-            await StartProcessingAsync(cancellationToken);
+            if (item.Status == ConversionStatus.Pending)
+            {
+                EnqueueItem(item);
+            }
         }
 
-        public async Task StopAsync(CancellationToken cancellationToken)
+        private void OnItemUpdated(object sender, QueueItem item)
         {
-            await StopProcessingAsync();
-            _stoppingCts.Cancel();
+            if (item.Status == ConversionStatus.Pending)
+            {
+                EnqueueItem(item);
+            }
         }
 
         public async ValueTask DisposeAsync()
         {
-            _stoppingCts.Cancel();
-            
+            _queueRepository.ItemAdded -= OnItemAdded;
+            _queueRepository.ItemUpdated -= OnItemUpdated;
+
+            _processingCts?.Cancel();
+
             if (_processingTask != null)
             {
                 try
@@ -283,7 +316,7 @@ namespace Converter.Application.Services
                 }
             }
 
-            _stoppingCts.Dispose();
+            _processingCts?.Dispose();
             _pauseLock.Dispose();
         }
 

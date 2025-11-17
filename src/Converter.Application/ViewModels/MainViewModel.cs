@@ -6,7 +6,7 @@ namespace Converter.Application.ViewModels
 {
     public class MainViewModel
     {
-        public BindingList<QueueItemViewModel> QueueItems { get; } = new();
+        public BindingList<QueueItemViewModel> QueueItems { get; } = new BindingListAdapter<QueueItemViewModel>();
 
         public ObservableCollection<ConversionProfile> Presets { get; } = new();
 

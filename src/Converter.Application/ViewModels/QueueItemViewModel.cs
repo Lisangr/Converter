@@ -1,21 +1,79 @@
 using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using Converter.Models;
 
 namespace Converter.Application.ViewModels
 {
-    public class QueueItemViewModel
+    public class QueueItemViewModel : INotifyPropertyChanged
     {
         public Guid Id { get; init; }
         public string FileName { get; init; } = string.Empty;
         public string FilePath { get; init; } = string.Empty;
         public long FileSizeBytes { get; init; }
-        public bool IsSelected { get; set; }
 
-        public ConversionStatus Status { get; set; }
-        public int Progress { get; set; }
-        public string? ErrorMessage { get; set; }
-        public string? OutputPath { get; set; }
-        public long? OutputFileSizeBytes { get; set; }
+        private bool _isSelected;
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set => SetProperty(ref _isSelected, value);
+        }
+
+        private ConversionStatus _status;
+        public ConversionStatus Status
+        {
+            get => _status;
+            set => SetProperty(ref _status, value);
+        }
+
+        private int _progress;
+        public int Progress
+        {
+            get => _progress;
+            set => SetProperty(ref _progress, value);
+        }
+
+        private string? _errorMessage;
+        public string? ErrorMessage
+        {
+            get => _errorMessage;
+            set => SetProperty(ref _errorMessage, value);
+        }
+
+        private string? _outputPath;
+        public string? OutputPath
+        {
+            get => _outputPath;
+            set => SetProperty(ref _outputPath, value);
+        }
+
+        private long? _outputFileSizeBytes;
+        public long? OutputFileSizeBytes
+        {
+            get => _outputFileSizeBytes;
+            set => SetProperty(ref _outputFileSizeBytes, value);
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            if (propertyName == null) return;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        protected bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+        {
+            if (EqualityComparer<T>.Default.Equals(field, value))
+            {
+                return false;
+            }
+
+            field = value;
+            OnPropertyChanged(propertyName);
+            return true;
+        }
 
         public static QueueItemViewModel FromModel(QueueItem item)
         {
