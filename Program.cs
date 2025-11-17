@@ -13,6 +13,7 @@ using Converter.Services;
 using Converter.UI;
 using Microsoft.Extensions.Configuration;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace Converter
 {
@@ -58,15 +59,22 @@ namespace Converter
                 var mainForm = services.GetRequiredService<IMainView>() as Form;
                 var presenter = services.GetRequiredService<MainPresenter>();
                 
-                // Initialize the presenter asynchronously
-                presenter.InitializeAsync().ContinueWith(t =>
+                try
                 {
-                    if (t.IsFaulted)
-                    {
-                        MessageBox.Show($"Failed to initialize: {t.Exception?.GetBaseException().Message}", 
-                            "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
-                }, TaskScheduler.FromCurrentSynchronizationContext());
+                    presenter.InitializeAsync().GetAwaiter().GetResult();
+                }
+                catch (OperationCanceledException)
+                {
+                    MessageBox.Show("Application initialization was cancelled.",
+                        "Initialization Cancelled", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Failed to initialize: {ex.GetBaseException().Message}",
+                        "Initialization Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
 
                 System.Windows.Forms.Application.Run(mainForm);
             }

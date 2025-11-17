@@ -247,6 +247,7 @@ namespace Converter.Application.Presenters
                 _logger.LogInformation("Starting conversion");
                 _view.IsBusy = true;
 
+                EnsureProcessingCancellationToken();
                 await _queueProcessor.StartProcessingAsync(_cancellationTokenSource.Token);
 
                 _view.ShowInfo("Conversion started");
@@ -269,7 +270,9 @@ namespace Converter.Application.Presenters
                 _logger.LogInformation("Canceling conversion");
                 _view.IsBusy = true;
 
+                _cancellationTokenSource.Cancel();
                 await _queueProcessor.StopProcessingAsync();
+                ResetProcessingCancellationToken();
 
                 _view.ShowInfo("Conversion cancelled");
             }
@@ -575,6 +578,20 @@ namespace Converter.Application.Presenters
                 _cancellationTokenSource?.Dispose();
                 _disposed = true;
             }
+        }
+
+        private void EnsureProcessingCancellationToken()
+        {
+            if (_cancellationTokenSource == null || _cancellationTokenSource.IsCancellationRequested)
+            {
+                ResetProcessingCancellationToken();
+            }
+        }
+
+        private void ResetProcessingCancellationToken()
+        {
+            _cancellationTokenSource?.Dispose();
+            _cancellationTokenSource = new CancellationTokenSource();
         }
     }
 }

@@ -98,6 +98,13 @@ namespace Converter.Application.Services
 
             _logger.LogInformation("Stopping queue processor");
 
+            if (_isPaused)
+            {
+                _logger.LogDebug("Releasing pause lock during stop");
+                _isPaused = false;
+                _pauseLock.Release();
+            }
+
             _processingCts?.Cancel();
 
             if (_processingTask != null)
@@ -122,7 +129,7 @@ namespace Converter.Application.Services
                 return;
 
             _logger.LogInformation("Pausing queue processor");
-            await _pauseLock.WaitAsync();
+            await _pauseLock.WaitAsync().ConfigureAwait(false);
             _isPaused = true;
             _logger.LogInformation("Queue processor paused");
         }
@@ -219,16 +226,9 @@ namespace Converter.Application.Services
                 {
                     try
                     {
-                        await _pauseLock.WaitAsync(stoppingToken);
+                        await _pauseLock.WaitAsync(stoppingToken).ConfigureAwait(false);
                         try
                         {
-                            if (_isPaused)
-                            {
-                                await Task.Delay(1000, stoppingToken);
-                                EnqueueItem(command.Item);
-                                continue;
-                            }
-
                             switch (command.Type)
                             {
                                 case QueueCommandType.ProcessItem:
@@ -277,8 +277,32 @@ namespace Converter.Application.Services
             var command = new QueueCommand(QueueCommandType.ProcessItem, item);
             if (!_commandChannel.Writer.TryWrite(command))
             {
-                _logger.LogWarning("Failed to enqueue item {ItemId}: command channel is full", item.Id);
+                _ = WriteWithBackpressureAsync(command);
             }
+        }
+
+        private async Task WriteWithBackpressureAsync(QueueCommand command)
+        {
+            try
+            {
+                while (await _commandChannel.Writer.WaitToWriteAsync().ConfigureAwait(false))
+                {
+                    if (_commandChannel.Writer.TryWrite(command))
+                    {
+                        return;
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Ignore cancellation caused by shutting down the processor.
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to enqueue command for item {ItemId}", command.Item.Id);
+            }
+
+            _logger.LogWarning("Failed to enqueue item {ItemId}: command channel is closed", command.Item.Id);
         }
 
         private void OnItemAdded(object sender, QueueItem item)
@@ -301,6 +325,12 @@ namespace Converter.Application.Services
         {
             _queueRepository.ItemAdded -= OnItemAdded;
             _queueRepository.ItemUpdated -= OnItemUpdated;
+
+            if (_isPaused)
+            {
+                _isPaused = false;
+                _pauseLock.Release();
+            }
 
             _processingCts?.Cancel();
 
