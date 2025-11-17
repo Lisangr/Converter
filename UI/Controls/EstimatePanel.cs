@@ -1,8 +1,8 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using Converter.Application.Abstractions;
 using Converter.Models;
-using Converter.Services;
 
 namespace Converter.UI.Controls
 {
@@ -30,10 +30,14 @@ namespace Converter.UI.Controls
             set => _warningThreshold = Math.Max(1, value);
         }
 
-        private Theme CurrentTheme => ThemeManager.Instance.CurrentTheme;
+        private readonly IThemeService _themeService;
+        private readonly EventHandler<Theme> _themeChangedHandler;
+        private Theme CurrentTheme => _themeService.CurrentTheme;
 
-        public EstimatePanel()
+        public EstimatePanel(IThemeService themeService)
         {
+            _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
+            _themeChangedHandler = (s, theme) => UpdateTheme(theme);
             Dock = DockStyle.Top;
             Height = 110;
             BackColor = Color.White;
@@ -74,6 +78,7 @@ namespace Converter.UI.Controls
             Controls.Add(perfPanel);
 
             UpdateTheme(CurrentTheme);
+            _themeService.ThemeChanged += _themeChangedHandler;
         }
 
         public void ShowCalculating()
@@ -117,6 +122,16 @@ namespace Converter.UI.Controls
             pbPerf.ForeColor = theme["Accent"];
             pbPerf.BackColor = theme["Border"];
             Invalidate();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _themeService.ThemeChanged -= _themeChangedHandler;
+            }
+
+            base.Dispose(disposing);
         }
     }
 }

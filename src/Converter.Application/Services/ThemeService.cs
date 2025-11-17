@@ -9,15 +9,17 @@ namespace Converter.Application.Services;
 public class ThemeService : IThemeService
 {
     private readonly ISettingsStore _settingsStore;
+    private readonly IThemeManager _themeManager;
 
     public event EventHandler<Theme>? ThemeChanged;
 
-    public Theme CurrentTheme => ThemeManager.Instance.CurrentTheme;
+    public Theme CurrentTheme => _themeManager.CurrentTheme;
 
-    public ThemeService(ISettingsStore settingsStore)
+    public ThemeService(ISettingsStore settingsStore, IThemeManager themeManager)
     {
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
-        ThemeManager.Instance.ThemeChanged += OnManagerThemeChanged;
+        _themeManager = themeManager ?? throw new ArgumentNullException(nameof(themeManager));
+        _themeManager.ThemeChanged += OnManagerThemeChanged;
         _ = InitializeFromSettingsAsync();
     }
 
@@ -31,7 +33,7 @@ public class ThemeService : IThemeService
                 var target = Theme.GetAllThemes().FirstOrDefault(t => t.Name == preferences.ThemeName);
                 if (target != null)
                 {
-                    ThemeManager.Instance.SetTheme(target, animate: false);
+                    _themeManager.SetTheme(target, animate: false);
                 }
             }
         }
@@ -46,7 +48,7 @@ public class ThemeService : IThemeService
     {
         if (theme == null) throw new ArgumentNullException(nameof(theme));
         
-        ThemeManager.Instance.SetTheme(theme, animate);
+        _themeManager.SetTheme(theme, animate);
         
         // Save the theme name in user preferences
         var preferences = await _settingsStore.GetUserPreferencesAsync();
@@ -59,7 +61,7 @@ public class ThemeService : IThemeService
         if (control is Form form)
         {
             // Для форм используем перегрузку с Form
-            ThemeManager.Instance.ApplyTheme(form);
+            _themeManager.ApplyTheme(form);
         }
         else
         {
@@ -67,7 +69,7 @@ public class ThemeService : IThemeService
             var parentForm = control.FindForm();
             if (parentForm != null)
             {
-                ThemeManager.Instance.ApplyTheme(parentForm);
+                _themeManager.ApplyTheme(parentForm);
             }
         }
     }
@@ -79,6 +81,6 @@ public class ThemeService : IThemeService
 
     public void Dispose()
     {
-        ThemeManager.Instance.ThemeChanged -= OnManagerThemeChanged;
+        _themeManager.ThemeChanged -= OnManagerThemeChanged;
     }
 }
