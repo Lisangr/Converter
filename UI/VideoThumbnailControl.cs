@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Converter.Application.Abstractions;
+using Converter.Models;
 using Xabe.FFmpeg;
 
 namespace Converter.UI
