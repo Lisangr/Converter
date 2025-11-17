@@ -9,9 +9,11 @@ using Converter.Application.Services;
 using Converter.Application.ViewModels;
 using Converter.Infrastructure;
 using Converter.Infrastructure.Ffmpeg;
+using Converter.Services;
 using Converter.UI;
 using Microsoft.Extensions.Configuration;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace Converter
 {
@@ -28,8 +30,8 @@ namespace Converter
                 .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
                 .Build();
 
-            var services = new ServiceCollection()
-                .AddLogging(configure => 
+            using var services = new ServiceCollection()
+                .AddLogging(configure =>
                     configure.AddDebug()
                             .SetMinimumLevel(LogLevel.Information))
                 .AddSingleton<IMainView, Form1>()
@@ -40,6 +42,7 @@ namespace Converter
                 .AddSingleton<IProfileProvider, ProfileProvider>()
                 .AddSingleton<IOutputPathBuilder, OutputPathBuilder>()
                 .AddSingleton<IProgressReporter, UiProgressReporter>()
+                .AddSingleton<IThemeManager, ThemeManager>()
                 .AddSingleton<IThemeService, ThemeService>()
                 .AddSingleton<IQueueProcessor, ChannelQueueProcessor>()
                 .AddSingleton<IFilePicker, WinFormsFilePicker>()
@@ -56,15 +59,22 @@ namespace Converter
                 var mainForm = services.GetRequiredService<IMainView>() as Form;
                 var presenter = services.GetRequiredService<MainPresenter>();
                 
-                // Initialize the presenter asynchronously
-                presenter.InitializeAsync().ContinueWith(t =>
+                try
                 {
-                    if (t.IsFaulted)
-                    {
-                        MessageBox.Show($"Failed to initialize: {t.Exception?.GetBaseException().Message}", 
-                            "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
-                }, TaskScheduler.FromCurrentSynchronizationContext());
+                    presenter.InitializeAsync().GetAwaiter().GetResult();
+                }
+                catch (OperationCanceledException)
+                {
+                    MessageBox.Show("Application initialization was cancelled.",
+                        "Initialization Cancelled", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Failed to initialize: {ex.GetBaseException().Message}",
+                        "Initialization Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
 
                 System.Windows.Forms.Application.Run(mainForm);
             }

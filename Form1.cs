@@ -8,6 +8,8 @@ using Converter.UI.Controls;
 using Converter.Application.Abstractions;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Converter
 {
@@ -17,9 +19,11 @@ namespace Converter
         private Button? _themeMenuButton;
         private bool _themeInitialized;
         private readonly IThemeService _themeService;
+        private readonly IThemeManager _themeManager;
         private readonly INotificationService _notificationService;
         private readonly IThumbnailProvider _thumbnailProvider;
         private readonly IShareService _shareService;
+        private readonly CancellationTokenSource _lifecycleCts = new();
 
         // IMainView events
         public event EventHandler? AddFilesRequested;
@@ -90,11 +94,13 @@ namespace Converter
 
         public Form1(
             IThemeService themeService,
+            IThemeManager themeManager,
             INotificationService notificationService,
             IThumbnailProvider thumbnailProvider,
             IShareService shareService)
         {
             _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
+            _themeManager = themeManager ?? throw new ArgumentNullException(nameof(themeManager));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _thumbnailProvider = thumbnailProvider ?? throw new ArgumentNullException(nameof(thumbnailProvider));
             _shareService = shareService ?? throw new ArgumentNullException(nameof(shareService));
@@ -203,7 +209,7 @@ namespace Converter
             _themeService.ApplyTheme(this);
             UpdateCustomControlsTheme(_themeService.CurrentTheme);
 
-            _themeSelector = new ThemeSelectorControl(_themeService)
+            _themeSelector = new ThemeSelectorControl(_themeService, _themeManager)
             {
                 Visible = false,
                 Anchor = AnchorStyles.Top | AnchorStyles.Right
@@ -273,9 +279,31 @@ namespace Converter
             }
         }
 
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            CancelBackgroundOperations();
+            base.OnFormClosing(e);
+        }
+
+        private void CancelBackgroundOperations()
+        {
+            try
+            {
+                if (!_lifecycleCts.IsCancellationRequested)
+                {
+                    _lifecycleCts.Cancel();
+                }
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
         private void DisposeManagedResources()
         {
             _themeService.ThemeChanged -= OnThemeChanged;
+            CancelBackgroundOperations();
 
             try
             {
@@ -289,7 +317,31 @@ namespace Converter
                 _estimateCts?.Cancel();
                 _estimateCts?.Dispose();
             }
-            catch { }            
+            catch { }
+
+            try
+            {
+                _lifecycleCts.Dispose();
+            }
+            catch { }
+
+            try
+            {
+                _notificationService.Dispose();
+            }
+            catch { }
+
+            try
+            {
+                _themeService.Dispose();
+            }
+            catch { }
+
+            try
+            {
+                _thumbnailProvider.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+            catch { }
         }
 
         private void OnThemeControlsResize(object? sender, EventArgs e) => PositionThemeControls();

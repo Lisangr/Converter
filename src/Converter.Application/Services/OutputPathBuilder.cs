@@ -10,6 +10,7 @@ using System;
 using System.IO;
 using System.Text.RegularExpressions;
 using Converter.Application.Abstractions;
+using Converter.Domain.Models;
 using Converter.Models;
 using Microsoft.Extensions.Logging;
 
@@ -25,7 +26,7 @@ namespace Converter.Application.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public string BuildOutputPath(Converter.Models.QueueItem item, string outputDirectory, string fileExtension)
+        public string BuildOutputPath(QueueItem item, string outputDirectory, string fileExtension)
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
             if (string.IsNullOrEmpty(outputDirectory)) 
@@ -53,7 +54,7 @@ namespace Converter.Application.Services
             return outputPath;
         }
 
-        public string BuildOutputPath(Converter.Models.QueueItem item, Converter.Models.ConversionProfile profile)
+        public string BuildOutputPath(QueueItem item, Models.ConversionProfile profile)
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
             if (profile == null) throw new ArgumentNullException(nameof(profile));

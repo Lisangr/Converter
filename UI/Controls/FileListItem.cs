@@ -2,8 +2,8 @@ using System;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
+using Converter.Application.Abstractions;
 using Converter.Models;
-using Converter.Services;
 
 namespace Converter.UI.Controls
 {
@@ -65,15 +65,17 @@ namespace Converter.UI.Controls
         public event EventHandler<ThumbnailPositionEventArgs>? RefreshThumbnailRequested;
         
         private readonly EventHandler<Theme> _themeChangedHandler;
-        
-        public FileListItem(string filePath)
+        private readonly IThemeService _themeService;
+
+        public FileListItem(string filePath, IThemeService themeService)
         {
             _filePath = filePath;
+            _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
             _themeChangedHandler = (s, theme) => ApplyTheme(theme);
             InitializeComponents();
             UpdateFileInfo();
-            ApplyTheme(ThemeManager.Instance.CurrentTheme);
-            ThemeManager.Instance.ThemeChanged += _themeChangedHandler;
+            ApplyTheme(_themeService.CurrentTheme);
+            _themeService.ThemeChanged += _themeChangedHandler;
         }
         
         private void InitializeComponents()
@@ -293,7 +295,7 @@ namespace Converter.UI.Controls
         {
             if (disposing)
             {
-                ThemeManager.Instance.ThemeChanged -= _themeChangedHandler;
+                _themeService.ThemeChanged -= _themeChangedHandler;
                 _thumbnail?.Image?.Dispose();
                 _contextMenu?.Dispose();
             }

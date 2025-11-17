@@ -1,9 +1,9 @@
 using Converter.Application.Abstractions;
+using Converter.Domain.Models;
 using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using Converter.Models;
 
 namespace Converter.Infrastructure.Notifications;
 

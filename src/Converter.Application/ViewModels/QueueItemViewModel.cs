@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using Converter.Models;
+using Converter.Domain.Models;
 
 namespace Converter.Application.ViewModels
 {

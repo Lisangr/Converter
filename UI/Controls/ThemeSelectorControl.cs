@@ -13,6 +13,7 @@ namespace Converter.UI.Controls
     public class ThemeSelectorControl : UserControl
     {
         private readonly IThemeService _themeService;
+        private readonly IThemeManager _themeManager;
         private readonly ComboBox _themeCombo;
         private readonly Panel _previewPanel;
         private readonly CheckBox _chkAnimations;
@@ -20,9 +21,10 @@ namespace Converter.UI.Controls
         private readonly Button _btnSettings;
         private readonly List<Theme> _themes;
 
-        public ThemeSelectorControl(IThemeService themeService)
+        public ThemeSelectorControl(IThemeService themeService, IThemeManager themeManager)
         {
             _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
+            _themeManager = themeManager ?? throw new ArgumentNullException(nameof(themeManager));
             _themeService.ThemeChanged += OnThemeChangedFromService;
             
             DoubleBuffered = true;
@@ -104,7 +106,7 @@ namespace Converter.UI.Controls
             _btnSettings.FlatAppearance.BorderSize = 0;
             _btnSettings.Click += (s, e) =>
             {
-                using var dialog = new ThemeSettingsDialog();
+                using var dialog = new ThemeSettingsDialog(_themeManager);
                 dialog.ShowDialog(this);
             };
 
@@ -177,13 +179,6 @@ namespace Converter.UI.Controls
             }
             
             UpdatePreview();
-        }
-
-        private void OnThemeManagerThemeChanged(Theme theme)
-        {
-            // This method is kept for backward compatibility
-            // but should no longer be used directly
-            OnThemeChangedFromService(this, theme);
         }
 
         private void UpdatePreview()

@@ -10,7 +10,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Converter.Application.Abstractions;
-using Converter.Models;
+using Converter.Domain.Models;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 

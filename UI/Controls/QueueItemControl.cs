@@ -2,7 +2,8 @@ using System;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
-using Converter.Models;
+using Converter.Domain.Models;
+using Converter.Extensions;
 
 namespace Converter.UI.Controls;
 
@@ -40,7 +41,7 @@ public class QueueItemControl : Panel
         {
             Location = new Point(0, 0),
             Size = new Size(5, Height),
-            BackColor = item.StatusColor
+            BackColor = item.GetStatusColor()
         };
 
         _thumbnail = new PictureBox
@@ -64,8 +65,8 @@ public class QueueItemControl : Panel
             Location = new Point(110, 35),
             Size = new Size(200, 18),
             Font = new Font("Segoe UI", 9),
-            ForeColor = item.StatusColor,
-            Text = item.StatusText
+            ForeColor = item.GetStatusColor(),
+            Text = item.GetStatusText()
         };
 
         _progressBar = new ProgressBar
@@ -81,7 +82,7 @@ public class QueueItemControl : Panel
             Location = new Point(420, 55),
             Size = new Size(100, 15),
             Font = new Font("Segoe UI", 8),
-            Text = $"ETA: {item.ETA}"
+            Text = $"ETA: {item.GetEta()}"
         };
 
         _btnStar = new Button
@@ -151,11 +152,12 @@ public class QueueItemControl : Panel
 
     public void UpdateDisplay()
     {
-        _status.Text = Item.StatusText;
-        _status.ForeColor = Item.StatusColor;
-        _statusIndicator.BackColor = Item.StatusColor;
+        var statusColor = Item.GetStatusColor();
+        _status.Text = Item.GetStatusText();
+        _status.ForeColor = statusColor;
+        _statusIndicator.BackColor = statusColor;
         _progressBar.Value = Math.Clamp(Item.Progress, 0, 100);
-        _eta.Text = $"ETA: {Item.ETA}";
+        _eta.Text = $"ETA: {Item.GetEta()}";
         _btnStar.Text = Item.IsStarred ? "★" : "☆";
         if (!_priorityCombo.Items.Contains(Item.Priority.ToString()))
         {

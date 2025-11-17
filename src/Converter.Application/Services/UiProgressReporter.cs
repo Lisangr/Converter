@@ -10,8 +10,8 @@ using System;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Converter.Application.Abstractions;
+using Converter.Domain.Models;
 using Converter.Extensions;
-using Converter.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Converter.Application.Services

@@ -4,7 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using Converter.Services;
+using Converter.Application.Abstractions;
+using Converter.Models;
 using Xabe.FFmpeg;
 
 namespace Converter.UI
@@ -23,9 +24,11 @@ namespace Converter.UI
         private readonly Button _removeButton;
 
         public string FilePath { get; }
+        private readonly IThemeService _themeService;
+        private readonly EventHandler<Theme> _themeChangedHandler;
         public event EventHandler? RemoveRequested;
 
-        public VideoThumbnailControl(string filePath)
+        public VideoThumbnailControl(string filePath, IThemeService themeService)
         {
             if (string.IsNullOrWhiteSpace(filePath))
             {
@@ -33,15 +36,16 @@ namespace Converter.UI
             }
 
             FilePath = filePath;
+            _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
+            _themeChangedHandler = (s, theme) => ApplyTheme(theme);
 
             Size = new Size(180, 220);
             BorderStyle = BorderStyle.FixedSingle;
             Padding = new Padding(5);
             Cursor = Cursors.Hand;
 
-            var theme = ThemeManager.Instance.CurrentTheme;
-            BackColor = theme["Surface"];
-            ForeColor = theme["TextPrimary"];
+            ApplyTheme(_themeService.CurrentTheme);
+            _themeService.ThemeChanged += _themeChangedHandler;
 
             _thumbnailBox = new PictureBox
             {
@@ -86,6 +90,7 @@ namespace Converter.UI
             };
             Controls.Add(_fileNameLabel);
 
+            var theme = _themeService.CurrentTheme;
             _durationLabel = new Label
             {
                 Location = new Point(5, 155),
@@ -202,11 +207,21 @@ namespace Converter.UI
             }
         }
 
+        private void ApplyTheme(Theme theme)
+        {
+            BackColor = theme["Surface"];
+            ForeColor = theme["TextPrimary"];
+            if (_durationLabel != null) _durationLabel.ForeColor = theme["TextSecondary"];
+            if (_sizeLabel != null) _sizeLabel.ForeColor = theme["TextSecondary"];
+            if (_codecLabel != null) _codecLabel.ForeColor = theme["TextSecondary"];
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
                 _thumbnailBox?.Image?.Dispose();
+                _themeService.ThemeChanged -= _themeChangedHandler;
             }
 
             base.Dispose(disposing);

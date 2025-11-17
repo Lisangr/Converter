@@ -11,7 +11,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Converter.Application.Abstractions;
-using Converter.Models;
+using Converter.Domain.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Converter.Application.Services
