@@ -23,6 +23,7 @@ public sealed class QueueItem
     public bool IsStarred { get; set; }
     public ConversionStatus Status { get; set; } = ConversionStatus.Pending;
     public int Progress { get; set; }
+    public string? OutputDirectory { get; set; }
     public string? OutputPath { get; set; }
     public string? ErrorMessage { get; set; }
     public DateTime AddedAt { get; set; } = DateTime.Now;

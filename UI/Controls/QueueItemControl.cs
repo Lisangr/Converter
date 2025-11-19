@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
+using Converter.Application.ViewModels;
 using Converter.Domain.Models;
 using Converter.Extensions;
 
@@ -22,7 +23,7 @@ public class QueueItemControl : Panel
     private readonly Panel _statusIndicator;
     private bool _updatingPriority;
 
-    public QueueItem Item { get; }
+    public QueueItemViewModel ViewModel { get; }
 
     public event EventHandler<Guid>? MoveUpClicked;
     public event EventHandler<Guid>? MoveDownClicked;
@@ -30,9 +31,9 @@ public class QueueItemControl : Panel
     public event EventHandler<Guid>? CancelClicked;
     public event EventHandler<(Guid Id, int Priority)>? PriorityChanged;
 
-    public QueueItemControl(QueueItem item)
+    public QueueItemControl(QueueItemViewModel viewModel)
     {
-        Item = item;
+        ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         Size = new Size(800, 80);
         BorderStyle = BorderStyle.FixedSingle;
         Padding = new Padding(5);
@@ -41,7 +42,7 @@ public class QueueItemControl : Panel
         {
             Location = new Point(0, 0),
             Size = new Size(5, Height),
-            BackColor = item.GetStatusColor()
+            BackColor = GetStatusColor(viewModel.Status)
         };
 
         _thumbnail = new PictureBox
@@ -57,7 +58,7 @@ public class QueueItemControl : Panel
             Location = new Point(110, 10),
             Size = new Size(300, 20),
             Font = new Font("Segoe UI", 10, FontStyle.Bold),
-            Text = item.FileName
+            Text = viewModel.FileName
         };
 
         _status = new Label
@@ -65,15 +66,15 @@ public class QueueItemControl : Panel
             Location = new Point(110, 35),
             Size = new Size(200, 18),
             Font = new Font("Segoe UI", 9),
-            ForeColor = item.GetStatusColor(),
-            Text = item.GetStatusText()
+            ForeColor = GetStatusColor(viewModel.Status),
+            Text = GetStatusText(viewModel.Status)
         };
 
         _progressBar = new ProgressBar
         {
             Location = new Point(110, 55),
             Size = new Size(300, 15),
-            Value = Math.Clamp(item.Progress, 0, 100),
+            Value = Math.Clamp(viewModel.Progress, 0, 100),
             Style = ProgressBarStyle.Continuous
         };
 
@@ -82,20 +83,20 @@ public class QueueItemControl : Panel
             Location = new Point(420, 55),
             Size = new Size(100, 15),
             Font = new Font("Segoe UI", 8),
-            Text = $"ETA: {item.GetEta()}"
+            Text = $"ETA: {GetEta()}"
         };
 
         _btnStar = new Button
         {
             Location = new Point(530, 10),
             Size = new Size(30, 30),
-            Text = item.IsStarred ? "★" : "☆",
+            Text = viewModel.IsStarred ? "★" : "☆",
             Font = new Font("Segoe UI", 14),
             FlatStyle = FlatStyle.Flat,
             Cursor = Cursors.Hand
         };
         _btnStar.FlatAppearance.BorderSize = 0;
-        _btnStar.Click += (_, _) => StarToggled?.Invoke(this, Item.Id);
+        _btnStar.Click += (_, _) => StarToggled?.Invoke(this, viewModel.Id);
 
         _priorityCombo = new ComboBox
         {
@@ -104,7 +105,7 @@ public class QueueItemControl : Panel
             DropDownStyle = ComboBoxStyle.DropDownList
         };
         _priorityCombo.Items.AddRange(new object[] { "1", "2", "3", "4", "5" });
-        _priorityCombo.SelectedItem = Item.Priority.ToString();
+        _priorityCombo.SelectedItem = viewModel.Priority.ToString();
         _priorityCombo.SelectedIndexChanged += (_, _) =>
         {
             if (_updatingPriority)
@@ -114,18 +115,21 @@ public class QueueItemControl : Panel
 
             if (int.TryParse(_priorityCombo.SelectedItem?.ToString(), out var priority))
             {
-                PriorityChanged?.Invoke(this, (Item.Id, priority));
+                PriorityChanged?.Invoke(this, (viewModel.Id, priority));
             }
         };
 
         _btnMoveUp = CreateIconButton("▲", new Point(640, 10));
-        _btnMoveUp.Click += (_, _) => MoveUpClicked?.Invoke(this, Item.Id);
+        _btnMoveUp.Click += (_, _) => MoveUpClicked?.Invoke(this, viewModel.Id);
 
         _btnMoveDown = CreateIconButton("▼", new Point(640, 45));
-        _btnMoveDown.Click += (_, _) => MoveDownClicked?.Invoke(this, Item.Id);
+        _btnMoveDown.Click += (_, _) => MoveDownClicked?.Invoke(this, viewModel.Id);
 
         _btnCancel = CreateIconButton("✕", new Point(680, 25));
-        _btnCancel.Click += (_, _) => CancelClicked?.Invoke(this, Item.Id);
+        _btnCancel.Click += (_, _) => CancelClicked?.Invoke(this, viewModel.Id);
+
+        // Subscribe to ViewModel property changes
+        viewModel.PropertyChanged += OnViewModelPropertyChanged;
 
         Controls.AddRange(new Control[]
         {
@@ -150,21 +154,101 @@ public class QueueItemControl : Panel
         return btn;
     }
 
-    public void UpdateDisplay()
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        var statusColor = Item.GetStatusColor();
-        _status.Text = Item.GetStatusText();
+        if (InvokeRequired)
+        {
+            BeginInvoke(new Action(() => OnViewModelPropertyChanged(sender, e)));
+            return;
+        }
+
+        switch (e.PropertyName)
+        {
+            case nameof(QueueItemViewModel.Status):
+                UpdateStatusDisplay();
+                break;
+            case nameof(QueueItemViewModel.Progress):
+                UpdateProgressDisplay();
+                break;
+            case nameof(QueueItemViewModel.ErrorMessage):
+                UpdateStatusDisplay();
+                break;
+            case nameof(QueueItemViewModel.IsStarred):
+                _btnStar.Text = ViewModel.IsStarred ? "★" : "☆";
+                break;
+            case nameof(QueueItemViewModel.Priority):
+                _updatingPriority = true;
+                if (!_priorityCombo.Items.Contains(ViewModel.Priority.ToString()))
+                {
+                    _priorityCombo.Items.Add(ViewModel.Priority.ToString());
+                }
+                _priorityCombo.SelectedItem = ViewModel.Priority.ToString();
+                _updatingPriority = false;
+                break;
+        }
+    }
+
+    private void UpdateStatusDisplay()
+    {
+        var statusColor = GetStatusColor(ViewModel.Status);
+        _status.Text = GetStatusText(ViewModel.Status);
         _status.ForeColor = statusColor;
         _statusIndicator.BackColor = statusColor;
-        _progressBar.Value = Math.Clamp(Item.Progress, 0, 100);
-        _eta.Text = $"ETA: {Item.GetEta()}";
-        _btnStar.Text = Item.IsStarred ? "★" : "☆";
-        if (!_priorityCombo.Items.Contains(Item.Priority.ToString()))
+    }
+
+    private void UpdateProgressDisplay()
+    {
+        _progressBar.Value = Math.Clamp(ViewModel.Progress, 0, 100);
+        _eta.Text = $"ETA: {GetEta()}";
+    }
+
+    public void UpdateDisplay()
+    {
+        UpdateStatusDisplay();
+        UpdateProgressDisplay();
+    }
+
+    private static Color GetStatusColor(ConversionStatus status)
+    {
+        return status switch
         {
-            _priorityCombo.Items.Add(Item.Priority.ToString());
-        }
-        _updatingPriority = true;
-        _priorityCombo.SelectedItem = Item.Priority.ToString();
-        _updatingPriority = false;
+            ConversionStatus.Pending => Color.Gray,
+            ConversionStatus.Processing => Color.Blue,
+            ConversionStatus.Completed => Color.Green,
+            ConversionStatus.Failed => Color.Red,
+            ConversionStatus.Paused => Color.Orange,
+            ConversionStatus.Cancelled => Color.DarkGray,
+            _ => Color.Gray
+        };
+    }
+
+    private static string GetStatusText(ConversionStatus status)
+    {
+        return status switch
+        {
+            ConversionStatus.Pending => "В очереди",
+            ConversionStatus.Processing => "Обработка",
+            ConversionStatus.Completed => "Завершено",
+            ConversionStatus.Failed => "Ошибка",
+            ConversionStatus.Paused => "Приостановлено",
+            ConversionStatus.Cancelled => "Отменено",
+            _ => "Неизвестно"
+        };
+    }
+
+    private string GetEta()
+    {
+        if (ViewModel.Status != ConversionStatus.Processing)
+            return "--:--";
+
+        var remainingProgress = 100 - ViewModel.Progress;
+        if (remainingProgress <= 0)
+            return "00:00";
+
+        // Простая оценка на основе прогресса (можно улучшить)
+        var estimatedSeconds = remainingProgress * 2; // Примерная оценка
+        var minutes = estimatedSeconds / 60;
+        var seconds = estimatedSeconds % 60;
+        return $"{minutes:D2}:{seconds:D2}";
     }
 }

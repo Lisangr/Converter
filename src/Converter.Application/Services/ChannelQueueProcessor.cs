@@ -167,7 +167,14 @@ namespace Converter.Application.Services
                 _logger.LogInformation("Started processing item {ItemId}", item.Id);
 
                 var progress = new Progress<int>(p => 
-                    ProgressChanged?.Invoke(this, new QueueProgressEventArgs(item, p)));
+                {
+                    // Update the item progress in repository
+                    item.Progress = p;
+                    _ = Task.Run(async () => await _queueRepository.UpdateAsync(item));
+                    
+                    // Notify UI
+                    ProgressChanged?.Invoke(this, new QueueProgressEventArgs(item, p));
+                });
 
                 var result = await _conversionUseCase.ExecuteAsync(item, progress, cancellationToken);
 

@@ -30,5 +30,9 @@ namespace Converter.Application.Abstractions
         // UI notifications
         void ShowError(string message);
         void ShowInfo(string message);
+
+        // Progress reporting
+        void UpdateCurrentProgress(int percent);
+        void UpdateTotalProgress(int percent);
     }
 }

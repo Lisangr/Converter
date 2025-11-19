@@ -29,6 +29,14 @@ public sealed class ConversionCommandBuilder : IConversionCommandBuilder
         if (!string.IsNullOrWhiteSpace(profile.AudioBitrateK))
             sb.Append("-b:a ").Append(profile.AudioBitrateK).Append(' ');
 
+        // Add resolution scaling if specified
+        if (request.TargetWidth.HasValue || request.TargetHeight.HasValue)
+        {
+            var width = request.TargetWidth.HasValue ? request.TargetWidth.Value : -1;
+            var height = request.TargetHeight.HasValue ? request.TargetHeight.Value : -2;
+            sb.Append("-vf ").Append($"scale={width}:{height}").Append(' ');
+        }
+
         // container is inferred by output extension
         sb.Append(Escape(request.OutputPath));
         return sb.ToString();

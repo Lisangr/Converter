@@ -24,6 +24,18 @@ namespace Converter
         private readonly IThumbnailProvider _thumbnailProvider;
         private readonly IShareService _shareService;
         private readonly CancellationTokenSource _lifecycleCts = new();
+        
+        // UI controls for SetBusy method
+        private Button? btnStart;
+        private Button? btnAddFiles;
+        private Button? btnStop;
+        private Button? btnRemoveSelected;
+        private Button? btnClearAll;
+        private Button? btnSavePreset;
+        private Button? btnLoadPreset;
+        private Button? _btnShare;
+        private Button? _btnOpenEditor;
+        private Button? _btnNotificationSettings;
 
         // IMainView events
         public event EventHandler? AddFilesRequested;
@@ -124,9 +136,25 @@ namespace Converter
             try
             {
                 Cursor = isBusy ? Cursors.WaitCursor : Cursors.Default;
+                
+                // Update main buttons
                 if (btnStart != null) btnStart.Enabled = !isBusy;
                 if (btnAddFiles != null) btnAddFiles.Enabled = !isBusy;
-                if (btnStop != null) btnStop.Enabled = isBusy;
+                if (btnStop != null) btnStop.Enabled = isBusy; // Enable stop button when busy
+                
+                // Update file management buttons
+                if (btnRemoveSelected != null) btnRemoveSelected.Enabled = !isBusy;
+                if (btnClearAll != null) btnClearAll.Enabled = !isBusy;
+                
+                // Update other control buttons
+                if (_btnShare != null) _btnShare.Enabled = !isBusy;
+                if (_btnOpenEditor != null) _btnOpenEditor.Enabled = !isBusy;
+                if (_btnNotificationSettings != null) _btnNotificationSettings.Enabled = !isBusy;
+                if (btnSavePreset != null) btnSavePreset.Enabled = !isBusy;
+                if (btnLoadPreset != null) btnLoadPreset.Enabled = !isBusy;
+                
+                // Update button appearance based on busy state
+                UpdateButtonStates(isBusy);
             }
             catch { }
         }
@@ -155,6 +183,72 @@ namespace Converter
         {
             if (InvokeRequired) { BeginInvoke(new Action(() => ShowInfo(message))); return; }
             AppendLog($"ℹ {message}");
+        }
+
+		public void UpdateCurrentProgress(int percent)
+        {
+            if (InvokeRequired) { BeginInvoke(new Action(() => UpdateCurrentProgress(percent))); return; }
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"UpdateCurrentProgress called: {percent}%");
+                if (progressBarCurrent != null)
+                {
+                    progressBarCurrent.Value = Math.Max(progressBarCurrent.Minimum,
+                        Math.Min(progressBarCurrent.Maximum, percent));
+                    System.Diagnostics.Debug.WriteLine($"ProgressBarCurrent updated to: {progressBarCurrent.Value}%");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("ProgressBarCurrent is null!");
+                }
+                
+                // Update current status label
+                if (lblStatusCurrent != null)
+                {
+                    lblStatusCurrent.Text = $"Текущий: {percent}%";
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("LblStatusCurrent is null!");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error in UpdateCurrentProgress: {ex.Message}");
+            }
+        }
+
+        public void UpdateTotalProgress(int percent)
+        {
+            if (InvokeRequired) { BeginInvoke(new Action(() => UpdateTotalProgress(percent))); return; }
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"UpdateTotalProgress called: {percent}%");
+                if (progressBarTotal != null)
+                {
+                    progressBarTotal.Value = Math.Max(progressBarTotal.Minimum,
+                        Math.Min(progressBarTotal.Maximum, percent));
+                    System.Diagnostics.Debug.WriteLine($"ProgressBarTotal updated to: {progressBarTotal.Value}%");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("ProgressBarTotal is null!");
+                }
+                
+                // Update total status label
+                if (lblStatusTotal != null)
+                {
+                    lblStatusTotal.Text = $"Общий прогресс: {percent}%";
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("LblStatusTotal is null!");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error in UpdateTotalProgress: {ex.Message}");
+            }
         }
 
         // IMainView: file dialogs
@@ -238,6 +332,24 @@ namespace Converter
             PositionThemeControls();
 
             _themeInitialized = true;
+        }
+
+        private void UpdateButtonStates(bool isBusy)
+        {
+            // Visual feedback for button states
+            try
+            {
+                if (btnStart != null)
+                {
+                    btnStart.BackColor = isBusy ? Color.FromArgb(100, 100, 100) : Color.FromArgb(0, 120, 215);
+                }
+                
+                if (btnStop != null)
+                {
+                    btnStop.BackColor = isBusy ? Color.FromArgb(180, 50, 50) : Color.FromArgb(100, 100, 100);
+                }
+            }
+            catch { }
         }
 
         private void OnThemeChanged(object? sender, Theme theme)

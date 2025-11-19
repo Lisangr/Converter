@@ -54,6 +54,8 @@ namespace Converter.Application.Presenters
             _queueRepository.ItemAdded += OnItemAdded;
             _queueRepository.ItemUpdated += OnItemUpdated;
             _queueRepository.ItemRemoved += OnItemRemoved;
+            
+            // Subscribe to queue processor events for progress updates
             _queueProcessor.ItemStarted += OnItemStarted;
             _queueProcessor.ItemCompleted += OnItemCompleted;
             _queueProcessor.ItemFailed += OnItemFailed;
@@ -198,11 +200,15 @@ namespace Converter.Application.Presenters
                         }
 
                         var fileInfo = new FileInfo(filePath);
+                        var outputDir = !string.IsNullOrWhiteSpace(_view.OutputFolder)
+                            ? _view.OutputFolder
+                            : Path.GetDirectoryName(filePath) ?? string.Empty;
                         var item = new QueueItem
                         {
                             Id = Guid.NewGuid(),
                             FilePath = filePath,
                             FileSizeBytes = fileInfo.Length,
+                            OutputDirectory = outputDir,
                             Status = ConversionStatus.Pending,
                             AddedAt = DateTime.UtcNow
                         };
@@ -248,6 +254,14 @@ namespace Converter.Application.Presenters
                 _view.IsBusy = true;
 
                 EnsureProcessingCancellationToken();
+                
+                _logger.LogInformation("Queue items count before start: {Count}", _viewModel.QueueItems.Count);
+                foreach (var item in _viewModel.QueueItems)
+                {
+                    _logger.LogInformation("Queue item: {FileName} - {Status} - {Progress}%", 
+                        item.FileName, item.Status, item.Progress);
+                }
+
                 await _queueProcessor.StartProcessingAsync(_cancellationTokenSource.Token);
 
                 _view.ShowInfo("Conversion started");
@@ -337,10 +351,12 @@ namespace Converter.Application.Presenters
             InvokeOnUiThread(() =>
             {
                 item.Status = ConversionStatus.Processing;
+                item.StartedAt = DateTime.UtcNow;
                 var vm = _viewModel.QueueItems.FirstOrDefault(q => q.Id == item.Id);
                 if (vm != null)
                 {
                     vm.Status = item.Status;
+                    vm.Progress = 0; // Reset progress when starting
                 }
                 _view.StatusText = $"Processing {item.FileName}...";
             });
@@ -351,10 +367,14 @@ namespace Converter.Application.Presenters
             InvokeOnUiThread(() =>
             {
                 item.Status = ConversionStatus.Completed;
+                item.CompletedAt = DateTime.UtcNow;
+                item.Progress = 100;
                 var vm = _viewModel.QueueItems.FirstOrDefault(q => q.Id == item.Id);
                 if (vm != null)
                 {
                     vm.Status = item.Status;
+                    vm.Progress = 100;
+                    vm.OutputFileSizeBytes = item.OutputFileSizeBytes;
                 }
                 _view.StatusText = $"Completed: {item.FileName}";
             });
@@ -379,11 +399,32 @@ namespace Converter.Application.Presenters
         {
             InvokeOnUiThread(() =>
             {
-                e.Item.Progress = e.Progress;
+                _logger.LogDebug("Progress changed for item {ItemId}: {Progress}%", e.Item.Id, e.Progress);
+                
+                // Обновляем ViewModel
                 var vm = _viewModel.QueueItems.FirstOrDefault(q => q.Id == e.Item.Id);
                 if (vm != null)
                 {
+                    _logger.LogDebug("Updating ViewModel {ItemId}: Progress={Progress}, Status={Status}", 
+                        vm.Id, e.Progress, e.Item.Status);
                     vm.Progress = e.Progress;
+                    vm.Status = e.Item.Status;
+                    vm.ErrorMessage = e.Item.ErrorMessage;
+                }
+                else
+                {
+                    _logger.LogWarning("ViewModel not found for item {ItemId}", e.Item.Id);
+                }
+
+                // Обновляем прогресс текущего элемента
+                _view.UpdateCurrentProgress(e.Progress);
+
+                // Считаем суммарный прогресс по очереди
+                if (_viewModel.QueueItems.Any())
+                {
+                    var total = _viewModel.QueueItems.Average(x => x.Progress);
+                    _view.UpdateTotalProgress((int)total);
+                    _logger.LogDebug("Total progress updated: {Total}%", (int)total);
                 }
 
                 if (!string.IsNullOrEmpty(e.Status))
@@ -404,6 +445,8 @@ namespace Converter.Application.Presenters
                 _view.StatusText = "Queue processing completed";
                 _view.IsBusy = false;
                 _view.ShowInfo("All items have been processed");
+				_view.UpdateCurrentProgress(0);
+				_view.UpdateTotalProgress(100);
             });
         }
 
@@ -414,12 +457,15 @@ namespace Converter.Application.Presenters
             {
                 if (!File.Exists(file)) continue;
                 if (_viewModel.QueueItems.Any(item => item.FilePath == file)) continue;
-                
+                var outputDir = !string.IsNullOrWhiteSpace(_view.OutputFolder)
+                    ? _view.OutputFolder
+                    : Path.GetDirectoryName(file) ?? string.Empty;
                 var item = new QueueItem
                 {
                     Id = Guid.NewGuid(),
                     FilePath = file,
                     FileSizeBytes = new FileInfo(file).Length,
+                    OutputDirectory = outputDir,
                     Status = ConversionStatus.Pending,
                     AddedAt = DateTime.UtcNow
                 };

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.CompilerServices;
 using Converter.Domain.Models;
 
@@ -55,6 +56,20 @@ namespace Converter.Application.ViewModels
             set => SetProperty(ref _outputFileSizeBytes, value);
         }
 
+        private bool _isStarred;
+        public bool IsStarred
+        {
+            get => _isStarred;
+            set => SetProperty(ref _isStarred, value);
+        }
+
+        private int _priority;
+        public int Priority
+        {
+            get => _priority;
+            set => SetProperty(ref _priority, value);
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
 
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
@@ -89,7 +104,9 @@ namespace Converter.Application.ViewModels
                 Progress = item.Progress,
                 ErrorMessage = item.ErrorMessage,
                 OutputPath = item.OutputPath,
-                OutputFileSizeBytes = item.OutputFileSizeBytes
+                OutputFileSizeBytes = item.OutputFileSizeBytes,
+                IsStarred = item.IsStarred,
+                Priority = item.Priority
             };
         }
 
@@ -102,6 +119,8 @@ namespace Converter.Application.ViewModels
             ErrorMessage = item.ErrorMessage;
             OutputPath = item.OutputPath;
             OutputFileSizeBytes = item.OutputFileSizeBytes;
+            IsStarred = item.IsStarred;
+            Priority = item.Priority;
         }
     }
 }

@@ -27,13 +27,17 @@ namespace Converter
         private Button btnAddFiles = null!;
         private Button btnRemoveSelected = null!;
         private Button btnClearAll = null!;
+        private Button btnStart = null!;
+        private Button btnStop = null!;
+        private Button btnSavePreset = null!;
+        private Button btnLoadPreset = null!;
         private FlowLayoutPanel filesPanel = null!;
         private DragDropPanel? _dragDropPanel;
         private readonly List<QueueItem> _conversionHistory = new();
         private Button? _btnShare;
         private Button? _btnOpenEditor;
-        private NotificationSettings _notificationSettings = new();
         private Button? _btnNotificationSettings;
+        private NotificationSettings _notificationSettings = new();
 
         private TabControl tabSettings = null!;
         private TabPage tabVideo = null!;
@@ -69,10 +73,6 @@ namespace Converter
         private ProgressBar progressBarCurrent = null!;
         private Label lblStatusTotal = null!;
         private Label lblStatusCurrent = null!;
-        private Button btnStart = null!;
-        private Button btnStop = null!;
-        private Button btnSavePreset = null!;
-        private Button btnLoadPreset = null!;
 
         private GroupBox groupLog = null!;
         private TextBox txtLog = null!;
@@ -342,8 +342,10 @@ namespace Converter
 
             // IMainView: прокидываем в событие AddFilesRequested, реализованное в Form1.cs
             btnAddFiles.Click += btnAddFiles_Click;
-            btnRemoveSelected.Click += btnRemoveSelected_Click;
-            btnClearAll.Click += btnClearAll_Click;
+            
+            // File management buttons - wire to IMainView events
+            btnRemoveSelected.Click += (s, e) => RemoveSelectedFilesRequested?.Invoke(this, EventArgs.Empty);
+            btnClearAll.Click += (s, e) => ClearAllFilesRequested?.Invoke(this, EventArgs.Empty);
 
             panelLeftTop.Controls.AddRange(new Control[]
             {
@@ -399,6 +401,7 @@ namespace Converter
         private void OnDragDropPanelFilesAdded(object? sender, string[] files)
         {
             AddFilesToList(files, syncDragDropPanel: false);
+            FilesDropped?.Invoke(this, files);
         }
 
         private void OnDragDropPanelFileRemoved(object? sender, string filePath)
@@ -500,10 +503,35 @@ namespace Converter
                 AllowUserToAddRows = false,
                 AllowUserToDeleteRows = false,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                MultiSelect = false,
+                MultiSelect = true, // Allow selecting multiple rows
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
                 BackgroundColor = Color.White,
-                BorderStyle = BorderStyle.None
+                BorderStyle = BorderStyle.None,
+                VirtualMode = false,
+                AllowUserToOrderColumns = false,
+                RowHeadersVisible = false,
+                GridColor = Color.FromArgb(230, 230, 235),
+                CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal
+            };
+
+            // Handle selection changes to update IsSelected property
+            _queueGrid.SelectionChanged += (sender, e) =>
+            {
+                if (_queueBindingSource?.DataSource is System.ComponentModel.BindingList<Converter.Application.ViewModels.QueueItemViewModel> bindingList)
+                {
+                    // Update IsSelected for all items based on grid selection
+                    foreach (var item in bindingList)
+                    {
+                        var isSelected = _queueGrid.SelectedRows
+                            .Cast<DataGridViewRow>()
+                            .Any(row => row.DataBoundItem == item);
+                        
+                        if (item.IsSelected != isSelected)
+                        {
+                            item.IsSelected = isSelected;
+                        }
+                    }
+                }
             };
 
             _queueGrid.DataSource = _queueBindingSource;
@@ -522,18 +550,35 @@ namespace Converter
                 HeaderText = "Статус",
                 FillWeight = 20
             });
-            _queueGrid.Columns.Add(new DataGridViewTextBoxColumn
+            
+            // Progress column with custom formatting
+            var progressColumn = new DataGridViewTextBoxColumn
             {
                 DataPropertyName = nameof(Converter.Application.ViewModels.QueueItemViewModel.Progress),
                 HeaderText = "%",
                 FillWeight = 10
-            });
+            };
+            _queueGrid.Columns.Add(progressColumn);
+            
             _queueGrid.Columns.Add(new DataGridViewTextBoxColumn
             {
                 DataPropertyName = nameof(Converter.Application.ViewModels.QueueItemViewModel.ErrorMessage),
                 HeaderText = "Ошибка",
                 FillWeight = 30
             });
+
+            // Force refresh when data changes
+            if (bindingList is System.ComponentModel.BindingList<Converter.Application.ViewModels.QueueItemViewModel> bl)
+            {
+                bl.ListChanged += (s, e) =>
+                {
+                    if (e.ListChangedType == System.ComponentModel.ListChangedType.ItemChanged)
+                    {
+                        // Refresh the grid when individual items change
+                        _queueGrid?.Refresh();
+                    }
+                };
+            }
 
             // Layout: simple panel with padding, grid fills all available space inside tab
             host.Controls.Add(_queueGrid);
@@ -1031,6 +1076,8 @@ namespace Converter
             btnStop.ForeColor = Color.White;
             btnStop.Enabled = false;
             btnStop.FlatAppearance.BorderSize = 0;
+            btnStop.FlatAppearance.MouseOverBackColor = Color.FromArgb(200, 60, 60);
+            btnStop.FlatAppearance.MouseDownBackColor = Color.FromArgb(160, 40, 40);
             // IMainView: отмена/остановка
             btnStop.Click += (s, e) => CancelConversionRequested?.Invoke(this, EventArgs.Empty);
 
@@ -1343,6 +1390,7 @@ namespace Converter
             if (e.Data?.GetData(DataFormats.FileDrop) is string[] files)
             {
                 AddFilesToList(files);
+                FilesDropped?.Invoke(this, files);
                 DebounceEstimate();
             }
         }
@@ -1358,6 +1406,7 @@ namespace Converter
             if (e.Data?.GetData(DataFormats.FileDrop) is string[] files)
             {
                 AddFilesToList(files);
+                FilesDropped?.Invoke(this, files);
                 DebounceEstimate();
             }
         }
@@ -1370,7 +1419,10 @@ namespace Converter
                 Multiselect = true
             };
             if (ofd.ShowDialog(this) == DialogResult.OK)
+            {
+                AddFilesToList(ofd.FileNames);
                 FilesDropped?.Invoke(this, ofd.FileNames);
+            }
         }
 
         private async void AddFilesToList(string[] paths, bool syncDragDropPanel = true)
@@ -1676,15 +1728,7 @@ namespace Converter
             }
         }
 
-        private void btnRemoveSelected_Click(object? sender, EventArgs e)
-        {
-            RemoveSelectedFilesRequested?.Invoke(this, EventArgs.Empty);
-        }
-
-        private void btnClearAll_Click(object? sender, EventArgs e)
-        {
-            ClearAllFilesRequested?.Invoke(this, EventArgs.Empty);
-        }
+        
 
         private void cbFormat_SelectedIndexChanged(object? sender, EventArgs e)
         {

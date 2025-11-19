@@ -8,12 +8,10 @@
 /// </summary>
 using System;
 using System.IO;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Converter.Application.Abstractions;
 using Converter.Domain.Models;
-using Converter.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Converter.Application.Services
@@ -23,20 +21,23 @@ namespace Converter.Application.Services
         private readonly IProfileProvider _profileProvider;
         private readonly IOutputPathBuilder _pathBuilder;
         private readonly ILogger<ConversionUseCase> _logger;
+        private readonly IConversionOrchestrator _orchestrator;
 
         public ConversionUseCase(
             IProfileProvider profileProvider,
             IOutputPathBuilder pathBuilder,
+            IConversionOrchestrator orchestrator,
             ILogger<ConversionUseCase> logger)
         {
             _profileProvider = profileProvider ?? throw new ArgumentNullException(nameof(profileProvider));
             _pathBuilder = pathBuilder ?? throw new ArgumentNullException(nameof(pathBuilder));
+            _orchestrator = orchestrator ?? throw new ArgumentNullException(nameof(orchestrator));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public async Task<ConversionResult> ExecuteAsync(
+        public async Task<Converter.Models.ConversionResult> ExecuteAsync(
             QueueItem item, 
-            IProgress<int> progress = null, 
+            IProgress<int>? progress = null, 
             CancellationToken cancellationToken = default)
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
@@ -59,26 +60,58 @@ namespace Converter.Application.Services
                     Directory.CreateDirectory(outputDir);
                 }
 
-                // Simulate conversion progress
-                for (int i = 0; i <= 100; i += 5)
+                // Map profile to orchestrator profile
+                var orchestratorProfile = new ConversionProfile(
+                    profile.Name,
+                    profile.VideoCodec ?? string.Empty,
+                    profile.AudioCodec ?? string.Empty,
+                    profile.AudioBitrate.HasValue ? $"{profile.AudioBitrate.Value}k" : null,
+                    profile.CRF);
+
+                var request = new ConversionRequest(
+                    item.FilePath, 
+                    outputPath, 
+                    orchestratorProfile,
+                    TargetWidth: profile.Width,
+                    TargetHeight: profile.Height);
+                var safeProgress = progress ?? new Progress<int>(_ => { });
+                var outcome = await _orchestrator.ConvertAsync(request, safeProgress, cancellationToken).ConfigureAwait(false);
+
+                if (outcome.Success)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    progress?.Report(i);
-                    await Task.Delay(100, cancellationToken);
+                    var size = outcome.OutputSize;
+                    if (!size.HasValue)
+                    {
+                        try
+                        {
+                            if (File.Exists(outputPath))
+                            {
+                                var fileInfo = new FileInfo(outputPath);
+                                size = fileInfo.Length;
+                            }
+                        }
+                        catch
+                        {
+                            // ignore size detection errors
+                        }
+                    }
+
+                    _logger.LogInformation("Successfully converted item {ItemId} to {OutputPath}",
+                        item.Id, outputPath);
+
+                    return new Converter.Models.ConversionResult
+                    {
+                        Success = true,
+                        OutputFileSize = size ?? 0,
+                        OutputPath = outputPath
+                    };
                 }
 
-                // Generate a placeholder artifact so downstream services can work
-                await EnsureOutputFileExistsAsync(outputPath, cancellationToken);
-
-                var fileInfo = new FileInfo(outputPath);
-                _logger.LogInformation("Successfully converted item {ItemId} to {OutputPath}", 
-                    item.Id, outputPath);
-                
-                return new ConversionResult
+                _logger.LogError("Conversion failed for item {ItemId}: {Error}", item.Id, outcome.ErrorMessage);
+                return new Converter.Models.ConversionResult
                 {
-                    Success = true,
-                    OutputFileSize = fileInfo.Length,
-                    OutputPath = outputPath
+                    Success = false,
+                    ErrorMessage = outcome.ErrorMessage
                 };
             }
             catch (OperationCanceledException)
@@ -89,7 +122,7 @@ namespace Converter.Application.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error converting item {ItemId}", item.Id);
-                return new ConversionResult
+                return new Converter.Models.ConversionResult
                 {
                     Success = false,
                     ErrorMessage = ex.Message
@@ -101,24 +134,6 @@ namespace Converter.Application.Services
         {
             // Currently we always use the default profile; per-item profiles are not wired yet
             return await _profileProvider.GetDefaultProfileAsync();
-        }
-
-        private static async Task EnsureOutputFileExistsAsync(string outputPath, CancellationToken cancellationToken)
-        {
-            if (File.Exists(outputPath))
-            {
-                return;
-            }
-
-            var directory = Path.GetDirectoryName(outputPath);
-            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            await using var stream = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None);
-            var placeholder = Encoding.UTF8.GetBytes("Simulated output");
-            await stream.WriteAsync(placeholder, 0, placeholder.Length, cancellationToken);
         }
     }
 }

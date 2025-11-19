@@ -28,6 +28,9 @@
     <Compile Update="UI\Controls\QueueItemControl.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Update="UI\Controls\QueueItemsListPanel.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Update="UI\Controls\ThemeSelectorControl.cs">
       <SubType>UserControl</SubType>
     </Compile>

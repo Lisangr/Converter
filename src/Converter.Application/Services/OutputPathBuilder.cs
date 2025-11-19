@@ -58,8 +58,9 @@ namespace Converter.Application.Services
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
             if (profile == null) throw new ArgumentNullException(nameof(profile));
-
-            var outputDir = Path.GetDirectoryName(item.FilePath) ?? string.Empty;
+            var outputDir = !string.IsNullOrWhiteSpace(item.OutputDirectory)
+                ? item.OutputDirectory
+                : Path.GetDirectoryName(item.FilePath) ?? string.Empty;
             var extension = Path.GetExtension(item.FilePath);
 
             return BuildOutputPath(item, outputDir, extension);
