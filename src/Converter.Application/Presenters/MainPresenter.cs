@@ -71,6 +71,14 @@ namespace Converter.Application.Presenters
             _view.RemoveSelectedFilesRequested += MakeAsyncEventHandler(OnRemoveSelectedFilesRequestedAsync, "removing selected files");
             _view.ClearAllFilesRequested += MakeAsyncEventHandler(OnClearAllFilesRequestedAsync, "clearing all files");
             _view.SettingsChanged += OnSettingsChanged;
+
+            // Subscribe to async events (новый нормализованный подход)
+            _view.AddFilesRequestedAsync += OnAddFilesRequestedAsync;
+            _view.StartConversionRequestedAsync += OnStartConversionRequestedAsync;
+            _view.CancelConversionRequestedAsync += OnCancelConversionRequestedAsync;
+            _view.FilesDroppedAsync += OnFilesDroppedAsync;
+            _view.RemoveSelectedFilesRequestedAsync += OnRemoveSelectedFilesRequestedAsync;
+            _view.ClearAllFilesRequestedAsync += OnClearAllFilesRequestedAsync;
         }
 
         public async Task InitializeAsync()
@@ -88,11 +96,14 @@ namespace Converter.Application.Presenters
                     LoadPresetsAsync()
                 );
                 
-                // Initialize UI bindings
+                // Initialize UI bindings - используем тот же список, что и в ViewModel
                 _view.QueueItemsBinding = _viewModel.QueueItems;
                 
-                // Load initial queue
+                // Load initial queue (это перезаполнит _viewModel.QueueItems)
                 await LoadQueueAsync();
+                
+                // Убеждаемся, что связь всё ещё установлена после LoadQueueAsync
+                _view.QueueItemsBinding = _viewModel.QueueItems;
                 
                 _view.StatusText = "Ready";
                 _logger.LogInformation("MainPresenter initialized successfully");
@@ -153,12 +164,15 @@ namespace Converter.Application.Presenters
                 var items = await _queueRepository.GetAllAsync();
                 var list = items.ToList();
 
-                // Заполняем ViewModel
+                // Очищаем текущую очередь в ViewModel
                 _viewModel.QueueItems.Clear();
+                
+                // Добавляем элементы в ViewModel
                 foreach (var item in list)
                 {
                     _viewModel.QueueItems.Add(QueueItemViewModel.FromModel(item));
                 }
+
                 _logger.LogInformation("Loaded {Count} items into the queue", items.Count);
             }
             catch (Exception ex)
@@ -213,6 +227,10 @@ namespace Converter.Application.Presenters
                             AddedAt = DateTime.UtcNow
                         };
                         
+                        // Добавляем сразу в ViewModel для мгновенного отображения
+                        _viewModel.QueueItems.Add(QueueItemViewModel.FromModel(item));
+                        
+                        // И в репозиторий для персистентности
                         await _queueRepository.AddAsync(item);
                         addedCount++;
                         _logger.LogDebug("Added file to queue: {FilePath}", filePath);
@@ -228,6 +246,8 @@ namespace Converter.Application.Presenters
                 {
                     _view.StatusText = $"Added {addedCount} file(s) to queue";
                     _view.ShowInfo($"Added {addedCount} file(s) to the queue");
+                    
+                    // Перезагружаем очередь для синхронизации с UI
                     await LoadQueueAsync();
                 }
                 else
@@ -281,19 +301,47 @@ namespace Converter.Application.Presenters
         {
             try
             {
-                _logger.LogInformation("Canceling conversion");
+                _logger.LogInformation("Canceling all conversions");
                 _view.IsBusy = true;
 
-                _cancellationTokenSource.Cancel();
+                // 1. Cancel the current conversion token
+                if (_cancellationTokenSource != null && !_cancellationTokenSource.IsCancellationRequested)
+                {
+                    _cancellationTokenSource.Cancel();
+                }
+
+                // 2. Stop the queue processor to prevent new items from starting
                 await _queueProcessor.StopProcessingAsync();
+
+                // 3. Mark all pending items as cancelled
+                var pendingItems = await _queueRepository.GetPendingItemsAsync();
+                foreach (var item in pendingItems)
+                {
+                    if (item.Status == ConversionStatus.Processing)
+                    {
+                        item.Status = ConversionStatus.Failed;
+                        item.ErrorMessage = "Конвертация отменена пользователем";
+                        await _queueRepository.UpdateAsync(item);
+                    }
+                }
+
+                // 4. Reset for next conversion
                 ResetProcessingCancellationToken();
 
-                _view.ShowInfo("Conversion cancelled");
+                // 5. Reset UI state
+                InvokeOnUiThread(() =>
+                {
+                    _view.UpdateCurrentProgress(0);
+                    _view.UpdateTotalProgress(0);
+                    _view.StatusText = "Все конвертации отменены";
+                });
+
+                _view.ShowInfo("Все конвертации отменены");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error canceling conversion");
-                _view.ShowError($"Failed to cancel conversion: {ex.Message}");
+                _logger.LogError(ex, "Error canceling conversions");
+                _view.ShowError($"Ошибка при отмене конвертации: {ex.Message}");
             }
             finally
             {
@@ -489,37 +537,32 @@ namespace Converter.Application.Presenters
 
             if (selectedItems.Count == 0)
             {
-                _view.ShowInfo("No files selected for removal");
+                _view.ShowInfo("Нет выбранных файлов для удаления");
                 return;
             }
 
             try
             {
                 _view.IsBusy = true;
-                _view.StatusText = $"Removing {selectedItems.Count} file(s)...";
+                _view.StatusText = $"Удаление {selectedItems.Count} файла(ов)...";
                 _logger.LogInformation("Removing {Count} selected files from queue", selectedItems.Count);
 
-                foreach (var item in selectedItems)
-                {
-                    try
-                    {
-                        await _queueRepository.RemoveAsync(item.Id);
-                        _logger.LogDebug("Removed file from queue: {FilePath}", item.FilePath);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error removing file from queue: {FilePath}", item.FilePath);
-                        _view.ShowError($"Error removing '{item.FileName}': {ex.Message}");
-                    }
-                }
+                // Используем массовое удаление для лучшей производительности
+                var itemIds = selectedItems.Select(item => item.Id).ToList();
+                await _queueRepository.RemoveRangeAsync(itemIds);
 
-                _view.StatusText = $"Removed {selectedItems.Count} file(s) from queue";
-                _view.ShowInfo($"Removed {selectedItems.Count} file(s) from the queue");
+                _logger.LogDebug("Removed {Count} files from queue using batch operation", selectedItems.Count);
+
+                // Перезагружаем очередь для синхронизации
+                await LoadQueueAsync();
+
+                _view.StatusText = $"Удалено файлов: {selectedItems.Count}";
+                _view.ShowInfo($"Удалено файлов: {selectedItems.Count} из очереди");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in OnRemoveSelectedFilesRequested");
-                _view.ShowError($"Failed to remove files: {ex.Message}");
+                _view.ShowError($"Ошибка при удалении файлов: {ex.Message}");
             }
             finally
             {
@@ -531,38 +574,34 @@ namespace Converter.Application.Presenters
         {
             if (_viewModel.QueueItems.Count == 0)
             {
-                _view.ShowInfo("Queue is already empty");
+                _view.ShowInfo("Очередь уже пуста");
                 return;
             }
 
             try
             {
                 _view.IsBusy = true;
-                _view.StatusText = "Clearing all files from queue...";
+                _view.StatusText = "Очистка очереди...";
                 _logger.LogInformation("Clearing all files from queue");
 
                 var allItems = _viewModel.QueueItems.ToList();
-                foreach (var item in allItems)
-                {
-                    try
-                    {
-                        await _queueRepository.RemoveAsync(item.Id);
-                        _logger.LogDebug("Removed file from queue: {FilePath}", item.FilePath);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error removing file from queue: {FilePath}", item.FilePath);
-                        _view.ShowError($"Error removing '{item.FileName}': {ex.Message}");
-                    }
-                }
+                
+                // Используем массовое удаление для лучшей производительности
+                var allItemIds = allItems.Select(item => item.Id).ToList();
+                await _queueRepository.RemoveRangeAsync(allItemIds);
 
-                _view.StatusText = "Queue cleared";
-                _view.ShowInfo("All files have been removed from the queue");
+                _logger.LogDebug("Cleared {Count} files from queue using batch operation", allItems.Count);
+
+                // Перезагружаем очередь для синхронизации
+                await LoadQueueAsync();
+
+                _view.StatusText = "Очередь очищена";
+                _view.ShowInfo("Все файлы удалены из очереди");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in OnClearAllFilesRequested");
-                _view.ShowError($"Failed to clear queue: {ex.Message}");
+                _view.ShowError($"Ошибка при очистке очереди: {ex.Message}");
             }
             finally
             {
@@ -570,6 +609,38 @@ namespace Converter.Application.Presenters
             }
         }
 
+        // Async event handlers (новый нормализованный подход)
+        private async Task OnAddFilesRequestedAsync()
+        {
+            await OnAddFilesRequestedAsync(this, EventArgs.Empty);
+        }
+
+        private async Task OnStartConversionRequestedAsync()
+        {
+            await OnStartConversionRequestedAsync(this, EventArgs.Empty);
+        }
+
+        private async Task OnCancelConversionRequestedAsync()
+        {
+            await OnCancelConversionRequestedAsync(this, EventArgs.Empty);
+        }
+
+        private async Task OnFilesDroppedAsync(string[] files)
+        {
+            await OnFilesDroppedAsync(this, files);
+        }
+
+        private async Task OnRemoveSelectedFilesRequestedAsync()
+        {
+            await OnRemoveSelectedFilesRequestedAsync(this, EventArgs.Empty);
+        }
+
+        private async Task OnClearAllFilesRequestedAsync()
+        {
+            await OnClearAllFilesRequestedAsync(this, EventArgs.Empty);
+        }
+
+        // Legacy async event handlers (для обратной совместимости)
         private EventHandler MakeAsyncEventHandler(Func<object?, EventArgs, Task> handler, string operation)
         {
             return (sender, args) =>
@@ -611,6 +682,7 @@ namespace Converter.Application.Presenters
                     _queueRepository.ItemRemoved -= OnItemRemoved;
                 }
 
+                // НЕ уничтожаем _queueProcessor - это Singleton сервис, управляемый Host
                 if (_queueProcessor != null)
                 {
                     _queueProcessor.ItemStarted -= OnItemStarted;
@@ -618,7 +690,18 @@ namespace Converter.Application.Presenters
                     _queueProcessor.ItemFailed -= OnItemFailed;
                     _queueProcessor.ProgressChanged -= OnProgressChanged;
                     _queueProcessor.QueueCompleted -= OnQueueCompleted;
-                    (_queueProcessor as IDisposable)?.Dispose();
+                    // НЕ вызываем (_queueProcessor as IDisposable)?.Dispose();
+                }
+
+                // Отписка от асинхронных событий
+                if (_view != null)
+                {
+                    _view.AddFilesRequestedAsync -= OnAddFilesRequestedAsync;
+                    _view.StartConversionRequestedAsync -= OnStartConversionRequestedAsync;
+                    _view.CancelConversionRequestedAsync -= OnCancelConversionRequestedAsync;
+                    _view.FilesDroppedAsync -= OnFilesDroppedAsync;
+                    _view.RemoveSelectedFilesRequestedAsync -= OnRemoveSelectedFilesRequestedAsync;
+                    _view.ClearAllFilesRequestedAsync -= OnClearAllFilesRequestedAsync;
                 }
 
                 _cancellationTokenSource?.Dispose();
@@ -638,6 +721,17 @@ namespace Converter.Application.Presenters
         {
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = new CancellationTokenSource();
+        }
+
+        // Публичные методы для делегирования из Form1
+        public async Task OnRemoveSelectedFilesRequested()
+        {
+            await OnRemoveSelectedFilesRequestedAsync(this, EventArgs.Empty);
+        }
+
+        public async Task OnClearAllFilesRequested()
+        {
+            await OnClearAllFilesRequestedAsync(this, EventArgs.Empty);
         }
     }
 }

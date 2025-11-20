@@ -17,11 +17,11 @@ namespace Converter.UI.Dialogs
         private readonly Button _btnSave;
         private readonly Button _btnCancel;
         private readonly List<Theme> _darkThemes;
-        private readonly IThemeManager _themeManager;
+        private readonly IThemeService _themeService;
 
-        public ThemeSettingsDialog(IThemeManager themeManager)
+        public ThemeSettingsDialog(IThemeService themeService)
         {
-            _themeManager = themeManager ?? throw new ArgumentNullException(nameof(themeManager));
+            _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
             Text = "Настройки темы";
             Size = new Size(460, 360);
             StartPosition = FormStartPosition.CenterParent;
@@ -164,30 +164,30 @@ namespace Converter.UI.Dialogs
 
         private void LoadCurrentSettings()
         {
-            var manager = _themeManager;
-            _timeDarkStart.Value = DateTime.Today.Add(manager.DarkModeStart);
-            _timeDarkEnd.Value = DateTime.Today.Add(manager.DarkModeEnd);
-            _numAnimationSpeed.Value = manager.AnimationDuration;
+            var service = _themeService;
+            _timeDarkStart.Value = DateTime.Today.Add(service.DarkModeStart);
+            _timeDarkEnd.Value = DateTime.Today.Add(service.DarkModeEnd);
+            _numAnimationSpeed.Value = service.AnimationDuration;
 
             if (_darkThemes.Count == 0)
             {
                 return;
             }
 
-            var index = _darkThemes.FindIndex(t => string.Equals(t.Name, manager.PreferredDarkTheme, StringComparison.OrdinalIgnoreCase));
+            var index = _darkThemes.FindIndex(t => string.Equals(t.Name, service.PreferredDarkTheme, StringComparison.OrdinalIgnoreCase));
             _comboDarkTheme.SelectedIndex = Math.Max(0, index);
         }
 
         private void OnSave(object? sender, EventArgs e)
         {
-            var manager = _themeManager;
-            manager.DarkModeStart = _timeDarkStart.Value.TimeOfDay;
-            manager.DarkModeEnd = _timeDarkEnd.Value.TimeOfDay;
-            manager.AnimationDuration = (int)_numAnimationSpeed.Value;
+            var service = _themeService;
+            service.DarkModeStart = _timeDarkStart.Value.TimeOfDay;
+            service.DarkModeEnd = _timeDarkEnd.Value.TimeOfDay;
+            service.AnimationDuration = (int)_numAnimationSpeed.Value;
 
             if (_comboDarkTheme.SelectedIndex >= 0 && _comboDarkTheme.SelectedIndex < _darkThemes.Count)
             {
-                manager.PreferredDarkTheme = _darkThemes[_comboDarkTheme.SelectedIndex].Name;
+                service.PreferredDarkTheme = _darkThemes[_comboDarkTheme.SelectedIndex].Name;
             }
 
             Close();

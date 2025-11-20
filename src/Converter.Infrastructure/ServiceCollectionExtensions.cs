@@ -13,18 +13,24 @@ namespace Converter.Infrastructure
     {
         public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
         {
-            // FFmpeg services
-            services.AddSingleton<IFFmpegExecutor, FFmpegExecutor>();
-            services.AddSingleton<FfmpegBootstrapService>();
-            services.AddSingleton<IThumbnailProvider, ThumbnailProvider>();
-            
-            // Other infrastructure services
-            services.AddSingleton<INotificationGateway, NotificationGateway>();
+            // Configuration
             services.Configure<SettingsOptions>(configuration.GetSection("Settings"));
+            
+            // Persistence services
             services.AddSingleton<ISettingsStore, JsonSettingsStore>();
             services.AddSingleton<IQueueStore, JsonQueueStore>();
+            
+            // FFmpeg services - these are infrastructure services
+            services.AddSingleton<IFFmpegExecutor, FFmpegExecutor>();
+            services.AddSingleton<FfmpegBootstrapService>(); // This is IHostedService
+            services.AddSingleton<IThumbnailProvider, ThumbnailProvider>();
+            
+            // Notification infrastructure
+            services.AddSingleton<INotificationGateway, NotificationGateway>();
             services.AddSingleton<INotificationSettingsStore, NotificationSettingsStore>();
             services.AddSingleton<INotificationService, NotificationService>();
+            
+            // Share service
             services.AddSingleton<IShareService, ShareService>();
             
             return services;

@@ -15,6 +15,7 @@ namespace Converter.Application.Abstractions
         Task AddRangeAsync(IEnumerable<QueueItem> items);
         Task UpdateAsync(QueueItem item);
         Task RemoveAsync(Guid id);
+        Task RemoveRangeAsync(IEnumerable<Guid> ids);
         Task<QueueItem> GetByIdAsync(Guid id);
         Task<IReadOnlyList<QueueItem>> GetAllAsync();
         Task<IReadOnlyList<QueueItem>> GetPendingItemsAsync();

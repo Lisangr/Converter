@@ -19,6 +19,7 @@ namespace Converter.Application.Services
     public class QueueProcessor : BackgroundService, IQueueProcessor
     {
         private readonly IQueueRepository _queueRepository;
+        private readonly IQueueStore _queueStore;
         private readonly IConversionUseCase _conversionUseCase;
         private readonly ILogger<QueueProcessor> _logger;
         private readonly SemaphoreSlim _processingLock = new(1, 1);
@@ -37,10 +38,12 @@ namespace Converter.Application.Services
 
         public QueueProcessor(
             IQueueRepository queueRepository,
+            IQueueStore queueStore,
             IConversionUseCase conversionUseCase,
             ILogger<QueueProcessor> logger)
         {
             _queueRepository = queueRepository ?? throw new ArgumentNullException(nameof(queueRepository));
+            _queueStore = queueStore ?? throw new ArgumentNullException(nameof(queueStore));
             _conversionUseCase = conversionUseCase ?? throw new ArgumentNullException(nameof(conversionUseCase));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
@@ -141,6 +144,14 @@ namespace Converter.Application.Services
 
             try
             {
+                // Атомарная операция: пытаемся зарезервировать элемент для обработки
+                if (!await _queueStore.TryReserveAsync(item.Id, cancellationToken).ConfigureAwait(false))
+                {
+                    _logger.LogDebug("Item {ItemId} was already reserved or processed, skipping", item.Id);
+                    return;
+                }
+
+                // Обновляем кэш через IQueueRepository для генерации событий
                 item.Status = ConversionStatus.Processing;
                 item.StartedAt = DateTime.UtcNow;
                 await _queueRepository.UpdateAsync(item);
@@ -150,11 +161,11 @@ namespace Converter.Application.Services
 
                 var progress = new Progress<int>(p => 
                 {
-                    // Update the item progress in repository
+                    // Обновляем прогресс в кэше для UI
                     item.Progress = p;
                     _ = Task.Run(async () => await _queueRepository.UpdateAsync(item));
                     
-                    // Notify UI
+                    // Уведомляем UI
                     ProgressChanged?.Invoke(this, new QueueProgressEventArgs(item, p));
                 });
 
@@ -162,37 +173,53 @@ namespace Converter.Application.Services
 
                 if (result.Success)
                 {
+                    // Атомарно завершаем элемент в IQueueStore
+                    await _queueStore.CompleteAsync(item.Id, ConversionStatus.Completed, null, result.OutputFileSize, DateTime.UtcNow, cancellationToken)
+                        .ConfigureAwait(false);
+
+                    // Обновляем кэш и генерируем событие
                     item.Status = ConversionStatus.Completed;
                     item.CompletedAt = DateTime.UtcNow;
                     item.OutputFileSizeBytes = result.OutputFileSize;
+                    await _queueRepository.UpdateAsync(item);
 
                     _logger.LogInformation("Successfully processed item {ItemId}", item.Id);
                     ItemCompleted?.Invoke(this, item);
                 }
                 else
                 {
+                    // Атомарно завершаем элемент с ошибкой
+                    await _queueStore.CompleteAsync(item.Id, ConversionStatus.Failed, result.ErrorMessage, null, DateTime.UtcNow, cancellationToken)
+                        .ConfigureAwait(false);
+
+                    // Обновляем кэш и генерируем событие
                     item.Status = ConversionStatus.Failed;
                     item.ErrorMessage = result.ErrorMessage;
+                    await _queueRepository.UpdateAsync(item);
+
                     _logger.LogError("Failed to process item {ItemId}: {Error}", item.Id, result.ErrorMessage);
                     ItemFailed?.Invoke(this, item);
                 }
             }
             catch (OperationCanceledException)
             {
-                item.Status = ConversionStatus.Pending;
                 _logger.LogInformation("Processing of item {ItemId} was cancelled", item.Id);
                 throw;
             }
             catch (Exception ex)
             {
+                // Завершаем элемент с ошибкой в IQueueStore
+                await _queueStore.CompleteAsync(item.Id, ConversionStatus.Failed, ex.Message, null, DateTime.UtcNow, cancellationToken)
+                    .ConfigureAwait(false);
+
+                // Обновляем кэш
                 item.Status = ConversionStatus.Failed;
                 item.ErrorMessage = ex.Message;
+                await _queueRepository.UpdateAsync(item);
+
                 _logger.LogError(ex, "Error processing item {ItemId}", item.Id);
                 ItemFailed?.Invoke(this, item);
-            }
-            finally
-            {
-                await _queueRepository.UpdateAsync(item);
+                throw;
             }
         }
 

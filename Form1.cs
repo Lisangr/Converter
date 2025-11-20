@@ -1,15 +1,19 @@
 using System;
-using System.Drawing;
-using System.Linq;
-using System.Windows.Forms;
-using Converter.Models;
-using Converter.Services;
-using Converter.UI.Controls;
-using Converter.Application.Abstractions;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Drawing;
+using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Forms;
+using Converter.Application.Abstractions;
+using Converter.Models;
+using Converter.Services;
+using Converter.UI;
+using Converter.UI.Controls;
+using Converter.Application.ViewModels;
 
 namespace Converter
 {
@@ -19,23 +23,12 @@ namespace Converter
         private Button? _themeMenuButton;
         private bool _themeInitialized;
         private readonly IThemeService _themeService;
-        private readonly IThemeManager _themeManager;
         private readonly INotificationService _notificationService;
         private readonly IThumbnailProvider _thumbnailProvider;
         private readonly IShareService _shareService;
         private readonly CancellationTokenSource _lifecycleCts = new();
         
-        // UI controls for SetBusy method
-        private Button? btnStart;
-        private Button? btnAddFiles;
-        private Button? btnStop;
-        private Button? btnRemoveSelected;
-        private Button? btnClearAll;
-        private Button? btnSavePreset;
-        private Button? btnLoadPreset;
-        private Button? _btnShare;
-        private Button? _btnOpenEditor;
-        private Button? _btnNotificationSettings;
+        
 
         // IMainView events
         public event EventHandler? AddFilesRequested;
@@ -46,6 +39,22 @@ namespace Converter
         public event EventHandler<string[]>? FilesDropped;
         public event EventHandler? RemoveSelectedFilesRequested;
         public event EventHandler? ClearAllFilesRequested;
+
+        // Async events for operations that require asynchronous handling
+        public event Func<Task>? AddFilesRequestedAsync;
+        public event Func<Task>? StartConversionRequestedAsync;
+        public event Func<Task>? CancelConversionRequestedAsync;
+        public event Func<string[], Task>? FilesDroppedAsync;
+        public event Func<Task>? RemoveSelectedFilesRequestedAsync;
+        public event Func<Task>? ClearAllFilesRequestedAsync;
+
+        // Ссылка на MainPresenter для делегирования операций
+        private Converter.Application.Presenters.MainPresenter? _mainPresenter;
+
+        public void SetMainPresenter(object presenter)
+        {
+            _mainPresenter = presenter as Converter.Application.Presenters.MainPresenter;
+        }
 
         private string _ffmpegPath = string.Empty;
         public string FfmpegPath
@@ -106,13 +115,11 @@ namespace Converter
 
         public Form1(
             IThemeService themeService,
-            IThemeManager themeManager,
             INotificationService notificationService,
             IThumbnailProvider thumbnailProvider,
             IShareService shareService)
         {
             _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
-            _themeManager = themeManager ?? throw new ArgumentNullException(nameof(themeManager));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _thumbnailProvider = thumbnailProvider ?? throw new ArgumentNullException(nameof(thumbnailProvider));
             _shareService = shareService ?? throw new ArgumentNullException(nameof(shareService));
@@ -120,6 +127,10 @@ namespace Converter
             InitializeComponent();
 
             _notificationSettings = _notificationService.GetSettings();
+
+            // Подписываемся на события удаления файлов
+            RemoveSelectedFilesRequested += OnRemoveSelectedFilesRequested;
+            ClearAllFilesRequested += OnClearAllFilesRequested;
         }
 
         public void UpdatePresetControls(Converter.Models.ConversionProfile preset)
@@ -137,24 +148,40 @@ namespace Converter
             {
                 Cursor = isBusy ? Cursors.WaitCursor : Cursors.Default;
                 
-                // Update main buttons
-                if (btnStart != null) btnStart.Enabled = !isBusy;
-                if (btnAddFiles != null) btnAddFiles.Enabled = !isBusy;
-                if (btnStop != null) btnStop.Enabled = isBusy; // Enable stop button when busy
-                
-                // Update file management buttons
-                if (btnRemoveSelected != null) btnRemoveSelected.Enabled = !isBusy;
-                if (btnClearAll != null) btnClearAll.Enabled = !isBusy;
-                
-                // Update other control buttons
-                if (_btnShare != null) _btnShare.Enabled = !isBusy;
-                if (_btnOpenEditor != null) _btnOpenEditor.Enabled = !isBusy;
-                if (_btnNotificationSettings != null) _btnNotificationSettings.Enabled = !isBusy;
-                if (btnSavePreset != null) btnSavePreset.Enabled = !isBusy;
-                if (btnLoadPreset != null) btnLoadPreset.Enabled = !isBusy;
-                
-                // Update button appearance based on busy state
-                UpdateButtonStates(isBusy);
+                // Update UI controls if they exist
+                UpdateControlsState(isBusy);
+            }
+            catch { }
+        }
+
+        private void UpdateControlsState(bool isBusy)
+        {
+            try
+            {
+                // Try to find controls by name in the form
+                TryUpdateButton("btnStart", !isBusy);
+                TryUpdateButton("btnStop", isBusy);
+                TryUpdateButton("btnAddFiles", !isBusy);
+                TryUpdateButton("btnRemoveSelected", !isBusy);
+                TryUpdateButton("btnClearAll", !isBusy);
+                TryUpdateButton("_btnShare", !isBusy);
+                TryUpdateButton("_btnOpenEditor", !isBusy);
+                TryUpdateButton("_btnNotificationSettings", !isBusy);
+                TryUpdateButton("btnSavePreset", !isBusy);
+                TryUpdateButton("btnLoadPreset", !isBusy);
+            }
+            catch { }
+        }
+
+        private void TryUpdateButton(string buttonName, bool enabled)
+        {
+            try
+            {
+                var button = this.Controls.Find(buttonName, true).FirstOrDefault() as Button;
+                if (button != null)
+                {
+                    button.Enabled = enabled;
+                }
             }
             catch { }
         }
@@ -303,7 +330,7 @@ namespace Converter
             _themeService.ApplyTheme(this);
             UpdateCustomControlsTheme(_themeService.CurrentTheme);
 
-            _themeSelector = new ThemeSelectorControl(_themeService, _themeManager)
+            _themeSelector = new ThemeSelectorControl(_themeService)
             {
                 Visible = false,
                 Anchor = AnchorStyles.Top | AnchorStyles.Right
@@ -332,24 +359,6 @@ namespace Converter
             PositionThemeControls();
 
             _themeInitialized = true;
-        }
-
-        private void UpdateButtonStates(bool isBusy)
-        {
-            // Visual feedback for button states
-            try
-            {
-                if (btnStart != null)
-                {
-                    btnStart.BackColor = isBusy ? Color.FromArgb(100, 100, 100) : Color.FromArgb(0, 120, 215);
-                }
-                
-                if (btnStop != null)
-                {
-                    btnStop.BackColor = isBusy ? Color.FromArgb(180, 50, 50) : Color.FromArgb(100, 100, 100);
-                }
-            }
-            catch { }
         }
 
         private void OnThemeChanged(object? sender, Theme theme)
@@ -475,5 +484,161 @@ namespace Converter
             _themeSelector.Location = new Point(selectorX, selectorY);
             _themeSelector.BringToFront();
         }
+
+        // Обработчики для кнопок удаления файлов - нормализованные через единый источник правды
+        private void OnRemoveSelectedFilesRequested(object? sender, EventArgs e)
+        {
+            try
+            {
+                // Делегируем удаление в MainPresenter (основная очередь)
+                if (_mainPresenter != null)
+                {
+                    _mainPresenter.OnRemoveSelectedFilesRequested();
+                    return;
+                }
+
+                // Fallback: используем нормализованный метод
+                RemoveSelectedFilesFromQueue();
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Ошибка при удалении выбранных файлов: {ex.Message}");
+            }
+        }
+
+        private void OnClearAllFilesRequested(object? sender, EventArgs e)
+        {
+            try
+            {
+                // Делегируем очистку в MainPresenter (основная очередь)
+                if (_mainPresenter != null)
+                {
+                    _mainPresenter.OnClearAllFilesRequested();
+                    return;
+                }
+
+                // Fallback: используем нормализованный метод
+                ClearQueue();
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Ошибка при очистке файлов: {ex.Message}");
+            }
+        }
+
+        #region Async Event Invocation Methods
+
+        public async Task RaiseAddFilesRequestedAsync()
+        {
+            AddFilesRequestedAsync?.Invoke();
+        }
+
+        public async Task RaiseStartConversionRequestedAsync()
+        {
+            StartConversionRequestedAsync?.Invoke();
+        }
+
+        public async Task RaiseCancelConversionRequestedAsync()
+        {
+            CancelConversionRequestedAsync?.Invoke();
+        }
+
+        public async Task RaiseFilesDroppedAsync(string[] files)
+        {
+            FilesDroppedAsync?.Invoke(files);
+        }
+
+        public async Task RaiseRemoveSelectedFilesRequestedAsync()
+        {
+            RemoveSelectedFilesRequestedAsync?.Invoke();
+        }
+
+        public async Task RaiseClearAllFilesRequestedAsync()
+        {
+            ClearAllFilesRequestedAsync?.Invoke();
+        }
+
+        #endregion
+
+        #region Unified Data Source Methods
+
+        /// <summary>
+        /// Нормализованный метод для добавления файлов - использует единый источник правды
+        /// </summary>
+        public void AddFilesToQueue(IEnumerable<string> filePaths)
+        {
+            if (filePaths == null) return;
+
+            var queueItems = filePaths
+                .Where(filePath => File.Exists(filePath))
+                .Select(filePath => new Converter.Application.ViewModels.QueueItemViewModel
+                {
+                    Id = Guid.NewGuid(),
+                    FileName = Path.GetFileName(filePath),
+                    FilePath = filePath,
+                    FileSizeBytes = new FileInfo(filePath).Length,
+                    Status = Converter.Domain.Models.ConversionStatus.Pending,
+                    Progress = 0
+                })
+                .ToList();
+
+            // Единый источник правды: QueueItemsBinding
+            if (_queueItemsBinding != null)
+            {
+                foreach (var item in queueItems)
+                {
+                    _queueItemsBinding.Add(item);
+                }
+                AppendLog($"Добавлено файлов в очередь: {queueItems.Count}");
+            }
+        }
+
+        /// <summary>
+        /// Нормализованный метод для удаления выбранных файлов
+        /// </summary>
+        public void RemoveSelectedFilesFromQueue()
+        {
+            if (_queueItemsBinding == null) return;
+
+            var selectedItems = _queueItemsBinding.Where(item => item.IsSelected).ToList();
+            foreach (var item in selectedItems)
+            {
+                _queueItemsBinding.Remove(item);
+            }
+            AppendLog($"Удалено файлов из очереди: {selectedItems.Count}");
+        }
+
+        /// <summary>
+        /// Нормализованный метод для очистки всей очереди
+        /// </summary>
+        public void ClearQueue()
+        {
+            if (_queueItemsBinding != null)
+            {
+                var count = _queueItemsBinding.Count;
+                _queueItemsBinding.Clear();
+                AppendLog($"Очищена очередь: {count} файлов");
+            }
+        }
+
+        /// <summary>
+        /// Нормализованный метод для обновления прогресса элемента
+        /// </summary>
+        public void UpdateQueueItemProgress(Guid itemId, int progress, string status = null)
+        {
+            if (_queueItemsBinding == null) return;
+
+            var item = _queueItemsBinding.FirstOrDefault(i => i.Id == itemId);
+            if (item != null)
+            {
+                item.Progress = progress;
+                if (!string.IsNullOrEmpty(status))
+                {
+                    // Можно добавить поле StatusText в QueueItemViewModel если нужно
+                }
+            }
+        }
+
+        #endregion
     }
 }

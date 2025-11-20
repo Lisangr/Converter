@@ -24,6 +24,12 @@ namespace Converter
     {
         private SplitContainer splitContainerMain = null!;
         private Panel panelLeftTop = null!;
+        private FlowLayoutPanel filesPanel = null!;
+        private DragDropPanel? _dragDropPanel;
+        private readonly List<QueueItem> _conversionHistory = new();
+        private NotificationSettings _notificationSettings = new();
+
+        // Button fields - initialized in UI building methods
         private Button btnAddFiles = null!;
         private Button btnRemoveSelected = null!;
         private Button btnClearAll = null!;
@@ -31,13 +37,9 @@ namespace Converter
         private Button btnStop = null!;
         private Button btnSavePreset = null!;
         private Button btnLoadPreset = null!;
-        private FlowLayoutPanel filesPanel = null!;
-        private DragDropPanel? _dragDropPanel;
-        private readonly List<QueueItem> _conversionHistory = new();
-        private Button? _btnShare;
-        private Button? _btnOpenEditor;
-        private Button? _btnNotificationSettings;
-        private NotificationSettings _notificationSettings = new();
+        private Button _btnShare = null!;
+        private Button _btnOpenEditor = null!;
+        private Button _btnNotificationSettings = null!;
 
         private TabControl tabSettings = null!;
         private TabPage tabVideo = null!;
@@ -519,16 +521,47 @@ namespace Converter
             {
                 if (_queueBindingSource?.DataSource is System.ComponentModel.BindingList<Converter.Application.ViewModels.QueueItemViewModel> bindingList)
                 {
+                    // Get currently selected rows
+                    var selectedRows = _queueGrid.SelectedRows
+                        .Cast<DataGridViewRow>()
+                        .Where(row => row.DataBoundItem != null)
+                        .Select(row => row.DataBoundItem as Converter.Application.ViewModels.QueueItemViewModel)
+                        .Where(vm => vm != null)
+                        .ToHashSet();
+
                     // Update IsSelected for all items based on grid selection
                     foreach (var item in bindingList)
                     {
-                        var isSelected = _queueGrid.SelectedRows
-                            .Cast<DataGridViewRow>()
-                            .Any(row => row.DataBoundItem == item);
-                        
-                        if (item.IsSelected != isSelected)
+                        var shouldBeSelected = selectedRows.Contains(item);
+                        if (item.IsSelected != shouldBeSelected)
                         {
-                            item.IsSelected = isSelected;
+                            item.IsSelected = shouldBeSelected;
+                        }
+                    }
+                }
+            };
+
+            // Handle cell clicks for proper selection behavior
+            _queueGrid.CellClick += (sender, e) =>
+            {
+                if (e.RowIndex >= 0 && e.ColumnIndex >= 0)
+                {
+                    var row = _queueGrid.Rows[e.RowIndex];
+                    if (row.DataBoundItem is Converter.Application.ViewModels.QueueItemViewModel vm)
+                    {
+                        // Toggle selection on Ctrl+Click, select only on regular click
+                        if (Control.ModifierKeys == Keys.Control)
+                        {
+                            vm.IsSelected = !vm.IsSelected;
+                        }
+                        else
+                        {
+                            // Single click - select only this item
+                            foreach (var item in _queueBindingSource?.DataSource as System.ComponentModel.BindingList<Converter.Application.ViewModels.QueueItemViewModel> ?? new System.ComponentModel.BindingList<Converter.Application.ViewModels.QueueItemViewModel>())
+                            {
+                                item.IsSelected = false;
+                            }
+                            vm.IsSelected = true;
                         }
                     }
                 }
@@ -1673,7 +1706,7 @@ namespace Converter
                     return;
                 }
 
-                await EnsureFfmpegAsync();
+                // FFmpeg уже инициализирован через Host service, не нужно вызывать EnsureFfmpegAsync
                 if (ct.IsCancellationRequested || item.IsDisposed || IsDisposed)
                 {
                     return;
@@ -2365,44 +2398,7 @@ namespace Converter
             }
         }
 
-        private async Task EnsureFfmpegAsync()
-        {
-            try
-            {
-                if (!string.IsNullOrWhiteSpace(txtFfmpegPath.Text) && System.IO.Directory.Exists(txtFfmpegPath.Text))
-                {
-                    FFmpeg.SetExecutablesPath(txtFfmpegPath.Text);
-                    return;
-                }
-
-                var baseDir = System.IO.Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), 
-                    "Converter", 
-                    "ffmpeg"
-                );
-                
-                var ffmpegExe = System.IO.Path.Combine(baseDir, OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg");
-
-                if (!System.IO.File.Exists(ffmpegExe))
-                {
-                    AppendLog("⏳ Загрузка FFmpeg...");
-                    System.IO.Directory.CreateDirectory(baseDir);
-                    await FFmpegDownloader.GetLatestVersion(FFmpegVersion.Official, baseDir);
-                    AppendLog("✅ FFmpeg загружен успешно");
-                }
-
-                FFmpeg.SetExecutablesPath(baseDir);
-                
-                if (txtFfmpegPath != null && string.IsNullOrWhiteSpace(txtFfmpegPath.Text))
-                {
-                    this.BeginInvoke(new Action(() => txtFfmpegPath.Text = baseDir));
-                }
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"❌ Ошибка настройки FFmpeg: {ex.Message}");
-            }
-        }
+        
 
         private static string FormatFileSize(long bytes)
         {

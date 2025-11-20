@@ -1,9 +1,10 @@
 /// <summary>
-/// Реализация <see cref="IQueueRepository"/> для управления очередью элементов конвертации.
-/// Отвечает за:
-/// - Хранение и управление очередью элементов
-/// - Управление приоритетами элементов
-/// - Выполнение базовых CRUD-операций с элементами очереди
+/// Реализация <see cref="IQueueRepository"/> как кэш/наблюдатель для очереди элементов конвертации.
+/// Особенности:
+/// - Простой кэш в памяти, синхронизированный с IQueueStore
+/// - Делегирует все операции в IQueueStore (единственный источник правды)
+/// - Генерирует события для UI об изменениях в очереди
+/// - Не содержит бизнес-логики, только кэширование и делегирование
 /// </summary>
 using System;
 using System.Collections.Concurrent;
@@ -19,7 +20,7 @@ namespace Converter.Application.Services
 {
     public class QueueRepository : IQueueRepository
     {
-        private readonly ConcurrentDictionary<Guid, QueueItem> _items = new();
+        private readonly ConcurrentDictionary<Guid, QueueItem> _cache = new();
         private readonly ILogger<QueueRepository> _logger;
         private readonly IQueueStore _queueStore;
         private readonly SemaphoreSlim _initLock = new(1, 1);
@@ -38,26 +39,24 @@ namespace Converter.Application.Services
         private async Task EnsureInitializedAsync()
         {
             if (_initialized)
-            {
                 return;
-            }
 
             await _initLock.WaitAsync().ConfigureAwait(false);
             try
             {
                 if (_initialized)
-                {
                     return;
-                }
 
-                _logger.LogInformation("Initializing queue repository from persistent store");
+                _logger.LogInformation("Initializing queue repository cache from persistent store");
+                
+                // Загружаем все элементы из IQueueStore в кэш
                 await foreach (var item in _queueStore.GetAllAsync().ConfigureAwait(false))
                 {
-                    _items[item.Id] = item;
+                    _cache[item.Id] = item;
                 }
 
                 _initialized = true;
-                _logger.LogInformation("Queue repository initialized with {Count} items", _items.Count);
+                _logger.LogInformation("Queue repository cache initialized with {Count} items", _cache.Count);
             }
             finally
             {
@@ -70,20 +69,22 @@ namespace Converter.Application.Services
             if (item == null) throw new ArgumentNullException(nameof(item));
 
             await EnsureInitializedAsync().ConfigureAwait(false);
+            
+            // Делегируем в IQueueStore и обновляем кэш
             await _queueStore.AddAsync(item).ConfigureAwait(false);
-
-            if (_items.TryAdd(item.Id, item))
-            {
-                _logger.LogInformation("Added item {ItemId} to queue", item.Id);
-                ItemAdded?.Invoke(this, item);
-            }
+            _cache[item.Id] = item;
+            
+            _logger.LogDebug("Added item {ItemId} to queue", item.Id);
+            ItemAdded?.Invoke(this, item);
         }
 
         public async Task AddRangeAsync(IEnumerable<QueueItem> items)
         {
             if (items == null) throw new ArgumentNullException(nameof(items));
             await EnsureInitializedAsync().ConfigureAwait(false);
-            foreach (var item in items)
+            
+            var itemList = items.ToList();
+            foreach (var item in itemList)
             {
                 await AddAsync(item).ConfigureAwait(false);
             }
@@ -94,53 +95,44 @@ namespace Converter.Application.Services
             if (item == null) throw new ArgumentNullException(nameof(item));
 
             await EnsureInitializedAsync().ConfigureAwait(false);
+            
+            // Делегируем в IQueueStore и обновляем кэш
             await _queueStore.UpdateAsync(item).ConfigureAwait(false);
-
-            if (_items.TryGetValue(item.Id, out var existingItem))
-            {
-                _items[item.Id] = item;
-                _logger.LogDebug("Updated item {ItemId} in queue", item.Id);
-                ItemUpdated?.Invoke(this, item);
-            }
-            else
-            {
-                _logger.LogWarning("Attempted to update non-existent item {ItemId}", item.Id);
-            }
+            _cache[item.Id] = item;
+            
+            _logger.LogDebug("Updated item {ItemId} in cache", item.Id);
+            ItemUpdated?.Invoke(this, item);
         }
 
         public async Task RemoveAsync(Guid id)
         {
             await EnsureInitializedAsync().ConfigureAwait(false);
+            
+            // Делегируем в IQueueStore и обновляем кэш
             await _queueStore.RemoveAsync(id).ConfigureAwait(false);
-
-            if (_items.TryRemove(id, out _))
-            {
-                _logger.LogInformation("Removed item {ItemId} from queue", id);
-                ItemRemoved?.Invoke(this, id);
-            }
-            else
-            {
-                _logger.LogWarning("Attempted to remove non-existent item {ItemId}", id);
-            }
+            _cache.TryRemove(id, out _);
+            
+            _logger.LogDebug("Removed item {ItemId} from queue", id);
+            ItemRemoved?.Invoke(this, id);
         }
 
         public async Task<QueueItem> GetByIdAsync(Guid id)
         {
             await EnsureInitializedAsync().ConfigureAwait(false);
-            _items.TryGetValue(id, out var item);
+            _cache.TryGetValue(id, out var item);
             return item;
         }
 
         public async Task<IReadOnlyList<QueueItem>> GetAllAsync()
         {
             await EnsureInitializedAsync().ConfigureAwait(false);
-            return _items.Values.OrderBy(x => x.AddedAt).ToList();
+            return _cache.Values.OrderBy(x => x.AddedAt).ToList();
         }
 
         public async Task<IReadOnlyList<QueueItem>> GetPendingItemsAsync()
         {
             await EnsureInitializedAsync().ConfigureAwait(false);
-            return _items.Values
+            return _cache.Values
                 .Where(x => x.Status == ConversionStatus.Pending)
                 .OrderBy(x => x.AddedAt)
                 .ToList();
@@ -149,7 +141,27 @@ namespace Converter.Application.Services
         public async Task<int> GetPendingCountAsync()
         {
             await EnsureInitializedAsync().ConfigureAwait(false);
-            return _items.Values.Count(x => x.Status == ConversionStatus.Pending);
+            return _cache.Values.Count(x => x.Status == ConversionStatus.Pending);
+        }
+
+        public async Task RemoveRangeAsync(IEnumerable<Guid> ids)
+        {
+            if (ids == null) throw new ArgumentNullException(nameof(ids));
+            
+            var idList = ids.ToList();
+            if (idList.Count == 0) return;
+
+            await EnsureInitializedAsync().ConfigureAwait(false);
+
+            // Делегируем в IQueueStore и обновляем кэш
+            foreach (var id in idList)
+            {
+                await _queueStore.RemoveAsync(id).ConfigureAwait(false);
+                _cache.TryRemove(id, out _);
+                ItemRemoved?.Invoke(this, id);
+            }
+
+            _logger.LogDebug("Removed {Count} items from queue", idList.Count);
         }
     }
 }

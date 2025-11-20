@@ -27,6 +27,19 @@ namespace Converter.UI
         private readonly IThemeService _themeService;
         private readonly EventHandler<Theme> _themeChangedHandler;
         public event EventHandler? RemoveRequested;
+        public event EventHandler? SelectionChanged;
+
+        private bool _isSelected;
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set
+            {
+                _isSelected = value;
+                UpdateSelectionVisual();
+                SelectionChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
 
         public VideoThumbnailControl(string filePath, IThemeService themeService)
         {
@@ -125,6 +138,9 @@ namespace Converter.UI
             MouseLeave += (_, _) => _overlayPanel.Visible = false;
             _thumbnailBox.MouseEnter += (_, _) => _overlayPanel.Visible = true;
             _thumbnailBox.MouseLeave += (_, _) => _overlayPanel.Visible = false;
+
+            // Click event for selection
+            this.Click += (s, e) => ToggleSelection();
 
             LoadVideoInfo();
         }
@@ -225,6 +241,35 @@ namespace Converter.UI
             }
 
             base.Dispose(disposing);
+        }
+
+        private void ToggleSelection()
+        {
+            IsSelected = !_isSelected;
+        }
+
+        private void UpdateSelectionVisual()
+        {
+            // Update visual appearance for selection
+            this.Invalidate(); // Force redraw
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+
+            // Draw selection border if selected
+            if (_isSelected)
+            {
+                using var pen = new Pen(Color.FromArgb(0, 120, 215), 3);
+                e.Graphics.DrawRectangle(pen, 1, 1, this.Width - 2, this.Height - 2);
+            }
+            // Draw subtle border when mouse is over (only if not selected)
+            else if (this.ClientRectangle.Contains(this.PointToClient(Cursor.Position)))
+            {
+                using var pen = new Pen(Color.FromArgb(200, 200, 200), 1);
+                e.Graphics.DrawRectangle(pen, 0, 0, this.Width - 1, this.Height - 1);
+            }
         }
     }
 }

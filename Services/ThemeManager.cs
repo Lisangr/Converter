@@ -9,7 +9,8 @@ using Converter.Models;
 namespace Converter.Services
 {
     /// <summary>
-    /// Управляет текущей темой, анимациями и автоматическим переключением.
+    /// Управляет текущей темой и анимациями перехода.
+    /// Все настройки теперь находятся в IThemeService и сохраняются через ISettingsStore.
     /// </summary>
     public class ThemeManager : IThemeManager
     {
@@ -18,81 +19,13 @@ namespace Converter.Services
         public event ThemeTransitionProgressEventHandler? ThemeTransitionProgress;
 
         private System.Windows.Forms.Timer? _transitionTimer;
-        private System.Windows.Forms.Timer? _autoSwitchTimer;
         private Theme? _targetTheme;
         private Theme? _sourceTheme;
         private float _transitionProgress;
 
-        private bool _enableAnimations = true;
-        private int _animationDuration = 300;
-        private TimeSpan _darkModeStart = new(20, 0, 0);
-        private TimeSpan _darkModeEnd = new(7, 0, 0);
-        private string _preferredDarkTheme = "dark";
-
-        public bool EnableAnimations
-        {
-            get => _enableAnimations;
-            set
-            {
-                if (_enableAnimations == value) return;
-                _enableAnimations = value;
-                SaveSettings();
-            }
-        }
-
-        public int AnimationDuration
-        {
-            get => _animationDuration;
-            set
-            {
-                var clamped = Math.Max(100, value);
-                if (_animationDuration == clamped) return;
-                _animationDuration = clamped;
-                SaveSettings();
-            }
-        }
-
-        public bool AutoSwitchEnabled { get; private set; }
-
-        public TimeSpan DarkModeStart
-        {
-            get => _darkModeStart;
-            set
-            {
-                if (_darkModeStart == value) return;
-                _darkModeStart = value;
-                SaveSettings();
-            }
-        }
-
-        public TimeSpan DarkModeEnd
-        {
-            get => _darkModeEnd;
-            set
-            {
-                if (_darkModeEnd == value) return;
-                _darkModeEnd = value;
-                SaveSettings();
-            }
-        }
-
-        public string PreferredDarkTheme
-        {
-            get => _preferredDarkTheme;
-            set
-            {
-                if (string.IsNullOrWhiteSpace(value)) return;
-                if (string.Equals(_preferredDarkTheme, value, StringComparison.OrdinalIgnoreCase)) return;
-                _preferredDarkTheme = value;
-                SaveSettings();
-            }
-        }
-
         public ThemeManager()
         {
-            LoadSettings();
-            CurrentTheme = LoadSavedTheme();
-            InitializeAutoSwitch();
+            CurrentTheme = Theme.Light; // Default theme
         }
 
         public void SetTheme(Theme theme, bool animate = true)
@@ -103,19 +36,14 @@ namespace Converter.Services
                 return;
             }
 
-            if (animate && EnableAnimations)
+            // Animation logic moved here from ThemeService for better separation
+            if (animate)
             {
-                if (AnimationDuration <= 0)
-                {
-                    AnimationDuration = 300;
-                }
-
                 StartThemeTransition(CurrentTheme, theme);
             }
             else
             {
                 CurrentTheme = theme;
-                SaveTheme(theme);
                 ThemeChanged?.Invoke(this, CurrentTheme);
             }
         }
@@ -131,13 +59,15 @@ namespace Converter.Services
             _transitionTimer = new System.Windows.Forms.Timer { Interval = 16 };
             _transitionTimer.Tick += (s, e) =>
             {
-                _transitionProgress += 16f / AnimationDuration;
+                // Animation duration is now controlled by IThemeService
+                var animationDuration = 300; // Default fallback
+                
+                _transitionProgress += 16f / animationDuration;
                 if (_transitionProgress >= 1f)
                 {
                     _transitionProgress = 1f;
                     _transitionTimer?.Stop();
                     CurrentTheme = _targetTheme!;
-                    SaveTheme(_targetTheme!);
                 }
                 else
                 {
@@ -192,6 +122,7 @@ namespace Converter.Services
         public void ApplyTheme(Form form)
         {
             if (form == null) throw new ArgumentNullException(nameof(form));
+            if (CurrentTheme == null) return;
 
             form.BackColor = CurrentTheme["Background"];
             form.ForeColor = CurrentTheme["TextPrimary"];
@@ -368,118 +299,11 @@ namespace Converter.Services
             dgv.BorderStyle = BorderStyle.None;
         }
 
-        private void InitializeAutoSwitch()
-        {
-            if (AutoSwitchEnabled)
-            {
-                SetupAutoSwitchTimer();
-            }
-        }
-
-        private void SetupAutoSwitchTimer()
-        {
-            _autoSwitchTimer ??= new System.Windows.Forms.Timer { Interval = 60000 };
-            _autoSwitchTimer.Tick -= AutoSwitchTimerOnTick;
-            _autoSwitchTimer.Tick += AutoSwitchTimerOnTick;
-            _autoSwitchTimer.Start();
-            CheckAndAutoSwitch();
-        }
-
-        public void EnableAutoSwitch(bool enable)
-        {
-            AutoSwitchEnabled = enable;
-
-            if (enable)
-            {
-                SetupAutoSwitchTimer();
-            }
-            else if (_autoSwitchTimer != null)
-            {
-                _autoSwitchTimer.Stop();
-            }
-
-            SaveSettings();
-        }
-
-        private void AutoSwitchTimerOnTick(object? sender, EventArgs e)
-        {
-            CheckAndAutoSwitch();
-        }
-
-        private void CheckAndAutoSwitch()
-        {
-            var now = DateTime.Now.TimeOfDay;
-            var shouldBeDark = IsDarkModeTime(now);
-            var targetThemeName = shouldBeDark ? PreferredDarkTheme : "light";
-            var targetTheme = Theme.GetAllThemes().FirstOrDefault(t => t.Name == targetThemeName) ?? Theme.Light;
-
-            if (!string.Equals(CurrentTheme.Name, targetTheme.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                SetTheme(targetTheme, animate: EnableAnimations);
-            }
-        }
-
-        private bool IsDarkModeTime(TimeSpan now)
-        {
-            if (DarkModeStart < DarkModeEnd)
-            {
-                return now >= DarkModeStart && now < DarkModeEnd;
-            }
-
-            return now >= DarkModeStart || now < DarkModeEnd;
-        }
-
-        private Theme LoadSavedTheme()
-        {
-            var themeName = Properties.Settings.Default.ThemeName ?? "light";
-            return Theme.GetAllThemes().FirstOrDefault(t => t.Name == themeName) ?? Theme.Light;
-        }
-
-        private void SaveTheme(Theme theme)
-        {
-            Properties.Settings.Default.ThemeName = theme.Name;
-            Properties.Settings.Default.Save();
-        }
-
-        private void LoadSettings()
-        {
-            _enableAnimations = Properties.Settings.Default.ThemeAnimations;
-            var duration = Properties.Settings.Default.ThemeAnimationDuration;
-            _animationDuration = duration > 0 ? duration : 300;
-            AutoSwitchEnabled = Properties.Settings.Default.ThemeAutoSwitch;
-            _preferredDarkTheme = Properties.Settings.Default.PreferredDarkTheme ?? "dark";
-
-            if (TimeSpan.TryParse(Properties.Settings.Default.DarkModeStart, out var start))
-            {
-                _darkModeStart = start;
-            }
-
-            if (TimeSpan.TryParse(Properties.Settings.Default.DarkModeEnd, out var end))
-            {
-                _darkModeEnd = end;
-            }
-        }
-
-        private void SaveSettings()
-        {
-            Properties.Settings.Default.ThemeAnimations = _enableAnimations;
-            Properties.Settings.Default.ThemeAnimationDuration = _animationDuration;
-            Properties.Settings.Default.ThemeAutoSwitch = AutoSwitchEnabled;
-            Properties.Settings.Default.PreferredDarkTheme = _preferredDarkTheme;
-            Properties.Settings.Default.DarkModeStart = DarkModeStart.ToString();
-            Properties.Settings.Default.DarkModeEnd = DarkModeEnd.ToString();
-            Properties.Settings.Default.Save();
-        }
-
         public void Dispose()
         {
             _transitionTimer?.Stop();
             _transitionTimer?.Dispose();
             _transitionTimer = null;
-
-            _autoSwitchTimer?.Stop();
-            _autoSwitchTimer?.Dispose();
-            _autoSwitchTimer = null;
         }
     }
 }

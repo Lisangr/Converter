@@ -59,10 +59,22 @@ namespace Converter.UI.Controls
                 _removeButton.Enabled = !value;
             }
         }
+
+        private bool _isSelected;
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set
+            {
+                _isSelected = value;
+                UpdateSelectionVisual();
+            }
+        }
         
         public event EventHandler<EventArgs>? RemoveClicked;
         public event EventHandler<EventArgs>? DoubleClicked;
         public event EventHandler<ThumbnailPositionEventArgs>? RefreshThumbnailRequested;
+        public event EventHandler<EventArgs>? SelectionChanged;
         
         private readonly EventHandler<Theme> _themeChangedHandler;
         private readonly IThemeService _themeService;
@@ -181,6 +193,9 @@ namespace Converter.UI.Controls
             
             // Double click event for the whole panel
             this.DoubleClick += (s, e) => DoubleClicked?.Invoke(this, e);
+
+            // Click event for selection
+            this.Click += (s, e) => ToggleSelection();
         }
         
         private void UpdateFileInfo()
@@ -265,12 +280,30 @@ namespace Converter.UI.Controls
         {
             base.OnPaint(e);
             
-            // Draw subtle border when mouse is over
-            if (this.ClientRectangle.Contains(this.PointToClient(Cursor.Position)))
+            // Draw selection border if selected
+            if (_isSelected)
+            {
+                using var pen = new Pen(Color.FromArgb(0, 120, 215), 2);
+                e.Graphics.DrawRectangle(pen, 1, 1, this.Width - 2, this.Height - 2);
+            }
+            // Draw subtle border when mouse is over (only if not selected)
+            else if (this.ClientRectangle.Contains(this.PointToClient(Cursor.Position)))
             {
                 using var pen = new Pen(Color.FromArgb(200, 200, 200), 1);
                 e.Graphics.DrawRectangle(pen, 0, 0, this.Width - 1, this.Height - 1);
             }
+        }
+
+        private void ToggleSelection()
+        {
+            IsSelected = !_isSelected;
+            SelectionChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void UpdateSelectionVisual()
+        {
+            // Update visual appearance for selection
+            this.Invalidate(); // Force redraw
         }
         
         public void ApplyTheme(Theme theme)

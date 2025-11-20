@@ -13,22 +13,31 @@ namespace Converter.UI.Controls
     public class ThemeSelectorControl : UserControl
     {
         private readonly IThemeService _themeService;
-        private readonly IThemeManager _themeManager;
         private readonly ComboBox _themeCombo;
         private readonly Panel _previewPanel;
         private readonly CheckBox _chkAnimations;
         private readonly CheckBox _chkAutoSwitch;
         private readonly Button _btnSettings;
         private readonly List<Theme> _themes;
+        private readonly System.Windows.Forms.Timer _manualSelectionTimer;
+        private bool _isManualSelection;
 
-        public ThemeSelectorControl(IThemeService themeService, IThemeManager themeManager)
+        public ThemeSelectorControl(IThemeService themeService)
         {
             _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
-            _themeManager = themeManager ?? throw new ArgumentNullException(nameof(themeManager));
             _themeService.ThemeChanged += OnThemeChangedFromService;
             
             DoubleBuffered = true;
             _themes = Theme.GetAllThemes();
+            
+            // Timer to prevent feedback loops
+            _manualSelectionTimer = new System.Windows.Forms.Timer { Interval = 100 };
+            _manualSelectionTimer.Tick += (s, e) =>
+            {
+                _isManualSelection = false;
+                _manualSelectionTimer.Stop();
+            };
+            _isManualSelection = false;
 
             Size = new Size(320, 170);
             Padding = new Padding(10);
@@ -75,12 +84,11 @@ namespace Converter.UI.Controls
                 Text = "✨ Анимация переходов",
                 Location = new Point(10, 115),
                 AutoSize = true,
-                Checked = true // Default value, will be updated in LoadCurrentSettings
+                Checked = true // Will be updated in LoadCurrentSettings
             };
             _chkAnimations.CheckedChanged += (s, e) =>
             {
-                // Animation settings would need to be moved to IThemeService if needed
-                // For now, we'll leave this as is since it's not critical for the theme switching
+                _themeService.EnableAnimations = _chkAnimations.Checked;
             };
 
             _chkAutoSwitch = new CheckBox
@@ -88,12 +96,11 @@ namespace Converter.UI.Controls
                 Text = "🌓 Автоматическое переключение",
                 Location = new Point(10, 140),
                 AutoSize = true,
-                Checked = false // Default value, will be updated in LoadCurrentSettings
+                Checked = false // Will be updated in LoadCurrentSettings
             };
-            _chkAutoSwitch.CheckedChanged += (s, e) =>
+            _chkAutoSwitch.CheckedChanged += async (s, e) =>
             {
-                // Auto-switch settings would need to be moved to IThemeService if needed
-                // For now, we'll leave this as is since it's not critical for the theme switching
+                await _themeService.EnableAutoSwitchAsync(_chkAutoSwitch.Checked);
             };
 
             _btnSettings = new Button
@@ -106,7 +113,7 @@ namespace Converter.UI.Controls
             _btnSettings.FlatAppearance.BorderSize = 0;
             _btnSettings.Click += (s, e) =>
             {
-                using var dialog = new ThemeSettingsDialog(_themeManager);
+                using var dialog = new ThemeSettingsDialog(_themeService);
                 dialog.ShowDialog(this);
             };
 
@@ -132,6 +139,7 @@ namespace Converter.UI.Controls
                 {
                     _themeService.ThemeChanged -= OnThemeChangedFromService;
                 }
+                _manualSelectionTimer?.Dispose();
             }
 
             base.Dispose(disposing);
@@ -160,8 +168,12 @@ namespace Converter.UI.Controls
                 return;
             }
 
+            _isManualSelection = true;
             var selectedTheme = _themes[_themeCombo.SelectedIndex];
             await _themeService.SetTheme(selectedTheme);
+            
+            // Reset flag after a short delay
+            _manualSelectionTimer.Start();
         }
         
         private void OnThemeChangedFromService(object? sender, Theme theme)
