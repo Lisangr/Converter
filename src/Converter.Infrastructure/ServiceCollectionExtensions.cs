@@ -41,6 +41,9 @@ namespace Converter.Infrastructure
             // File service
             services.AddSingleton<IFileService, FileService>();
             
+            // UI services
+            services.AddSingleton<Converter.Services.UIServices.IFileOperationsService, Converter.Services.UIServices.FileOperationsService>();
+            
             return services;
         }
     }

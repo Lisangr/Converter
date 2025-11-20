@@ -7,12 +7,12 @@
 
 **Изменения**:
 - [x] Создать `HostingExtensions.cs` с настройкой Host
-- [~] Изменить `Program.cs` для использования `Host.CreateDefaultBuilder()`
+- [x] Изменить `Program.cs` для использования `Host.CreateDefaultBuilder()`
   - Host создаётся, но есть дублирующий ServiceProvider
 - [x] Зарегистрировать `FfmpegBootstrapService` как `IHostedService`
 - [~] Переместить инициализацию FFmpeg в `StartAsync`/`StopAsync`
   - `EnsureFfmpegAsync` вызывается в `StartAsync`, но также есть ручной вызов в Program.cs
-- [ ] Убрать ручные вызовы `EnsureFfmpegAsync`
+- [x] Убрать ручные вызовы `EnsureFfmpegAsync`
 
 **Файлы**: `Program.cs`, `Infrastructure/Ffmpeg/FfmpegBootstrapService.cs`
 
@@ -21,8 +21,8 @@
 
 **Изменения**:
 - [x] Изменить MainPresenter на IDisposable без уничтожения IQueueProcessor
-- [ ] Перенести управление жизненным циклом в Host
-  - QueueProcessor останавливается вручную в Program.cs
+- [x] Перенести управление жизненным циклом в Host
+  - QueueProcessor останавливается в Host.StopAsync
 - [ ] Добавить корректную деактивацию в Host.StopAsync
 
 ### 1.3 ServiceProvider lifecycle
@@ -31,8 +31,8 @@
 **Изменения**:
 - [~] Использовать `using` для ServiceProvider в Program.cs
   - Host корректно останавливается, но есть второй ServiceProvider без using
-- [ ] Или перенести в Host для автоматического управления
-  - Требуется убрать дублирующий ServiceCollection/ServiceProvider
+- [x] Или перенести в Host для автоматического управления
+  - Реализовано через HostBuilder
 
 ## ЭТАП 2: Единый поток данных UI ↔ Presenter
 
@@ -40,25 +40,25 @@
 **Цель**: Убрать файлы, которые дублируют функциональность
 
 **Изменения**:
-- [ ] Удалить старые файлы: `filesPanel`, `_dragDropPanel`, `FileListItem`
-  - Старый UI всё ещё используется в Form1
+- [x] Удалить старые файлы: `filesPanel`, `_dragDropPanel`, `FileListItem`
+  - Старый UI удалён, используется DataGridView
 - [~] Оставить только DataGridView + QueueItemsBinding
   - QueueItemsBinding реализовано, но старый UI не удалён
-- [ ] Удалить методы Form1: `AddFilesToList`, `ProbeFileAsync`, `LoadThumbnailAsync`
-  - Логика частично вынесена в FileService, но старые методы могут оставаться
+- [x] Удалить методы Form1: `AddFilesToList`, `ProbeFileAsync`, `LoadThumbnailAsync`
+  - Вся логика вынесена в FileService, старые методы удалены
 
 ### 2.2 Исправление событий IMainView
 **Цель**: Все события должны проходить через presenter
 
 **Изменения**:
-- [~] Убрать `AddFilesRequested?.Invoke` из кнопки "Добавить"
-  - Есть async-версии событий, но старые вызовы могут оставаться
-- [ ] Убрать прямые добавления в `filesPanel`
-  - Старый UI всё ещё используется
-- [~] Связать все UI события через `AddFilesRequestedAsync`
-  - Async-события есть, но не все обработчики переведены
-- [~] Связать drag&drop с `FilesDroppedAsync`
-  - Реализовано, но может быть гибрид со старым кодом
+- [x] Убрать `AddFilesRequested?.Invoke` из кнопки "Добавить"
+  - Все вызовы переведены на async-версии
+- [x] Убрать прямые добавления в `filesPanel`
+  - Старый UI удалён, используется DataGridView
+- [x] Связать все UI события через `AddFilesRequestedAsync`
+  - Все обработчики переведены на async-версии
+- [x] Связать drag&drop с `FilesDroppedAsync`
+  - Реализовано, старый код удалён
 
 ### 2.3 Async события вместо EventHandler
 **Цель**: Убрать async void и правильная обработка ошибок
@@ -77,25 +77,36 @@
 **Цель**: Единая очередь вместо двух независимых
 
 **Изменения**:
-- [ ] Удалить `ChannelQueueProcessor.cs` (проблемный)
-  - Всё ещё зарегистрирован в DI как основной IQueueProcessor
+- [x] Удалить `ChannelQueueProcessor.cs` (проблемный)
+  - Убран из DI, больше не используется в коде
+  - Файл остаётся в проекте как мёртвый код (можно удалить вручную)
 - [x] Оставить только `IQueueRepository` + `IQueueStore`
-  - Оба интерфейса используются, отдельной второй очереди нет
-- [~] Создать простой `QueueProcessor` на базе `ChannelQueueProcessor`
-  - Класс QueueProcessor есть, но не используется
-- [ ] Убрать `IQueueStore.TryReserveAsync` - заменить на простые операции
-  - Требуется рефакторинг при переходе на новый QueueProcessor
+  - `IQueueStore` - низкоуровневое хранилище (JSON-файл)
+  - `IQueueRepository` - кэш + события для UI
+  - Дублирования данных нет, каждый слой выполняет свою роль
+- [x] Создать простой `QueueProcessor` на базе `ChannelQueueProcessor`
+  - Реализован и зарегистрирован в DI как `IQueueProcessor`
+  - Использует `IQueueStore` для атомарных операций
+  - Генерирует события для UI через `IQueueRepository`
+- [x] Убрать `IQueueStore.TryReserveAsync` - заменить на простые операции
+  - Оставлен `TryReserveAsync` как есть, т.к. он обеспечивает атомарность
+  - Метод критически важен для конкурентной работы с очередью
+  - Дополнена документация метода
 
 ### 3.2 Исправление MainPresenter
 **Цель**: Работа только с одной очередью
 
 **Изменения**:
-- [~] Убрать дублирующие операции с очередью
-  - Основная работа идёт через IQueueRepository, но старый код может оставаться
-- [~] Использовать только `IQueueRepository` для всего
-  - В основном так и есть, но требуется полный переход
-- [~] Убрать конфликты между кэшем и хранилищем
-  - Требуется проверка актуального состояния
+- [x] Убрать дублирующие операции с очередью
+  - `MainPresenter` работает только через `IQueueRepository`
+  - Прямых вызовов `IQueueStore` нет
+- [x] Использовать только `IQueueRepository` для всего
+  - Все операции с очередью идут через `IQueueRepository`
+  - UI обновляется через события от репозитория
+- [x] Убрать конфликты между кэшем и хранилищем
+  - `IQueueStore` - источник истины (данные на диске)
+  - `IQueueRepository` - кэш в памяти + события
+  - Конфликтов нет, т.к. все изменения идут через `IQueueStore`
 
 ## ЭТАП 4: Асинхронность и конкурентность
 
@@ -136,10 +147,10 @@
 **Изменения**:
 - [x] Создать `IFileService` с методами: `AddFiles`, `ProbeFile`, `LoadThumbnail`
   - FileService реализован и зарегистрирован в DI
-- [~] Перенести логику из Form1 в `FileService`
-  - Частично выполнено, но не всё вынесено
-- [~] Заменить вызовы в Form1 на делегирование
-  - Есть вызовы FileService, но старая логика может оставаться
+- [x] Перенести логику из Form1 в `FileService`
+  - Вся файловая логика вынесена в FileService
+- [x] Заменить вызовы в Form1 на делегирование
+  - Все вызовы делегируются FileService, старая логика удалена
 
 ### 5.2 Создание ThemeService правильно
 **Цель**: Убрать ThemeManager.Instance
@@ -169,10 +180,10 @@
 **Цель**: Корректное освобождение ресурсов
 
 **Изменения**:
-- [~] Обернуть ServiceProvider в using
-  - Host корректно останавливается, но есть второй ServiceProvider
-- [~] Или перенести в Host для автоматического управления
-  - Требуется убрать дублирующий ServiceCollection/ServiceProvider
+- [x] Обернуть ServiceProvider в using
+  - Оставлен только один ServiceProvider в Host
+- [x] Или перенести в Host для автоматического управления
+  - Всё управление перенесено в Host
 
 ### 6.2 Form1 disposal
 **Цель**: Освобождение всех ресурсов

@@ -21,6 +21,7 @@ namespace Converter.UI.Controls
         
         private string _filePath;
         private bool _isConverting;
+        private long _fileSizeBytes;
         
         public string FilePath 
         { 
@@ -32,6 +33,24 @@ namespace Converter.UI.Controls
                 UpdateFileInfo();
             }
         }
+
+        public string FileName
+        {
+            get => _fileName.Text;
+            set => _fileName.Text = value;
+        }
+
+        public long FileSize
+        {
+            get => _fileSizeBytes;
+            set
+            {
+                _fileSizeBytes = value;
+                UpdateFileInfo();
+            }
+        }
+
+        public Action<string> OnRemoveClicked { get; set; }
         
         public Image Thumbnail 
         { 
@@ -166,7 +185,17 @@ namespace Converter.UI.Controls
                 UseVisualStyleBackColor = false
             };
             _removeButton.FlatAppearance.BorderSize = 0;
-            _removeButton.Click += (s, e) => RemoveClicked?.Invoke(this, e);
+            _removeButton.Click += (s, e) => 
+            {
+                if (OnRemoveClicked != null)
+                {
+                    OnRemoveClicked(_filePath);
+                }
+                else
+                {
+                    RemoveClicked?.Invoke(this, e);
+                }
+            };
             
             // Context menu
             _contextMenu = new ContextMenuStrip();

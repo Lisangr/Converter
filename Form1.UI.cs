@@ -9,11 +9,13 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Microsoft.Extensions.Logging;
 using Xabe.FFmpeg;
 using Xabe.FFmpeg.Downloader;
 using Converter.Domain.Models;
 using Converter.Models;
 using Converter.Services;
+using Converter.Services.UIServices;
 using Converter.UI;
 using Converter.UI.Controls;
 using Converter.UI.Dialogs;
@@ -94,6 +96,19 @@ namespace Converter
 
         // Presets binding (for future use)
         private BindingSource? _presetsBindingSource;
+
+        // File operations service reference - доступ через partial class (использует существующее поле)
+        private Converter.Services.UIServices.IFileOperationsService FileOperationsService => 
+            this._fileOperationsService;
+
+        // Logger for UI operations
+        private ILogger? _logger;
+        
+        // Initialize logger - called from main Form1 constructor
+        public void SetLogger(Microsoft.Extensions.Logging.ILogger logger)
+        {
+            _logger = logger;
+        }
 
         protected override void OnLoad(EventArgs e)
         {
@@ -222,10 +237,18 @@ namespace Converter
             //btnRemoveSelected.Click += async (s, e) => await RaiseRemoveSelectedFilesRequestedAsync();
             btnClearAll.Click += async (s, e) =>
             {
-                // Сначала очищаем визуальные панели (filesPanel + DragDropPanel)
-                ClearAllFiles();
-                // Затем синхронизируем очередь и хранилище через презентер
-                await RaiseClearAllFilesRequestedAsync();
+                try
+                {
+                    // Сначала очищаем визуальные панели (filesPanel + DragDropPanel)
+                    ClearAllFiles();
+                    // Затем очищаем очередь через FileOperationsService
+                    await FileOperationsService.ClearAllFilesAsync();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Ошибка при очистке файлов: {ex.Message}", "Ошибка", 
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             };
 
             panelLeftTop.Controls.AddRange(new Control[]
@@ -247,8 +270,22 @@ namespace Converter
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
                 BackColor = Color.White,
-                Padding = new Padding(5),
-                AllowDrop = true
+                Padding = new Padding(5)
+                // AllowDrop will be set after handle creation
+            };
+
+            filesPanel.HandleCreated += (s, e) => {
+                try
+                {
+                    if (!DesignMode)
+                    {
+                        filesPanel.AllowDrop = true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Warning: Could not enable drag-drop for filesPanel: {ex.Message}");
+                }
             };
 
             filesPanel.DragEnter += Panel_DragEnter;
@@ -281,14 +318,51 @@ namespace Converter
 
         private async void OnDragDropPanelFilesAdded(object? sender, string[] files)
         {
-            AddFilesToList(files, syncDragDropPanel: false);
-            await RaiseFilesDroppedAsync(files);
+            try
+            {
+                if (files != null && files.Length > 0)
+                {
+                    await FileOperationsService.AddFilesAsync(files);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при добавлении файлов: {ex.Message}", "Ошибка", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void OnDragDropPanelFileRemoved(object? sender, string filePath)
         {
-            RemoveFileByPath(filePath);
-        }
+            // Синхронизируем удаление с очередью и файловой панелью
+            if (!string.IsNullOrEmpty(filePath))
+            {
+                // Удаляем из очередь через FileOperationsService
+                var queueItems = FileOperationsService.GetQueueItems().ToList();
+                var queueItem = queueItems
+                    .FirstOrDefault(i => string.Equals(i.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+                
+                if (queueItem != null)
+                {
+                    // Удаляем из очереди через FileOperationsService
+                    _ = FileOperationsService.RemoveSelectedFilesAsync(new[] { queueItem });
+                }
+
+                // Удаляем из filesPanel если существует
+                var fileItem = filesPanel.Controls.OfType<FileListItem>()
+                    .FirstOrDefault(f => string.Equals(f.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+                
+                if (fileItem != null)
+                {
+                    filesPanel.Controls.Remove(fileItem);
+                    fileItem.Dispose();
+                }
+
+                // Обновляем состояние UI
+                UpdateEditorButtonState();
+                UpdateShareButtonState();
+            }
+        }        
 
         private void OnOpenEditorClick(object? sender, EventArgs e)
         {
@@ -373,7 +447,12 @@ namespace Converter
 
             // Ensure binding source exists and is hooked up to the current binding list from IMainView
             _queueBindingSource ??= new BindingSource();
-            var bindingList = _queueItemsBinding ?? new System.ComponentModel.BindingList<Converter.Application.ViewModels.QueueItemViewModel>();
+            
+            // Загружаем текущие элементы из FileOperationsService
+            var queueItems = FileOperationsService?.GetQueueItems() ?? new List<QueueItem>();
+            var viewModels = queueItems.Select(item => Converter.Application.ViewModels.QueueItemViewModel.FromModel(item)).ToList();
+            var bindingList = new System.ComponentModel.BindingList<Converter.Application.ViewModels.QueueItemViewModel>(viewModels);
+            
             _queueBindingSource.DataSource = bindingList;
 
             _queueGrid = new DataGridView
@@ -1316,17 +1395,45 @@ namespace Converter
 
         private async void btnAddFiles_Click(object? sender, EventArgs e)
         {
-            using var ofd = new OpenFileDialog
+            try
             {
-                Filter = "Видео файлы|*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.flv;*.webm;*.m4v;*.mpg;*.mpeg|Все файлы|*.*",
-                Multiselect = true
-            };
+                using var ofd = new OpenFileDialog
+                {
+                    Filter = "Видео файлы|*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.flv;*.webm;*.m4v;*.mpg;*.mpeg|Все файлы|*.*",
+                    Multiselect = true,
+                    Title = "Выберите файлы для добавления"
+                };
 
-            if (ofd.ShowDialog(this) == DialogResult.OK)
+                if (ofd.ShowDialog(this) == DialogResult.OK)
+                {
+                    var filePaths = ofd.FileNames;
+                    if (filePaths.Length > 0)
+                    {
+                        // Отключаем кнопку на время добавления файлов
+                        btnAddFiles.Enabled = false;
+                        try
+                        {
+                            // 1) Добавляем элементы на панель файлов (старый UI)
+                            AddFilesToList(filePaths);
+
+                            // 2) Сообщаем презентеру через FilesDroppedAsync, чтобы добавить в очередь
+                            await RaiseFilesDroppedAsync(filePaths);
+
+                            // 3) Обновляем оценку
+                            DebounceEstimate();
+                        }
+                        finally
+                        {
+                            btnAddFiles.Enabled = true;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
             {
-                AddFilesToList(ofd.FileNames);
-                await RaiseFilesDroppedAsync(ofd.FileNames);
-                DebounceEstimate();
+                MessageBox.Show($"Ошибка при добавлении файлов: {ex.Message}",
+                    "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                _logger?.LogError(ex, "Ошибка в обработчике btnAddFiles_Click");
             }
         }
 
@@ -1336,7 +1443,7 @@ namespace Converter
             {
                 if (!System.IO.File.Exists(path)) continue;
 
-                // Check if already added
+                // Проверяем, не добавлен ли уже такой файл
                 if (filesPanel.Controls.OfType<FileListItem>().Any(item => item.FilePath == path))
                     continue;
 
@@ -1358,10 +1465,10 @@ namespace Converter
                     _dragDropPanel?.AddFiles(new[] { path }, notify: false);
                 }
 
-                // Asynchronously load thumbnail
+                // Асинхронно загружаем превью
                 _ = LoadThumbnailAsync(fileItem, _lifecycleCts.Token);
 
-                // Asynchronously probe file info
+                // Асинхронно пробуем файл
                 _ = ProbeFileAsync(fileItem, path, _lifecycleCts.Token);
             }
 
@@ -1514,9 +1621,10 @@ namespace Converter
             item.Dispose();
             DebounceEstimate();
 
-            if (syncDragDropPanel)
+            if (syncDragDropPanel && _dragDropPanel != null)
             {
-                _dragDropPanel?.RemoveFile(item.FilePath, notify: false);
+                // Удаляем файл из DragDropPanel И вызываем событие для обновления UI
+                _dragDropPanel.RemoveFile(item.FilePath, notify: true);
             }
             UpdateEditorButtonState();
 
@@ -1534,26 +1642,225 @@ namespace Converter
             }
         }
 
-        private void RemoveFileByPath(string filePath)
+        private async void RemoveFileByPath(string filePath)
         {
-            var item = filesPanel.Controls
-                .OfType<FileListItem>()
-                .FirstOrDefault(i => string.Equals(i.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+            if (string.IsNullOrEmpty(filePath)) return;
 
-            if (item != null)
+            try
             {
-                // При удалении по пути синхронизируем обе панели (filesPanel и DragDropPanel)
-                RemoveFileFromList(item, syncDragDropPanel: true);
+                // 1. Get a fresh copy of queue items
+                var queueItems = FileOperationsService.GetQueueItems().ToList();
+                var queueItem = queueItems
+                    .FirstOrDefault(i => string.Equals(i.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+                
+                if (queueItem != null)
+                {
+                    // 2. Remove from the queue via service
+                    await FileOperationsService.RemoveSelectedFilesAsync(new[] { queueItem });
+                }
+
+                // 3. Remove from filesPanel if exists
+                var fileItem = filesPanel.Controls.OfType<FileListItem>()
+                    .FirstOrDefault(f => string.Equals(f.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+                
+                if (fileItem != null)
+                {
+                    filesPanel.Controls.Remove(fileItem);
+                    fileItem.Dispose();
+                }
+
+                // 4. Remove from DragDropPanel if exists
+                if (_dragDropPanel != null)
+                {
+                    _dragDropPanel.RemoveFile(filePath, notify: true);
+                }
+
+                // 5. Update the UI state
+                UpdateEditorButtonState();
+                UpdateShareButtonState();
+                
+                // 6. Force refresh the queue display
+                var currentItems = FileOperationsService.GetQueueItems();
+                OnQueueUpdated(this, new QueueUpdatedEventArgs(currentItems));
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Ошибка при удалении файла: {ex.Message}");
+                MessageBox.Show($"Ошибка при удалении файла: {ex.Message}", "Ошибка", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
-
         private void ClearAllFiles()
         {
             filesPanel.Controls.Clear();
-            _dragDropPanel?.ClearFiles(notify: false);
+            
+            // Очищаем DragDropPanel с уведомлением об изменении
+            if (_dragDropPanel != null)
+            {
+                _dragDropPanel.ClearFiles(notify: true);
+            }
+            
             DebounceEstimate();
             UpdateEditorButtonState();
+            UpdateShareButtonState();
         }
+
+        private async Task RemoveSelectedItems(IEnumerable<QueueItem> items)
+        {
+            try
+            {
+                if (items?.Any() == true)
+                {
+                    await FileOperationsService.RemoveSelectedFilesAsync(items);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при удалении выбранных файлов: {ex.Message}", "Ошибка", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        
+
+        private async Task AddFilesToQueue(IEnumerable<string> filePaths, bool showProgress = true)
+        {
+            if (filePaths == null || !filePaths.Any())
+                return;
+
+            try
+            {
+                await FileOperationsService.AddFilesAsync(filePaths);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при добавлении файлов в очередь: {ex.Message}", "Ошибка", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        
+
+        private void UpdateQueueGrid()
+        {
+            try
+            {
+                var items = FileOperationsService.GetQueueItems();
+                
+                if (_queueBindingSource != null)
+                {
+                    var viewModels = items
+                        .Select(item => Converter.Application.ViewModels.QueueItemViewModel.FromModel(item))
+                        .ToList();
+                    
+                    var bindingList = new System.ComponentModel.BindingList<Converter.Application.ViewModels.QueueItemViewModel>(viewModels);
+                    
+                    if (this.InvokeRequired)
+                    {
+                        this.Invoke(new Action(() =>
+                        {
+                            _queueBindingSource.DataSource = null;
+                            _queueBindingSource.DataSource = bindingList;
+                        }));
+                    }
+                    else
+                    {
+                        _queueBindingSource.DataSource = null;
+                        _queueBindingSource.DataSource = bindingList;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при обновлении сетки очереди: {ex.Message}", "Ошибка", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void UpdateQueueStatus(IReadOnlyList<QueueItem> items)
+        {
+            if (items == null) return;
+
+            int total = items.Count;
+            int completed = items.Count(i => i.Status == ConversionStatus.Completed);
+            int failed = items.Count(i => i.Status == ConversionStatus.Failed);
+            int processing = items.Count(i => i.Status == ConversionStatus.Processing);
+            int pending = items.Count(i => i.Status == ConversionStatus.Pending);
+
+            string status = $"Файлов: {total} | Готово: {completed} | Ошибки: {failed} | В процессе: {processing} | Ожидание: {pending}";
+            
+            if (lblStatusTotal != null && !lblStatusTotal.IsDisposed)
+            {
+                if (lblStatusTotal.InvokeRequired)
+                {
+                    lblStatusTotal.Invoke(new Action(() => lblStatusTotal.Text = status));
+                }
+                else
+                {
+                    lblStatusTotal.Text = status;
+                }
+            }
+        }
+
+        private void UpdateQueueItemStatus(Guid itemId, ConversionStatus status)
+        {
+            try
+            {
+                var items = FileOperationsService.GetQueueItems();
+                var item = items.FirstOrDefault(i => i.Id == itemId);
+                if (item != null)
+                {
+                    item.Status = status;
+                    // Статус будет обновлен автоматически через событие QueueUpdated
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при обновлении статуса элемента: {ex.Message}", "Ошибка", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void UpdateQueueItemProgress(Guid itemId, int progress)
+        {
+            try
+            {
+                var items = FileOperationsService.GetQueueItems();
+                var item = items.FirstOrDefault(i => i.Id == itemId);
+                if (item != null)
+                {
+                    item.Progress = progress;
+                    // Прогресс будет обновлен автоматически через событие QueueUpdated
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при обновлении прогресса элемента: {ex.Message}", "Ошибка", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private async void UpdateQueueItemError(Guid itemId, string errorMessage)
+{
+    try
+    {
+        var items = FileOperationsService.GetQueueItems();
+        var item = items.FirstOrDefault(i => i.Id == itemId);
+        if (item != null)
+        {
+            item.ErrorMessage = errorMessage;
+            item.Status = ConversionStatus.Failed;
+            
+            // Update the item through the service
+            await FileOperationsService.UpdateQueueItem(item);
+        }
+    }
+    catch (Exception ex)
+    {
+        MessageBox.Show($"Ошибка при обновлении ошибки элемента: {ex.Message}", "Ошибка", 
+            MessageBoxButtons.OK, MessageBoxIcon.Error);
+    }
+}
 
         private void OpenVideoInPlayer(string filePath)
         {

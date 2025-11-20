@@ -8,8 +8,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Microsoft.Extensions.Hosting;
 using Converter.Application.Abstractions;
 using Converter.Models;
+using Converter.Domain.Models;
 using Converter.Services;
 using Converter.UI;
 using Converter.UI.Controls;
@@ -27,9 +29,12 @@ namespace Converter
         private readonly IThumbnailProvider _thumbnailProvider;
         private readonly IShareService _shareService;
         private readonly IFileService _fileService;
+        private readonly Converter.Services.UIServices.IFileOperationsService _fileOperationsService;
         private readonly CancellationTokenSource _lifecycleCts = new();
+        private IHost? _host;
         
         private bool _disposed = false;
+        private bool _closingInProgress = false;
         
         // Fields for estimation and background operations
         private System.Timers.Timer? _estimateDebounce;
@@ -61,6 +66,11 @@ namespace Converter
         public void SetMainPresenter(object presenter)
         {
             _mainPresenter = presenter as Converter.Application.Presenters.MainPresenter;
+        }
+
+        public void SetHost(IHost host)
+        {
+            _host = host;
         }
 
         private string _ffmpegPath = string.Empty;
@@ -125,24 +135,26 @@ namespace Converter
             INotificationService notificationService,
             IThumbnailProvider thumbnailProvider,
             IShareService shareService,
-            IFileService fileService)
+            IFileService fileService,
+            Converter.Services.UIServices.IFileOperationsService fileOperationsService)
         {
             _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _thumbnailProvider = thumbnailProvider ?? throw new ArgumentNullException(nameof(thumbnailProvider));
             _shareService = shareService ?? throw new ArgumentNullException(nameof(shareService));
             _fileService = fileService ?? throw new ArgumentNullException(nameof(fileService));
-
-            // Устанавливаем AllowDrop в конструкторе, до вызова InitializeComponent
-            this.AllowDrop = true;
-
+            _fileOperationsService = fileOperationsService ?? throw new ArgumentNullException(nameof(fileOperationsService));
+            
             InitializeComponent();
-
-            _notificationSettings = _notificationService.GetSettings();
-
-            // Подписываемся на события удаления файлов
-            RemoveSelectedFilesRequested += OnRemoveSelectedFilesRequested;
-            ClearAllFilesRequested += OnClearAllFilesRequested;
+            InitializeAdvancedTheming();
+            
+            // Подписываемся на обновления очереди
+            _fileOperationsService.QueueUpdated += OnQueueUpdated;
+            
+            // Инициализируем логгер для UI компонента
+            // Логгер будет настроен через DI в Program.cs
+            var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
+            SetLogger(logger);
         }
 
         public void UpdatePresetControls(Converter.Models.ConversionProfile preset)
@@ -333,14 +345,25 @@ namespace Converter
                 return;
             }
 
-            btnStart.Tag = "AccentButton";
+            // Безопасно работаем с кнопкой запуска: на ранних стадиях инициализации контрол может быть ещё не создан
+            if (btnStart != null)
+            {
+                btnStart.Tag = "AccentButton";
+            }
 
-            _themeService.ThemeChanged -= OnThemeChanged;
-            _themeService.ThemeChanged += OnThemeChanged;
+            // Переподписываемся на событие смены темы (с проверкой на null на всякий случай)
+            if (_themeService != null)
+            {
+                _themeService.ThemeChanged -= OnThemeChanged;
+                _themeService.ThemeChanged += OnThemeChanged;
+            }
 
-            // применяем текущую тему ко всей форме
-            _themeService.ApplyTheme(this);
-            UpdateCustomControlsTheme(_themeService.CurrentTheme);
+            // применяем текущую тему ко всей форме, только если сервис темы доступен
+            if (_themeService != null)
+            {
+                _themeService.ApplyTheme(this);
+                UpdateCustomControlsTheme(_themeService.CurrentTheme);
+            }
 
             _themeSelector = new ThemeSelectorControl(_themeService)
             {
@@ -414,34 +437,63 @@ namespace Converter
 
         protected override async void OnFormClosing(FormClosingEventArgs e)
         {
+            // Защита от множественных вызовов закрытия
+            if (_closingInProgress)
+            {
+                return;
+            }
+            
+            if (_host != null)
+            {
+                // Помечаем, что процесс закрытия уже запущен, чтобы не вызывать его повторно
+                _closingInProgress = true;
+
+                // Отменяем закрытие формы, пока не завершатся фоновые задачи
+                e.Cancel = true;
+                _ = CloseApplicationAsync();
+            }
+            else
+            {
+                base.OnFormClosing(e);
+            }
+        }
+
+        private async Task CloseApplicationAsync()
+        {
             try
             {
-                // Request cancellation of all background operations
+                // Отменяем все фоновые операции
                 CancelBackgroundOperations();
 
-                // При выходе очищаем очередь и UI, чтобы не оставлять старые элементы в JSON-хранилище
-                try
+                // При выходе очищаем очередь только через презентер (единая точка входа)
+                if (_mainPresenter != null)
                 {
-                    ClearAllFiles();
-                }
-                catch { }
-
-                try
-                {
-                    if (_mainPresenter != null)
+                    try
                     {
                         await _mainPresenter.OnClearAllFilesRequested().ConfigureAwait(false);
                     }
-                    else
+                    catch { }
+                }
+                else
+                {
+                    // Fallback для старого кода
+                    try
                     {
                         ClearQueue();
                     }
+                    catch { }
                 }
-                catch { }
+                
+                // Ожидаем завершения критических операций
+                await Task.WhenAny(
+                    Task.Delay(TimeSpan.FromSeconds(5)),
+                    Task.Run(() => _host?.StopAsync())
+                );
             }
             finally
             {
-                base.OnFormClosing(e);
+                // Принудительно завершаем приложение
+                System.Windows.Forms.Application.Exit();
             }
         }
 
@@ -550,25 +602,101 @@ namespace Converter
 
         protected virtual void Dispose(bool disposing)
         {
-            if (!_disposed)
+            if (_disposed) return;
+
+            if (disposing)
             {
-                if (disposing)
+                _lifecycleCts?.Cancel();
+                _lifecycleCts?.Dispose();
+                _estimateDebounce?.Dispose();
+                _estimateCts?.Dispose();
+                
+                // Отписываемся от событий
+                if (_fileOperationsService != null)
                 {
-                    // Dispose managed resources
-                    DisposeManagedResources();
+                    _fileOperationsService.QueueUpdated -= OnQueueUpdated;
                 }
-
-                // Free unmanaged resources (if any)
-                // Note: WinForms controls handle their own unmanaged resources
-
-                _disposed = true;
             }
+
+            _disposed = true;
             base.Dispose(disposing);
         }
 
         ~Form1()
         {
             Dispose(disposing: false);
+        }
+
+        #endregion
+
+        #region Event Handlers
+
+        private void OnQueueUpdated(object? sender, Converter.Services.UIServices.QueueUpdatedEventArgs e)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => OnQueueUpdated(sender, e)));
+                return;
+            }
+
+            try
+            {
+                // 1. Обновляем грид очереди (если биндинг уже инициализирован)
+                if (_queueBindingSource != null)
+                {
+                    var viewModels = e.QueueItems
+                        .Select(item => QueueItemViewModel.FromModel(item))
+                        .ToList();
+
+                    _queueBindingSource.DataSource = null;
+                    _queueBindingSource.DataSource = viewModels;
+                }
+
+                // 2. Синхронизируем панель файлов с очередью
+                var currentFiles = filesPanel.Controls.OfType<FileListItem>()
+                    .Select(f => f.FilePath)
+                    .ToList();
+
+                var queueFiles = e.QueueItems
+                    .Select(q => q.FilePath)
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .ToList();
+
+                var newFiles = queueFiles
+                    .Except(currentFiles, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+                var removedFiles = currentFiles
+                    .Except(queueFiles, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                // Удаляем файлы, которых больше нет в очереди
+                foreach (var filePath in removedFiles)
+                {
+                    var fileItem = filesPanel.Controls.OfType<FileListItem>()
+                        .FirstOrDefault(f => string.Equals(f.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+
+                    if (fileItem != null)
+                    {
+                        filesPanel.Controls.Remove(fileItem);
+                        fileItem.Dispose();
+                    }
+                }
+
+                // Добавляем новые файлы через существующую логику (с превью и обработчиками)
+                if (newFiles.Length > 0)
+                {
+                    AddFilesToList(newFiles, syncDragDropPanel: false);
+                }
+
+                // 3. Обновляем состояние UI
+                UpdateEditorButtonState();
+                UpdateShareButtonState();
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Ошибка при обновлении интерфейса очереди: {ex.Message}");
+            }
         }
 
         #endregion
@@ -637,9 +765,6 @@ namespace Converter
                 // Делегируем очистку в MainPresenter (основная очередь)
                 if (_mainPresenter != null)
                 {
-                    // Синхронизируем визуальные панели файлов
-                    ClearAllFiles();
-
                     _mainPresenter.OnClearAllFilesRequested();
                     return;
                 }

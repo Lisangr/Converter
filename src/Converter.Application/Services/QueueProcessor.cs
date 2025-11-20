@@ -24,6 +24,7 @@ namespace Converter.Application.Services
         private readonly ILogger<QueueProcessor> _logger;
         private readonly SemaphoreSlim _processingLock = new(1, 1);
         private CancellationTokenSource _processingCts;
+        private Task? _processingTask;
         private bool _isPaused;
         private bool _isRunning;
 
@@ -52,24 +53,40 @@ namespace Converter.Application.Services
         {
             if (_isRunning) return;
 
-            _logger.LogInformation("Starting queue processor");
+            _logger.LogInformation("Запуск обработки очереди...");
             _processingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             _isRunning = true;
             _isPaused = false;
             
             await base.StartAsync(cancellationToken);
-            _logger.LogInformation("Queue processor started");
+            _logger.LogInformation("Queue processor запущен");
         }
 
-        public new async Task StopProcessingAsync()
+        public async Task StopProcessingAsync()
         {
             if (!_isRunning) return;
 
-            _logger.LogInformation("Stopping queue processor");
-            _processingCts?.Cancel();
-            await base.StopAsync(default);
+            _logger.LogInformation("Остановка обработки очереди...");
             _isRunning = false;
-            _logger.LogInformation("Queue processor stopped");
+            _processingCts?.Cancel();
+            
+            try
+            {
+                // Ждем завершения текущей задачи обработки
+                if (_processingTask != null && !_processingTask.IsCompleted)
+                {
+                    await Task.WhenAny(
+                        _processingTask,
+                        Task.Delay(Timeout.Infinite)
+                    );
+                }
+                await base.StopAsync(default);
+                _logger.LogInformation("Queue processor остановлен");
+            }
+            catch (OperationCanceledException)
+            {
+                // Игнорируем отмену
+            }
         }
 
         public async Task PauseProcessingAsync()

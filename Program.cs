@@ -21,96 +21,72 @@ namespace Converter
     internal static class Program
     {
         [STAThread]
-        static void Main()
+        static int Main(string[] args)
         {
             System.Windows.Forms.Application.EnableVisualStyles();
             System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
 
-            IHost? host = null;
-            
+            // Весь пайплайн запускаем синхронно в STA-потоке,
+            // чтобы Form1 и диалоги всегда создавались и вызывались из STA
             try
             {
-                // Создаем базовый хост без сложных сервисов
-                var configuration = new ConfigurationBuilder()
-                    .SetBasePath(Directory.GetCurrentDirectory())
-                    .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
-                    .Build();
+                return RunApplication(args);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Fatal error: {ex.Message}\n\n{ex.StackTrace}",
+                    "Fatal Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return 1;
+            }
+        }
 
-                host = Host.CreateDefaultBuilder()
-                    .ConfigureServices((context, services) =>
-                    {
-                        services
-                            .AddLogging(configure =>
-                                configure.AddDebug()
-                                        .SetMinimumLevel(LogLevel.Information))
-                            .AddSingleton<IMainView, Form1>()
-                            .AddInfrastructureServices(configuration);
-                    })
-                    .Build();
+        private static int RunApplication(string[] args)
+        {
+            using var cts = new CancellationTokenSource();
 
-                host.StartAsync().GetAwaiter().GetResult();
+            // Обработка завершения через Ctrl+C (на всякий случай, если консоль подключена)
+            Console.CancelKeyPress += (s, e) =>
+            {
+                e.Cancel = true;
+                cts.Cancel();
+            };
 
-                // Создаем форму вручную, минуя DI
-                using var formScope = host.Services.CreateScope();
-                var formServices = formScope.ServiceProvider;
-                
-                // Создаем форму через её конструктор
-                var mainForm = new Form1(
-                    formServices.GetRequiredService<IThemeService>(),
-                    formServices.GetRequiredService<INotificationService>(),
-                    formServices.GetRequiredService<IThumbnailProvider>(),
-                    formServices.GetRequiredService<IShareService>(),
-                    formServices.GetRequiredService<IFileService>());
+            IHost? host = null;
 
-                if (mainForm == null)
+            try
+            {
+                // Создаем Host через HostingExtensions и настраиваем все сервисы в одном контейнере
+                var builder = HostingExtensions.CreateHostBuilder(args);
+
+                builder.Services
+                    .ConfigureApplicationServices(builder.Configuration)
+                    .ConfigureHostedServices();
+
+                host = builder.Build();
+                var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
+
+                // Обработка завершения через IHostApplicationLifetime
+                lifetime.ApplicationStopping.Register(() =>
                 {
-                    MessageBox.Show("Failed to create main form", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
+                    cts.Cancel();
+                });
+
+                // Запускаем фоновые службы (включая FfmpegBootstrapService как IHostedService)
+                host.StartAsync(cts.Token).GetAwaiter().GetResult();
+
+                // Получаем основное представление и презентер из DI
+                var presenter = host.Services.GetRequiredService<MainPresenter>();
+                var mainView = host.Services.GetRequiredService<IMainView>() as Form1;
+
+                if (mainView == null)
+                {
+                    MessageBox.Show("Failed to resolve main form from DI", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return 1;
                 }
 
-                // Инициализируем остальные сервисы
-                var serviceCollection = new ServiceCollection();
-                serviceCollection
-                    .AddLogging(configure =>
-                        configure.AddDebug()
-                                .SetMinimumLevel(LogLevel.Information))
-                    .AddSingleton<IMainView>(mainForm)
-                    .AddSingleton<MainPresenter>()
-                    .AddSingleton<MainViewModel>()
-                    .AddSingleton<IQueueRepository, QueueRepository>()
-                    .AddSingleton<IConversionCommandBuilder, ConversionCommandBuilder>()
-                    .AddSingleton<IConversionOrchestrator, ConversionOrchestrator>()
-                    .AddSingleton<IConversionUseCase, ConversionUseCase>()
-                    .AddSingleton<IProfileProvider, ProfileProvider>()
-                    .AddSingleton<IOutputPathBuilder, OutputPathBuilder>()
-                    .AddSingleton<IProgressReporter, UiProgressReporter>()
-                    .AddSingleton<IThemeManager, ThemeManager>()
-                    .AddSingleton<IThemeService, ThemeService>()
-                    .AddSingleton<IQueueProcessor, ChannelQueueProcessor>()
-                    .AddSingleton<IFilePicker, WinFormsFilePicker>()
-                    .AddSingleton<IFolderPicker, WinFormsFolderPicker>()
-                    .AddSingleton<IFileService, FileService>()
-                    .AddInfrastructureServices(configuration);
-
-                var serviceProvider = serviceCollection.BuildServiceProvider();
-
-                // Получаем презентер и инициализируем его
-                var presenter = serviceProvider.GetRequiredService<MainPresenter>();
-                var queueProcessor = serviceProvider.GetRequiredService<IQueueProcessor>();
-                
-                // Initialize FFmpeg in background
-                var ffmpegBootstrap = serviceProvider.GetRequiredService<FfmpegBootstrapService>();
-                _ = Task.Run(async () => 
-                {
-                    try
-                    {
-                        await ffmpegBootstrap.EnsureFfmpegAsync();
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"FFmpeg initialization error: {ex.Message}");
-                    }
-                });
+                // Устанавливаем ссылку на презентер и хост в форме (для вспомогательных вызовов)
+                mainView.SetMainPresenter(presenter);
+                mainView.SetHost(host);
 
                 try
                 {
@@ -120,48 +96,27 @@ namespace Converter
                 {
                     MessageBox.Show("Application initialization was cancelled.",
                         "Initialization Cancelled", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
+                    return 0;
                 }
                 catch (Exception ex)
                 {
                     MessageBox.Show($"Failed to initialize: {ex.GetBaseException().Message}",
                         "Initialization Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
+                    return 1;
                 }
 
-                System.Windows.Forms.Application.Run(mainForm);
-
-                // Ensure graceful shutdown of application services
-                try
+                using (mainView)
                 {
-                    presenter?.Dispose();
-
-                    if (queueProcessor != null)
-                    {
-                        // Stop processing queue before disposing DI container
-                        queueProcessor.StopProcessingAsync().GetAwaiter().GetResult();
-
-                        // Dispose async/sync resources if implemented
-                        if (queueProcessor is IAsyncDisposable asyncDisposable)
-                        {
-                            asyncDisposable.DisposeAsync().GetAwaiter().GetResult();
-                        }
-                        else if (queueProcessor is IDisposable disposable)
-                        {
-                            disposable.Dispose();
-                        }
-                    }
+                    System.Windows.Forms.Application.Run(mainView);
                 }
-                catch (Exception ex)
-                {
-                    // Log shutdown errors but don't mask original exceptions
-                    System.Diagnostics.Debug.WriteLine($"Shutdown error: {ex.Message}");
-                }
+
+                // Graceful shutdown
+                host.StopAsync().GetAwaiter().GetResult();
+                return 0;
             }
-            catch (Exception ex)
+            catch (OperationCanceledException)
             {
-                MessageBox.Show($"Fatal error: {ex.Message}\n\n{ex.StackTrace}", 
-                    "Fatal Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return 0;
             }
             finally
             {
@@ -169,7 +124,10 @@ namespace Converter
                 {
                     if (host != null)
                     {
-                        host.StopAsync().GetAwaiter().GetResult();
+                        using (var shutdownCts = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
+                        {
+                            host.StopAsync(shutdownCts.Token).GetAwaiter().GetResult();
+                        }
                         host.Dispose();
                     }
                 }
@@ -179,6 +137,5 @@ namespace Converter
                 }
             }
         }
-
     }
 }

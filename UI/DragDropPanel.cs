@@ -23,7 +23,6 @@ namespace Converter.UI
         public DragDropPanel(IThemeService themeService)
         {
             _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
-            AllowDrop = true;
             AutoScroll = true;
             BackColor = Color.FromArgb(240, 240, 240);
             BorderStyle = BorderStyle.FixedSingle;
@@ -43,6 +42,22 @@ namespace Converter.UI
             };
             _placeholderLabel.Click += (_, _) => SelectFiles();
             Controls.Add(_placeholderLabel);
+
+            // Set AllowDrop after handle creation to avoid DragDropRegFailed exception
+            HandleCreated += (s, e) => {
+                try
+                {
+                    if (!DesignMode)
+                    {
+                        AllowDrop = true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Логируем ошибку, но не прерываем инициализацию
+                    System.Diagnostics.Debug.WriteLine($"Warning: Could not enable drag-drop: {ex.Message}");
+                }
+            };
 
             DragEnter += OnDragEnter;
             DragOver += OnDragOver;

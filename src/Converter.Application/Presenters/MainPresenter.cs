@@ -26,6 +26,7 @@ namespace Converter.Application.Presenters
         private readonly IFilePicker _filePicker;
         private readonly ILogger<MainPresenter> _logger;
         private bool _disposed;
+        private bool _clearingInProgress;
         private CancellationTokenSource _cancellationTokenSource;
 
         public MainPresenter(
@@ -451,40 +452,56 @@ namespace Converter.Application.Presenters
 
         private async Task OnClearAllFilesRequestedAsync(object? sender, EventArgs e)
         {
-            if (_viewModel.QueueItems.Count == 0)
+            // Защита от рекурсивных вызовов
+            if (_clearingInProgress)
             {
-                _view.ShowInfo("Очередь уже пуста");
+                _logger.LogWarning("ClearAllFiles already in progress, skipping duplicate call");
                 return;
             }
 
+            _clearingInProgress = true;
+            
             try
             {
-                _view.IsBusy = true;
-                _view.StatusText = "Очистка очереди...";
-                _logger.LogInformation("Clearing all files from queue");
+                if (_viewModel.QueueItems.Count == 0)
+                {
+                    _view.ShowInfo("Очередь уже пуста");
+                    return;
+                }
 
-                var allItems = _viewModel.QueueItems.ToList();
-                
-                // Используем массовое удаление для лучшей производительности
-                var allItemIds = allItems.Select(item => item.Id).ToList();
-                await _queueRepository.RemoveRangeAsync(allItemIds);
+                try
+                {
+                    _view.IsBusy = true;
+                    _view.StatusText = "Очистка очереди...";
+                    _logger.LogInformation("Clearing all files from queue");
 
-                _logger.LogDebug("Cleared {Count} files from queue using batch operation", allItems.Count);
+                    var allItems = _viewModel.QueueItems.ToList();
+                    
+                    // Используем массовое удаление для лучшей производительности
+                    var allItemIds = allItems.Select(item => item.Id).ToList();
+                    await _queueRepository.RemoveRangeAsync(allItemIds);
 
-                // Перезагружаем очередь для синхронизации
-                await LoadQueueAsync();
+                    _logger.LogDebug("Cleared {Count} files from queue using batch operation", allItems.Count);
 
-                _view.StatusText = "Очередь очищена";
-                _view.ShowInfo("Все файлы удалены из очереди");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error in OnClearAllFilesRequested");
-                _view.ShowError($"Ошибка при очистке очереди: {ex.Message}");
+                    // Перезагружаем очередь для синхронизации
+                    await LoadQueueAsync();
+
+                    _view.StatusText = "Очередь очищена";
+                    _view.ShowInfo("Все файлы удалены из очереди");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error in OnClearAllFilesRequested");
+                    _view.ShowError($"Ошибка при очистке очереди: {ex.Message}");
+                }
+                finally
+                {
+                    _view.IsBusy = false;
+                }
             }
             finally
             {
-                _view.IsBusy = false;
+                _clearingInProgress = false;
             }
         }
 

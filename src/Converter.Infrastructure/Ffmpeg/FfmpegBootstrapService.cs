@@ -15,6 +15,8 @@ namespace Converter.Infrastructure.Ffmpeg
     {
         private readonly IFFmpegExecutor _ffmpegExecutor;
         private readonly ILogger<FfmpegBootstrapService> _logger;
+        private CancellationTokenSource? _cancellationTokenSource;
+        private Task? _initializationTask;
 
         public FfmpegBootstrapService(
             IFFmpegExecutor ffmpegExecutor,
@@ -28,30 +30,56 @@ namespace Converter.Infrastructure.Ffmpeg
         {
             try
             {
-                _logger.LogInformation("Starting FFmpeg bootstrap service...");
-
-                // Ensure FFmpeg is available and configured on service start as a safety net.
-                await EnsureFfmpegAsync();
-
+                _logger.LogInformation("Запуск инициализации FFmpeg...");
+                _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                
+                _initializationTask = EnsureFfmpegAsync(_cancellationTokenSource.Token);
+                await _initializationTask;
+                
                 var version = await _ffmpegExecutor.GetVersionAsync(cancellationToken);
                 var firstLine = version?.Split('\n')[0] ?? version;
-                _logger.LogInformation("FFmpeg version: {Version}", firstLine);
+                _logger.LogInformation("FFmpeg успешно инициализирован. Версия: {Version}", firstLine);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to initialize FFmpeg");
+                _logger.LogError(ex, "Ошибка при инициализации FFmpeg");
                 throw;
             }
         }
 
-        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public async Task StopAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                _logger.LogInformation("Остановка FFmpeg сервиса...");
+                
+                // Отменяем все текущие операции FFmpeg
+                _cancellationTokenSource?.Cancel();
+                
+                // Ожидаем завершения текущих операций, но не дольше 5 секунд
+                if (_initializationTask != null && !_initializationTask.IsCompleted)
+                {
+                    await Task.WhenAny(
+                        _initializationTask,
+                        Task.Delay(TimeSpan.FromSeconds(5), cancellationToken)
+                    );
+                }
+                
+                _logger.LogInformation("FFmpeg сервис успешно остановлен");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при остановке FFmpeg сервиса");
+                throw;
+            }
+        }
 
         /// <summary>
         /// Ensures that FFmpeg binaries are available and configured for Xabe.FFmpeg.
         /// Downloads FFmpeg into a per-user application data folder if missing
         /// and validates availability via <see cref="IFFmpegExecutor"/>.
         /// </summary>
-        public async Task EnsureFfmpegAsync()
+        public async Task EnsureFfmpegAsync(CancellationToken cancellationToken = default)
         {
             try
             {

@@ -6,12 +6,14 @@ using Converter.Application.Abstractions;
 using Converter.Application.Presenters;
 using Converter.Application.Services;
 using Converter.Application.ViewModels;
+using Converter.Application.Builders;
 using Converter.Infrastructure.Ffmpeg;
 using Converter.Infrastructure.Notifications;
 using Converter.Infrastructure.Persistence;
 using Converter.Services;
 using Converter.UI;
 using Converter.UI.Controls;
+using Converter.Services.UIServices;
 
 namespace Converter.Infrastructure
 {
@@ -34,11 +36,11 @@ namespace Converter.Infrastructure
         
         public static IServiceCollection ConfigureApplicationServices(this IServiceCollection services, IConfiguration configuration)
         {
-            // Infrastructure services
+            // Application layer services
             services.AddInfrastructureServices(configuration);
             
             // Application layer services
-            services.AddSingleton<IMainView, Form1>();
+            services.AddScoped<IMainView, Form1>();
             services.AddSingleton<MainPresenter>();
             services.AddSingleton<MainViewModel>();
 
@@ -46,6 +48,7 @@ namespace Converter.Infrastructure
             services.AddSingleton<IQueueRepository, QueueRepository>();
             services.AddSingleton<IConversionOrchestrator, ConversionOrchestrator>();
             services.AddSingleton<IConversionUseCase, ConversionUseCase>();
+            services.AddSingleton<IConversionCommandBuilder, ConversionCommandBuilder>();
             services.AddSingleton<IProfileProvider, ProfileProvider>();
             services.AddSingleton<IOutputPathBuilder, OutputPathBuilder>();
             services.AddSingleton<IProgressReporter, UiProgressReporter>();
@@ -55,9 +58,10 @@ namespace Converter.Infrastructure
             // IThemeService is already registered in AddInfrastructureServices()
 
             // Queue processing
-            services.AddSingleton<IQueueProcessor, ChannelQueueProcessor>();
+            services.AddSingleton<IQueueProcessor, QueueProcessor>();
 
             // File system services
+            services.AddScoped<IFileOperationsService, FileOperationsService>();
             services.AddSingleton<IFilePicker, WinFormsFilePicker>();
             services.AddSingleton<IFolderPicker, WinFormsFolderPicker>();
             
@@ -69,6 +73,9 @@ namespace Converter.Infrastructure
             // Register FFmpeg bootstrap as hosted service
             services.AddSingleton<FfmpegBootstrapService>();
             services.AddHostedService(provider => provider.GetRequiredService<FfmpegBootstrapService>());
+            
+            // QueueProcessor наследуется от BackgroundService, поэтому он уже зарегистрирован как hosted service
+            services.AddSingleton<IQueueProcessor, QueueProcessor>();
             
             return services;
         }
