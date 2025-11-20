@@ -22,6 +22,7 @@ namespace Converter.Services
         private Theme? _targetTheme;
         private Theme? _sourceTheme;
         private float _transitionProgress;
+        private bool _disposed = false;
 
         public ThemeManager()
         {
@@ -301,9 +302,18 @@ namespace Converter.Services
 
         public void Dispose()
         {
-            _transitionTimer?.Stop();
-            _transitionTimer?.Dispose();
-            _transitionTimer = null;
+            if (!_disposed)
+            {
+                _transitionTimer?.Stop();
+                _transitionTimer?.Dispose();
+                _transitionTimer = null;
+                _disposed = true;
+            }
+        }
+
+        ~ThemeManager()
+        {
+            Dispose(disposing: false);
         }
     }
 }

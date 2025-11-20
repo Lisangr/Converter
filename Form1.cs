@@ -606,16 +606,8 @@ namespace Converter
 
             if (disposing)
             {
-                _lifecycleCts?.Cancel();
-                _lifecycleCts?.Dispose();
-                _estimateDebounce?.Dispose();
-                _estimateCts?.Dispose();
-                
-                // Отписываемся от событий
-                if (_fileOperationsService != null)
-                {
-                    _fileOperationsService.QueueUpdated -= OnQueueUpdated;
-                }
+                // Полная очистка управляемых ресурсов
+                DisposeManagedResources();
             }
 
             _disposed = true;

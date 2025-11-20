@@ -14,7 +14,7 @@ namespace Converter.Infrastructure.Ffmpeg
     {
         private readonly IFFmpegExecutor _ffmpegExecutor;
         private readonly ILogger<ThumbnailProvider> _logger;
-        private bool _disposed;
+        private bool _disposed = false;
 
         public ThumbnailProvider(
             IFFmpegExecutor ffmpegExecutor,
@@ -89,6 +89,11 @@ namespace Converter.Infrastructure.Ffmpeg
                 // Add any async cleanup if needed
                 await Task.CompletedTask;
             }
+        }
+
+        ~ThumbnailProvider()
+        {
+            Dispose();
         }
     }
 }

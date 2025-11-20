@@ -209,6 +209,11 @@ namespace Converter.Services.UIServices
             }
         }
 
+        ~FileOperationsService()
+        {
+            Dispose(disposing: false);
+        }
+
         // Сохраняем ссылки на обработчики для корректной отписки
         private EventHandler<QueueItem>? _itemAddedHandler;
         private EventHandler<QueueItem>? _itemUpdatedHandler;

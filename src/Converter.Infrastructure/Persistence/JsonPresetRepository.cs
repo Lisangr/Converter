@@ -176,5 +176,10 @@ namespace Converter.Infrastructure.Persistence
                 _cachedPresets = null;
             }
         }
+
+        ~JsonPresetRepository()
+        {
+            Dispose(disposing: false);
+        }
     }
 }

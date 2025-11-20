@@ -13,7 +13,7 @@ namespace Converter.Infrastructure.Ffmpeg
     {
         private readonly string? _ffmpegPath;
         private readonly ILogger<FFmpegExecutor>? _logger;
-        private bool _disposed;
+        private bool _disposed = false;
 
         public FFmpegExecutor(string? ffmpegPath = null, ILogger<FFmpegExecutor>? logger = null)
         {
@@ -200,6 +200,11 @@ namespace Converter.Infrastructure.Ffmpeg
                 _disposed = true;
                 // Add any cleanup if needed
             }
+        }
+
+        ~FFmpegExecutor()
+        {
+            Dispose(disposing: false);
         }
 
         private class ProcessResult

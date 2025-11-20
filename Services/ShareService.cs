@@ -19,6 +19,9 @@ public class ShareService : IShareService, IDisposable
 {
     private bool _disposed = false;
     
+    // Note: All resources (Graphics, Image, Brush, Pen, Font) are properly
+    // disposed using 'using' statements in methods, so no additional cleanup needed
+    
     public ShareReport? GenerateReport(List<QueueItem> completedItems)
     {
         var successfulItems = completedItems
@@ -212,7 +215,15 @@ public class ShareService : IShareService, IDisposable
 
     public void Dispose()
     {
-        _disposed = true;
+        if (!_disposed)
+        {
+            _disposed = true;
+        }
+    }
+
+    ~ShareService()
+    {
+        Dispose(disposing: false);
     }
 }
 

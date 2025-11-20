@@ -13,6 +13,7 @@ namespace Converter.Services
         private NotificationSettings _settings;
         private readonly HashSet<int> _notifiedMilestones = new();
         private SoundPlayer? _soundPlayer;
+        private bool _disposed = false;
         public NotificationService(INotificationSettingsStore settingsStore)
         {
             _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
@@ -143,8 +144,17 @@ namespace Converter.Services
 
         public void Dispose()
         {
-            _soundPlayer?.Stop();
-            _soundPlayer?.Dispose();
+            if (!_disposed)
+            {
+                _soundPlayer?.Stop();
+                _soundPlayer?.Dispose();
+                _disposed = true;
+            }
+        }
+
+        ~NotificationService()
+        {
+            Dispose(disposing: false);
         }
     }
 

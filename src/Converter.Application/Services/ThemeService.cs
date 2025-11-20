@@ -18,6 +18,7 @@ public class ThemeService : IThemeService
     private System.Windows.Forms.Timer? _autoSwitchTimer;
     private DateTime _lastManualThemeChange = DateTime.MinValue;
     private readonly TimeSpan _manualChangeCooldown = TimeSpan.FromMinutes(5);
+    private bool _disposed = false;
 
     public event EventHandler<Theme>? ThemeChanged;
 
@@ -240,9 +241,18 @@ public class ThemeService : IThemeService
 
     public void Dispose()
     {
-        _themeManager.ThemeChanged -= OnManagerThemeChanged;
-        _autoSwitchTimer?.Stop();
-        _autoSwitchTimer?.Dispose();
-        _autoSwitchTimer = null;
+        if (!_disposed)
+        {
+            _themeManager.ThemeChanged -= OnManagerThemeChanged;
+            _autoSwitchTimer?.Stop();
+            _autoSwitchTimer?.Dispose();
+            _autoSwitchTimer = null;
+            _disposed = true;
+        }
+    }
+
+    ~ThemeService()
+    {
+        Dispose(disposing: false);
     }
 }
