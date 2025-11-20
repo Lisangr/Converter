@@ -72,6 +72,15 @@ namespace Converter.Infrastructure.Ffmpeg
             }
         }
 
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                _disposed = true;
+                // Synchronous cleanup - no async operations needed for now
+            }
+        }
+
         public async ValueTask DisposeAsync()
         {
             if (!_disposed)

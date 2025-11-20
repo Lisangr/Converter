@@ -61,20 +61,11 @@ namespace Converter.Application.Presenters
             _queueProcessor.ItemFailed += OnItemFailed;
             _queueProcessor.ProgressChanged += OnProgressChanged;
             _queueProcessor.QueueCompleted += OnQueueCompleted;
-            
-            // Subscribe to view events via async adapters
-            _view.AddFilesRequested += MakeAsyncEventHandler(OnAddFilesRequestedAsync, "adding files");
-            _view.StartConversionRequested += MakeAsyncEventHandler(OnStartConversionRequestedAsync, "starting conversion");
-            _view.CancelConversionRequested += MakeAsyncEventHandler(OnCancelConversionRequestedAsync, "canceling conversion");
-            _view.PresetSelected += OnPresetSelected;
-            _view.FilesDropped += MakeAsyncEventHandler(OnFilesDroppedAsync, "adding dropped files");
-            _view.RemoveSelectedFilesRequested += MakeAsyncEventHandler(OnRemoveSelectedFilesRequestedAsync, "removing selected files");
-            _view.ClearAllFilesRequested += MakeAsyncEventHandler(OnClearAllFilesRequestedAsync, "clearing all files");
-            _view.SettingsChanged += OnSettingsChanged;
 
-            // Subscribe to async events (новый нормализованный подход)
-            _view.AddFilesRequestedAsync += OnAddFilesRequestedAsync;
-            _view.StartConversionRequestedAsync += OnStartConversionRequestedAsync;
+            // Subscribe to async view events (нормализованный подход)
+            _view.PresetSelected += OnPresetSelected;
+            _view.SettingsChanged += OnSettingsChanged;
+            //_view.StartConversionRequestedAsync += OnStartConversionRequestedAsync;
             _view.CancelConversionRequestedAsync += OnCancelConversionRequestedAsync;
             _view.FilesDroppedAsync += OnFilesDroppedAsync;
             _view.RemoveSelectedFilesRequestedAsync += OnRemoveSelectedFilesRequestedAsync;
@@ -179,121 +170,6 @@ namespace Converter.Application.Presenters
             {
                 _logger.LogError(ex, "Error loading queue");
                 _view.ShowError($"Failed to load queue: {ex.Message}");
-            }
-        }
-
-        private async Task OnAddFilesRequestedAsync(object? sender, EventArgs e)
-        {
-            try
-            {
-                _view.IsBusy = true;
-                _view.StatusText = "Adding files...";
-                _logger.LogInformation("Adding files to queue");
-                
-                var filePaths = _filePicker.PickFiles(
-                    "Select files to convert", 
-                    "Video Files|*.mp4;*.avi;*.mkv;*.mov;*.wmv|All Files|*.*");
-                
-                if (filePaths == null || !filePaths.Any())
-                {
-                    _logger.LogInformation("No files selected");
-                    _view.StatusText = "No files selected";
-                    return;
-                }
-
-                var addedCount = 0;
-                foreach (var filePath in filePaths)
-                {
-                    try
-                    {
-                        if (!File.Exists(filePath)) continue;
-                        if (_viewModel.QueueItems.Any(item => item.FilePath == filePath)) 
-                        {
-                            _logger.LogInformation("File already in queue: {FilePath}", filePath);
-                            continue;
-                        }
-
-                        var fileInfo = new FileInfo(filePath);
-                        var outputDir = !string.IsNullOrWhiteSpace(_view.OutputFolder)
-                            ? _view.OutputFolder
-                            : Path.GetDirectoryName(filePath) ?? string.Empty;
-                        var item = new QueueItem
-                        {
-                            Id = Guid.NewGuid(),
-                            FilePath = filePath,
-                            FileSizeBytes = fileInfo.Length,
-                            OutputDirectory = outputDir,
-                            Status = ConversionStatus.Pending,
-                            AddedAt = DateTime.UtcNow
-                        };
-                        
-                        // Добавляем сразу в ViewModel для мгновенного отображения
-                        _viewModel.QueueItems.Add(QueueItemViewModel.FromModel(item));
-                        
-                        // И в репозиторий для персистентности
-                        await _queueRepository.AddAsync(item);
-                        addedCount++;
-                        _logger.LogDebug("Added file to queue: {FilePath}", filePath);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error adding file to queue: {FilePath}", filePath);
-                        _view.ShowError($"Error adding file '{Path.GetFileName(filePath)}': {ex.Message}");
-                    }
-                }
-
-                if (addedCount > 0)
-                {
-                    _view.StatusText = $"Added {addedCount} file(s) to queue";
-                    _view.ShowInfo($"Added {addedCount} file(s) to the queue");
-                    
-                    // Перезагружаем очередь для синхронизации с UI
-                    await LoadQueueAsync();
-                }
-                else
-                {
-                    _view.StatusText = "No new files were added to the queue";
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error in OnAddFilesRequested");
-                _view.ShowError($"Failed to add files: {ex.Message}");
-            }
-            finally
-            {
-                _view.IsBusy = false;
-            }
-        }
-
-        private async Task OnStartConversionRequestedAsync(object? sender, EventArgs e)
-        {
-            try
-            {
-                _logger.LogInformation("Starting conversion");
-                _view.IsBusy = true;
-
-                EnsureProcessingCancellationToken();
-                
-                _logger.LogInformation("Queue items count before start: {Count}", _viewModel.QueueItems.Count);
-                foreach (var item in _viewModel.QueueItems)
-                {
-                    _logger.LogInformation("Queue item: {FileName} - {Status} - {Progress}%", 
-                        item.FileName, item.Status, item.Progress);
-                }
-
-                await _queueProcessor.StartProcessingAsync(_cancellationTokenSource.Token);
-
-                _view.ShowInfo("Conversion started");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error starting conversion");
-                _view.ShowError($"Failed to start conversion: {ex.Message}");
-            }
-            finally
-            {
-                _view.IsBusy = false;
             }
         }
 
@@ -553,8 +429,8 @@ namespace Converter.Application.Presenters
 
                 _logger.LogDebug("Removed {Count} files from queue using batch operation", selectedItems.Count);
 
-                // Перезагружаем очередь для синхронизации
-                await LoadQueueAsync();
+                // НЕ перезагружаем очередь - события от QueueRepository сами обновят UI
+                // await LoadQueueAsync(); // УДАЛЕНО - это было причиной дублирования
 
                 _view.StatusText = $"Удалено файлов: {selectedItems.Count}";
                 _view.ShowInfo($"Удалено файлов: {selectedItems.Count} из очереди");
@@ -609,16 +485,11 @@ namespace Converter.Application.Presenters
             }
         }
 
-        // Async event handlers (новый нормализованный подход)
-        private async Task OnAddFilesRequestedAsync()
-        {
-            await OnAddFilesRequestedAsync(this, EventArgs.Empty);
-        }
-
-        private async Task OnStartConversionRequestedAsync()
+        // Async event handlers (нормализованный подход)
+/*        private async Task OnStartConversionRequestedAsync()
         {
             await OnStartConversionRequestedAsync(this, EventArgs.Empty);
-        }
+        }*/
 
         private async Task OnCancelConversionRequestedAsync()
         {
@@ -638,36 +509,6 @@ namespace Converter.Application.Presenters
         private async Task OnClearAllFilesRequestedAsync()
         {
             await OnClearAllFilesRequestedAsync(this, EventArgs.Empty);
-        }
-
-        // Legacy async event handlers (для обратной совместимости)
-        private EventHandler MakeAsyncEventHandler(Func<object?, EventArgs, Task> handler, string operation)
-        {
-            return (sender, args) =>
-            {
-                _ = HandleViewEventAsync(() => handler(sender, args), operation);
-            };
-        }
-
-        private EventHandler<string[]> MakeAsyncEventHandler(Func<object?, string[], Task> handler, string operation)
-        {
-            return (sender, files) =>
-            {
-                _ = HandleViewEventAsync(() => handler(sender, files), operation);
-            };
-        }
-
-        private async Task HandleViewEventAsync(Func<Task> action, string operation)
-        {
-            try
-            {
-                await action().ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unhandled error while {Operation}", operation);
-                _view.ShowError($"An unexpected error occurred while {operation}: {ex.Message}");
-            }
         }
 
         public void Dispose()
@@ -696,8 +537,8 @@ namespace Converter.Application.Presenters
                 // Отписка от асинхронных событий
                 if (_view != null)
                 {
-                    _view.AddFilesRequestedAsync -= OnAddFilesRequestedAsync;
-                    _view.StartConversionRequestedAsync -= OnStartConversionRequestedAsync;
+                    //_view.AddFilesRequestedAsync -= OnAddFilesRequestedAsync;
+                    //_view.StartConversionRequestedAsync -= OnStartConversionRequestedAsync;
                     _view.CancelConversionRequestedAsync -= OnCancelConversionRequestedAsync;
                     _view.FilesDroppedAsync -= OnFilesDroppedAsync;
                     _view.RemoveSelectedFilesRequestedAsync -= OnRemoveSelectedFilesRequestedAsync;

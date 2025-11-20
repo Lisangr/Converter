@@ -402,8 +402,33 @@ namespace Converter
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            CancelBackgroundOperations();
-            base.OnFormClosing(e);
+            try
+            {
+                // При выходе очищаем очередь и UI, чтобы не оставлять старые элементы в JSON-хранилище
+                try
+                {
+                    ClearAllFiles();
+                }
+                catch { }
+
+                try
+                {
+                    if (_mainPresenter != null)
+                    {
+                        _mainPresenter.OnClearAllFilesRequested().GetAwaiter().GetResult();
+                    }
+                    else
+                    {
+                        ClearQueue();
+                    }
+                }
+                catch { }
+            }
+            finally
+            {
+                CancelBackgroundOperations();
+                base.OnFormClosing(e);
+            }
         }
 
         private void CancelBackgroundOperations()
@@ -493,6 +518,22 @@ namespace Converter
                 // Делегируем удаление в MainPresenter (основная очередь)
                 if (_mainPresenter != null)
                 {
+                    // Сначала синхронизируем UI-файлы с выбранными элементами очереди
+                    if (_queueItemsBinding != null)
+                    {
+                        var selectedItems = _queueItemsBinding
+                            .Where(item => item.IsSelected)
+                            .ToList();
+
+                        foreach (var vm in selectedItems)
+                        {
+                            if (!string.IsNullOrWhiteSpace(vm.FilePath))
+                            {
+                                RemoveFileByPath(vm.FilePath);
+                            }
+                        }
+                    }
+
                     _mainPresenter.OnRemoveSelectedFilesRequested();
                     return;
                 }
@@ -513,12 +554,16 @@ namespace Converter
                 // Делегируем очистку в MainPresenter (основная очередь)
                 if (_mainPresenter != null)
                 {
+                    // Синхронизируем визуальные панели файлов
+                    ClearAllFiles();
+
                     _mainPresenter.OnClearAllFilesRequested();
                     return;
                 }
 
                 // Fallback: используем нормализованный метод
                 ClearQueue();
+                ClearAllFiles();
             }
             catch (Exception ex)
             {
@@ -530,32 +575,128 @@ namespace Converter
 
         public async Task RaiseAddFilesRequestedAsync()
         {
-            AddFilesRequestedAsync?.Invoke();
+            if (AddFilesRequestedAsync == null)
+            {
+                return;
+            }
+
+            var handlers = AddFilesRequestedAsync
+                .GetInvocationList()
+                .Cast<Func<Task>>()
+                .Select(h => h())
+                .ToArray();
+
+            if (handlers.Length == 0)
+            {
+                return;
+            }
+
+            await Task.WhenAll(handlers).ConfigureAwait(false);
         }
 
         public async Task RaiseStartConversionRequestedAsync()
         {
-            StartConversionRequestedAsync?.Invoke();
+            if (StartConversionRequestedAsync == null)
+            {
+                return;
+            }
+
+            var handlers = StartConversionRequestedAsync
+                .GetInvocationList()
+                .Cast<Func<Task>>()
+                .Select(h => h())
+                .ToArray();
+
+            if (handlers.Length == 0)
+            {
+                return;
+            }
+
+            await Task.WhenAll(handlers).ConfigureAwait(false);
         }
 
         public async Task RaiseCancelConversionRequestedAsync()
         {
-            CancelConversionRequestedAsync?.Invoke();
+            if (CancelConversionRequestedAsync == null)
+            {
+                return;
+            }
+
+            var handlers = CancelConversionRequestedAsync
+                .GetInvocationList()
+                .Cast<Func<Task>>()
+                .Select(h => h())
+                .ToArray();
+
+            if (handlers.Length == 0)
+            {
+                return;
+            }
+
+            await Task.WhenAll(handlers).ConfigureAwait(false);
         }
 
         public async Task RaiseFilesDroppedAsync(string[] files)
         {
-            FilesDroppedAsync?.Invoke(files);
+            if (FilesDroppedAsync == null)
+            {
+                return;
+            }
+
+            var handlers = FilesDroppedAsync
+                .GetInvocationList()
+                .Cast<Func<string[], Task>>()
+                .Select(h => h(files))
+                .ToArray();
+
+            if (handlers.Length == 0)
+            {
+                return;
+            }
+
+            await Task.WhenAll(handlers).ConfigureAwait(false);
         }
 
         public async Task RaiseRemoveSelectedFilesRequestedAsync()
         {
-            RemoveSelectedFilesRequestedAsync?.Invoke();
+            if (RemoveSelectedFilesRequestedAsync == null)
+            {
+                return;
+            }
+
+            var handlers = RemoveSelectedFilesRequestedAsync
+                .GetInvocationList()
+                .Cast<Func<Task>>()
+                .Select(h => h())
+                .ToArray();
+
+            if (handlers.Length == 0)
+            {
+                return;
+            }
+
+            await Task.WhenAll(handlers).ConfigureAwait(false);
         }
 
         public async Task RaiseClearAllFilesRequestedAsync()
         {
-            ClearAllFilesRequestedAsync?.Invoke();
+            if (ClearAllFilesRequestedAsync == null)
+            {
+                return;
+            }
+
+            var handlers = ClearAllFilesRequestedAsync
+                .GetInvocationList()
+                .Cast<Func<Task>>()
+                .Select(h => h())
+                .ToArray();
+
+            if (handlers.Length == 0)
+            {
+                return;
+            }
+
+            await Task.WhenAll(handlers).ConfigureAwait(false);
         }
 
         #endregion

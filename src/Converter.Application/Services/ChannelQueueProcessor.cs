@@ -19,6 +19,7 @@ namespace Converter.Application.Services
         private CancellationTokenSource? _processingCts;
         private Task? _processingTask;
         private bool _isProcessing;
+        private bool _disposed;
 
         public event EventHandler<QueueItem> ItemStarted;
         public event EventHandler<QueueItem> ItemCompleted;
@@ -281,6 +282,13 @@ namespace Converter.Application.Services
 
         public async ValueTask DisposeAsync()
         {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+
             _queueRepository.ItemAdded -= OnItemAdded;
 
             _processingCts?.Cancel();

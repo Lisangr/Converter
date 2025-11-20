@@ -66,6 +66,7 @@ namespace Converter
 
                 var mainForm = services.GetRequiredService<IMainView>() as Form;
                 var presenter = services.GetRequiredService<MainPresenter>();
+                var queueProcessor = services.GetService<IQueueProcessor>();
 
                 try
                 {
@@ -85,6 +86,27 @@ namespace Converter
                 }
 
                 System.Windows.Forms.Application.Run(mainForm);
+
+                // Ensure graceful shutdown of application services
+                try
+                {
+                    presenter?.Dispose();
+
+                    if (queueProcessor != null)
+                    {
+                        // Stop processing queue before disposing DI container
+                        queueProcessor.StopProcessingAsync().GetAwaiter().GetResult();
+
+                        // Dispose async/sync resources if implemented
+                        (queueProcessor as IAsyncDisposable)?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                        (queueProcessor as IDisposable)?.Dispose();
+                    }
+                }
+                catch
+                {
+                    // Ignore shutdown errors to avoid masking original exceptions
+                }
+
             }
             catch (Exception ex)
             {

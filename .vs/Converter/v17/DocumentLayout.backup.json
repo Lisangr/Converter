@@ -3,8 +3,22 @@
   "WorkspaceRootPath": "C:\\Users\\User\\source\\repos\\Converter\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\User\\AppData\\Local\\Temp\\.vsdbgsrc\\3bfb239ee9bcda4ea5fb3a3ba15cff3664b65b6c9596925830fb1580fcf04fd6\\ServiceProviderEngineScope.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\form1.ui.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:form1.ui.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\src\\converter.application\\presenters\\mainpresenter.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:src\\converter.application\\presenters\\mainpresenter.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\User\\AppData\\Local\\Temp\\.vsdbgsrc\\90793c3eb31d7122de8c9fc198b40ef620e753d16ec471ad4ebd91d387ca3092\\ThrowHelper.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\src\\converter.application\\abstractions\\imainview.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -13,10 +27,6 @@
     {
       "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\form1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:form1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\form1.ui.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:form1.ui.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\form1.resx||{81828910-B8B3-4D2B-99A3-067027C180C1}",
@@ -62,7 +72,59 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 2,
+              "Title": "Form1.UI.cs",
+              "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.cs",
+              "RelativeDocumentMoniker": "Form1.UI.cs",
+              "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.cs",
+              "RelativeToolTip": "Form1.UI.cs",
+              "ViewState": "AgIAAGcBAAAAAAAAAAAewGsBAABBAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-07T12:10:00.732Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "MainPresenter.cs",
+              "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\src\\Converter.Application\\Presenters\\MainPresenter.cs",
+              "RelativeDocumentMoniker": "src\\Converter.Application\\Presenters\\MainPresenter.cs",
+              "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\src\\Converter.Application\\Presenters\\MainPresenter.cs",
+              "RelativeToolTip": "src\\Converter.Application\\Presenters\\MainPresenter.cs",
+              "ViewState": "AgIAAC8AAAAAAAAAAAAiwEMAAAAOAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-20T14:13:12.292Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "ServiceProviderEngineScope.cs",
+              "DocumentMoniker": "C:\\Users\\User\\AppData\\Local\\Temp\\.vsdbgsrc\\3bfb239ee9bcda4ea5fb3a3ba15cff3664b65b6c9596925830fb1580fcf04fd6\\ServiceProviderEngineScope.cs",
+              "RelativeDocumentMoniker": "..\\..\\..\\AppData\\Local\\Temp\\.vsdbgsrc\\3bfb239ee9bcda4ea5fb3a3ba15cff3664b65b6c9596925830fb1580fcf04fd6\\ServiceProviderEngineScope.cs",
+              "ToolTip": "C:\\Users\\User\\AppData\\Local\\Temp\\.vsdbgsrc\\3bfb239ee9bcda4ea5fb3a3ba15cff3664b65b6c9596925830fb1580fcf04fd6\\ServiceProviderEngineScope.cs",
+              "RelativeToolTip": "..\\..\\..\\AppData\\Local\\Temp\\.vsdbgsrc\\3bfb239ee9bcda4ea5fb3a3ba15cff3664b65b6c9596925830fb1580fcf04fd6\\ServiceProviderEngineScope.cs",
+              "ViewState": "AgIAAIUAAAAAAAAAAAAewJYAAAADAAAAAQAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-20T13:57:54.912Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "ThrowHelper.cs",
+              "DocumentMoniker": "C:\\Users\\User\\AppData\\Local\\Temp\\.vsdbgsrc\\90793c3eb31d7122de8c9fc198b40ef620e753d16ec471ad4ebd91d387ca3092\\ThrowHelper.cs",
+              "RelativeDocumentMoniker": "..\\..\\..\\AppData\\Local\\Temp\\.vsdbgsrc\\90793c3eb31d7122de8c9fc198b40ef620e753d16ec471ad4ebd91d387ca3092\\ThrowHelper.cs",
+              "ToolTip": "C:\\Users\\User\\AppData\\Local\\Temp\\.vsdbgsrc\\90793c3eb31d7122de8c9fc198b40ef620e753d16ec471ad4ebd91d387ca3092\\ThrowHelper.cs [\u0422\u043E\u043B\u044C\u043A\u043E \u0447\u0442\u0435\u043D\u0438\u0435]",
+              "RelativeToolTip": "..\\..\\..\\AppData\\Local\\Temp\\.vsdbgsrc\\90793c3eb31d7122de8c9fc198b40ef620e753d16ec471ad4ebd91d387ca3092\\ThrowHelper.cs [\u0422\u043E\u043B\u044C\u043A\u043E \u0447\u0442\u0435\u043D\u0438\u0435]",
+              "ViewState": "AgIAABMBAAAAAAAAAAAowCUBAAACAAAAAQAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-20T13:20:53.233Z",
+              "EditorCaption": " [\u0422\u043E\u043B\u044C\u043A\u043E \u0447\u0442\u0435\u043D\u0438\u0435]"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
               "Title": "IMainView.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\src\\Converter.Application\\Abstractions\\IMainView.cs",
               "RelativeDocumentMoniker": "src\\Converter.Application\\Abstractions\\IMainView.cs",
@@ -74,7 +136,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 6,
               "Title": "Form1.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Form1.cs",
               "RelativeDocumentMoniker": "Form1.cs",
@@ -86,42 +148,44 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 1,
               "Title": "Program.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Program.cs",
               "RelativeDocumentMoniker": "Program.cs",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\Program.cs",
               "RelativeToolTip": "Program.cs",
-              "ViewState": "AgIAACQAAAAAAAAAAAAYwDgAAAA5AAAAAAAAAA==",
+              "ViewState": "AgIAACYAAAAAAAAAAADgvzgAAAAQAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-16T09:17:41.383Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 6,
+              "DocumentIndex": 9,
               "Title": "Form1.UI.resx",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.resx",
               "RelativeDocumentMoniker": "Form1.UI.resx",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.resx",
               "RelativeToolTip": "Form1.UI.resx",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001005|",
-              "WhenOpened": "2025-11-07T12:17:07.59Z"
+              "WhenOpened": "2025-11-07T12:17:07.59Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 5,
+              "DocumentIndex": 8,
               "Title": "Form1.UI.cs [\u041A\u043E\u043D\u0441\u0442\u0440\u0443\u043A\u0442\u043E\u0440]",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.cs",
               "RelativeDocumentMoniker": "Form1.UI.cs",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.cs [\u041A\u043E\u043D\u0441\u0442\u0440\u0443\u043A\u0442\u043E\u0440]",
               "RelativeToolTip": "Form1.UI.cs [\u041A\u043E\u043D\u0441\u0442\u0440\u0443\u043A\u0442\u043E\u0440]",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-07T12:17:01.283Z"
+              "WhenOpened": "2025-11-07T12:17:01.283Z",
+              "EditorCaption": " [\u041A\u043E\u043D\u0441\u0442\u0440\u0443\u043A\u0442\u043E\u0440]"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 7,
               "Title": "Form1.resx",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Form1.resx",
               "RelativeDocumentMoniker": "Form1.resx",
@@ -129,18 +193,6 @@
               "RelativeToolTip": "Form1.resx",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001005|",
               "WhenOpened": "2025-11-07T12:16:59.585Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 3,
-              "Title": "Form1.UI.cs",
-              "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.cs",
-              "RelativeDocumentMoniker": "Form1.UI.cs",
-              "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.cs",
-              "RelativeToolTip": "Form1.UI.cs",
-              "ViewState": "AgIAANIAAAAAAAAAAAAmwN8AAABBAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-07T12:10:00.732Z"
             }
           ]
         }

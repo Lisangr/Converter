@@ -265,6 +265,33 @@ namespace Converter
             }
         }
 
+        private void SyncQueueSelectionWithFileItem(FileListItem item)
+        {
+            if (_queueItemsBinding == null || _queueGrid == null)
+            {
+                return;
+            }
+
+            // Обновляем IsSelected у элементов очереди по пути файла
+            foreach (var vm in _queueItemsBinding)
+            {
+                vm.IsSelected = string.Equals(vm.FilePath, item.FilePath, StringComparison.OrdinalIgnoreCase);
+            }
+
+            // Обновляем выделение строк в гриде очереди
+            foreach (DataGridViewRow row in _queueGrid.Rows)
+            {
+                if (row.DataBoundItem is Converter.Application.ViewModels.QueueItemViewModel vm)
+                {
+                    row.Selected = vm.IsSelected;
+                }
+                else
+                {
+                    row.Selected = false;
+                }
+            }
+        }
+
         private int EstimateVideoBitrateKbps(int height, string codec, int crf)
         {
             // very rough heuristic based on height, codec and CRF
@@ -332,7 +359,7 @@ namespace Converter
             };
 
             btnAddFiles = CreateStyledButton("➕ Добавить файлы", 0);
-            btnRemoveSelected = CreateStyledButton("➖ Удалить выбранные", 160);
+            //btnRemoveSelected = CreateStyledButton("➖ Удалить выбранные", 160);
             btnClearAll = CreateStyledButton("🗑 Очистить всё", 340);
             _btnShare = CreateStyledButton("📤 Поделиться", 520);
             _btnShare.Enabled = false;
@@ -342,12 +369,19 @@ namespace Converter
             _btnOpenEditor.Enabled = false;
             _btnOpenEditor.Click += OnOpenEditorClick;
 
-            // IMainView: прокидываем в событие AddFilesRequested, реализованное в Form1.cs
+            // IMainView: кнопка добавления файлов использует локальный диалог,
+            // но далее синхронизирует очередь через async-событие FilesDroppedAsync.
             btnAddFiles.Click += btnAddFiles_Click;
-            
-            // File management buttons - wire to IMainView events
-            btnRemoveSelected.Click += (s, e) => RemoveSelectedFilesRequested?.Invoke(this, EventArgs.Empty);
-            btnClearAll.Click += (s, e) => ClearAllFilesRequested?.Invoke(this, EventArgs.Empty);
+
+            // File management buttons - async IMainView events
+            //btnRemoveSelected.Click += async (s, e) => await RaiseRemoveSelectedFilesRequestedAsync();
+            btnClearAll.Click += async (s, e) =>
+            {
+                // Сначала очищаем визуальные панели (filesPanel + DragDropPanel)
+                ClearAllFiles();
+                // Затем синхронизируем очередь и хранилище через презентер
+                await RaiseClearAllFilesRequestedAsync();
+            };
 
             panelLeftTop.Controls.AddRange(new Control[]
             {
@@ -400,10 +434,10 @@ namespace Converter
             splitContainerMain.Panel1.Controls.Add(panelLeftTop);
         }
 
-        private void OnDragDropPanelFilesAdded(object? sender, string[] files)
+        private async void OnDragDropPanelFilesAdded(object? sender, string[] files)
         {
             AddFilesToList(files, syncDragDropPanel: false);
-            FilesDropped?.Invoke(this, files);
+            await RaiseFilesDroppedAsync(files);
         }
 
         private void OnDragDropPanelFileRemoved(object? sender, string filePath)
@@ -536,32 +570,6 @@ namespace Converter
                         if (item.IsSelected != shouldBeSelected)
                         {
                             item.IsSelected = shouldBeSelected;
-                        }
-                    }
-                }
-            };
-
-            // Handle cell clicks for proper selection behavior
-            _queueGrid.CellClick += (sender, e) =>
-            {
-                if (e.RowIndex >= 0 && e.ColumnIndex >= 0)
-                {
-                    var row = _queueGrid.Rows[e.RowIndex];
-                    if (row.DataBoundItem is Converter.Application.ViewModels.QueueItemViewModel vm)
-                    {
-                        // Toggle selection on Ctrl+Click, select only on regular click
-                        if (Control.ModifierKeys == Keys.Control)
-                        {
-                            vm.IsSelected = !vm.IsSelected;
-                        }
-                        else
-                        {
-                            // Single click - select only this item
-                            foreach (var item in _queueBindingSource?.DataSource as System.ComponentModel.BindingList<Converter.Application.ViewModels.QueueItemViewModel> ?? new System.ComponentModel.BindingList<Converter.Application.ViewModels.QueueItemViewModel>())
-                            {
-                                item.IsSelected = false;
-                            }
-                            vm.IsSelected = true;
                         }
                     }
                 }
@@ -1406,10 +1414,14 @@ namespace Converter
                 e.Effect = DragDropEffects.Copy;
         }
 
-        private void Form1_DragDrop(object? sender, DragEventArgs e)
+        private async void Form1_DragDrop(object? sender, DragEventArgs e)
         {
             if (e.Data?.GetData(DataFormats.FileDrop) is string[] files)
-                FilesDropped?.Invoke(this, files);
+            {
+                AddFilesToList(files);
+                await RaiseFilesDroppedAsync(files);
+                DebounceEstimate();
+            }
         }
 
         private void ListView_DragEnter(object? sender, DragEventArgs e)
@@ -1418,12 +1430,12 @@ namespace Converter
                 e.Effect = DragDropEffects.Copy;
         }
 
-        private void ListView_DragDrop(object? sender, DragEventArgs e)
+        private async void ListView_DragDrop(object? sender, DragEventArgs e)
         {
             if (e.Data?.GetData(DataFormats.FileDrop) is string[] files)
             {
                 AddFilesToList(files);
-                FilesDropped?.Invoke(this, files);
+                await RaiseFilesDroppedAsync(files);
                 DebounceEstimate();
             }
         }
@@ -1434,12 +1446,12 @@ namespace Converter
                 e.Effect = DragDropEffects.Copy;
         }
 
-        private void Panel_DragDrop(object? sender, DragEventArgs e)
+        private async void Panel_DragDrop(object? sender, DragEventArgs e)
         {
             if (e.Data?.GetData(DataFormats.FileDrop) is string[] files)
             {
                 AddFilesToList(files);
-                FilesDropped?.Invoke(this, files);
+                await RaiseFilesDroppedAsync(files);
                 DebounceEstimate();
             }
         }
@@ -1451,10 +1463,12 @@ namespace Converter
                 Filter = "Видео файлы|*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.flv;*.webm;*.m4v;*.mpg;*.mpeg|Все файлы|*.*",
                 Multiselect = true
             };
+
             if (ofd.ShowDialog(this) == DialogResult.OK)
             {
                 AddFilesToList(ofd.FileNames);
-                FilesDropped?.Invoke(this, ofd.FileNames);
+                await RaiseFilesDroppedAsync(ofd.FileNames);
+                DebounceEstimate();
             }
         }
 
@@ -1475,6 +1489,9 @@ namespace Converter
                 {
                     _ = RefreshThumbnail(fileItem, e.Position, _lifecycleCts.Token);
                 };
+
+                // Синхронизируем выделение элемента файловой панели с очередью
+                fileItem.SelectionChanged += (s, e) => SyncQueueSelectionWithFileItem(fileItem);
 
                 filesPanel.Controls.Add(fileItem);
 
@@ -1655,8 +1672,20 @@ namespace Converter
             {
                 _dragDropPanel?.RemoveFile(item.FilePath, notify: false);
             }
-
             UpdateEditorButtonState();
+
+            // Дополнительно синхронизируем очередь: помечаем соответствующие элементы как выбранные
+            // и инициируем стандартный сценарий удаления выбранных через IMainView-событие.
+            if (_queueItemsBinding != null)
+            {
+                foreach (var vm in _queueItemsBinding)
+                {
+                    vm.IsSelected = string.Equals(vm.FilePath, item.FilePath, StringComparison.OrdinalIgnoreCase);
+                }
+
+                // Запускаем общий механизм удаления выбранных файлов (Form1 → MainPresenter → QueueRepository)
+                RemoveSelectedFilesRequested?.Invoke(this, EventArgs.Empty);
+            }
         }
 
         private void RemoveFileByPath(string filePath)
@@ -1667,7 +1696,8 @@ namespace Converter
 
             if (item != null)
             {
-                RemoveFileFromList(item, syncDragDropPanel: false);
+                // При удалении по пути синхронизируем обе панели (filesPanel и DragDropPanel)
+                RemoveFileFromList(item, syncDragDropPanel: true);
             }
         }
 
