@@ -17,7 +17,7 @@ using Converter.Application.ViewModels;
 
 namespace Converter
 {
-    public partial class Form1 : Form, IMainView
+    public partial class Form1 : Form, IMainView, IDisposable
     {
         private ThemeSelectorControl? _themeSelector;
         private Button? _themeMenuButton;
@@ -26,7 +26,14 @@ namespace Converter
         private readonly INotificationService _notificationService;
         private readonly IThumbnailProvider _thumbnailProvider;
         private readonly IShareService _shareService;
+        private readonly IFileService _fileService;
         private readonly CancellationTokenSource _lifecycleCts = new();
+        
+        private bool _disposed = false;
+        
+        // Fields for estimation and background operations
+        private System.Timers.Timer? _estimateDebounce;
+        private CancellationTokenSource? _estimateCts;
         
         
 
@@ -117,12 +124,17 @@ namespace Converter
             IThemeService themeService,
             INotificationService notificationService,
             IThumbnailProvider thumbnailProvider,
-            IShareService shareService)
+            IShareService shareService,
+            IFileService fileService)
         {
             _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _thumbnailProvider = thumbnailProvider ?? throw new ArgumentNullException(nameof(thumbnailProvider));
             _shareService = shareService ?? throw new ArgumentNullException(nameof(shareService));
+            _fileService = fileService ?? throw new ArgumentNullException(nameof(fileService));
+
+            // Устанавливаем AllowDrop в конструкторе, до вызова InitializeComponent
+            this.AllowDrop = true;
 
             InitializeComponent();
 
@@ -400,10 +412,13 @@ namespace Converter
             }
         }
 
-        protected override void OnFormClosing(FormClosingEventArgs e)
+        protected override async void OnFormClosing(FormClosingEventArgs e)
         {
             try
             {
+                // Request cancellation of all background operations
+                CancelBackgroundOperations();
+
                 // При выходе очищаем очередь и UI, чтобы не оставлять старые элементы в JSON-хранилище
                 try
                 {
@@ -415,7 +430,7 @@ namespace Converter
                 {
                     if (_mainPresenter != null)
                     {
-                        _mainPresenter.OnClearAllFilesRequested().GetAwaiter().GetResult();
+                        await _mainPresenter.OnClearAllFilesRequested().ConfigureAwait(false);
                     }
                     else
                     {
@@ -426,7 +441,6 @@ namespace Converter
             }
             finally
             {
-                CancelBackgroundOperations();
                 base.OnFormClosing(e);
             }
         }
@@ -471,24 +485,93 @@ namespace Converter
             }
             catch { }
 
+            // Safely dispose notification service
             try
             {
-                _notificationService.Dispose();
+                if (_notificationService is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
             }
             catch { }
 
+            // Safely dispose share service
             try
             {
-                _themeService.Dispose();
+                if (_shareService is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
             }
             catch { }
 
+            // Safely dispose theme service
             try
             {
-                _thumbnailProvider.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                if (_themeService is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
+            catch { }
+
+            // Safely dispose thumbnail provider
+            try
+            {
+                if (_thumbnailProvider is IAsyncDisposable asyncDisposable)
+                {
+                    asyncDisposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                }
+                else if (_thumbnailProvider is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
+            catch { }
+
+            // Safely dispose file service
+            try
+            {
+                if (_fileService is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
             }
             catch { }
         }
+
+        #region IDisposable Implementation
+
+        public void Dispose()
+        {
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    // Dispose managed resources
+                    DisposeManagedResources();
+                }
+
+                // Free unmanaged resources (if any)
+                // Note: WinForms controls handle their own unmanaged resources
+
+                _disposed = true;
+            }
+            base.Dispose(disposing);
+        }
+
+        ~Form1()
+        {
+            Dispose(disposing: false);
+        }
+
+        #endregion
 
         private void OnThemeControlsResize(object? sender, EventArgs e) => PositionThemeControls();
 

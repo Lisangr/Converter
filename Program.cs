@@ -26,47 +26,91 @@ namespace Converter
             System.Windows.Forms.Application.EnableVisualStyles();
             System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
 
-            var configuration = new ConfigurationBuilder()
-                .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
-                .Build();
-
-            using var services = new ServiceCollection()
-                .AddLogging(configure =>
-                    configure.AddDebug()
-                            .SetMinimumLevel(LogLevel.Information))
-                .AddSingleton<IMainView, Form1>()
-                .AddSingleton<MainPresenter>()
-                .AddSingleton<MainViewModel>()
-                .AddSingleton<IQueueRepository, QueueRepository>()
-                .AddSingleton<IConversionCommandBuilder, ConversionCommandBuilder>()
-#if DEBUG
-                .AddSingleton<IConversionOrchestrator, MockConverter>()  // Use mock for testing
-#else
-                .AddSingleton<IConversionOrchestrator, ConversionOrchestrator>()
-#endif
-                .AddSingleton<IConversionUseCase, ConversionUseCase>()
-                .AddSingleton<IProfileProvider, ProfileProvider>()
-                .AddSingleton<IOutputPathBuilder, OutputPathBuilder>()
-                .AddSingleton<IProgressReporter, UiProgressReporter>()
-                .AddSingleton<IThemeManager, ThemeManager>()
-                .AddSingleton<IThemeService, ThemeService>()
-                .AddSingleton<IQueueProcessor, ChannelQueueProcessor>()
-                .AddSingleton<IFilePicker, WinFormsFilePicker>()
-                .AddSingleton<IFolderPicker, WinFormsFolderPicker>()
-                .AddInfrastructureServices(configuration)
-                .BuildServiceProvider();
-
+            IHost? host = null;
+            
             try
             {
-                
-                // Ensure FFmpeg is available and configured before the UI is shown
-                var ffmpegBootstrap = services.GetRequiredService<FfmpegBootstrapService>();
-                ffmpegBootstrap.EnsureFfmpegAsync().GetAwaiter().GetResult();
+                // Создаем базовый хост без сложных сервисов
+                var configuration = new ConfigurationBuilder()
+                    .SetBasePath(Directory.GetCurrentDirectory())
+                    .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                    .Build();
 
-                var mainForm = services.GetRequiredService<IMainView>() as Form;
-                var presenter = services.GetRequiredService<MainPresenter>();
-                var queueProcessor = services.GetService<IQueueProcessor>();
+                host = Host.CreateDefaultBuilder()
+                    .ConfigureServices((context, services) =>
+                    {
+                        services
+                            .AddLogging(configure =>
+                                configure.AddDebug()
+                                        .SetMinimumLevel(LogLevel.Information))
+                            .AddSingleton<IMainView, Form1>()
+                            .AddInfrastructureServices(configuration);
+                    })
+                    .Build();
+
+                host.StartAsync().GetAwaiter().GetResult();
+
+                // Создаем форму вручную, минуя DI
+                using var formScope = host.Services.CreateScope();
+                var formServices = formScope.ServiceProvider;
+                
+                // Создаем форму через её конструктор
+                var mainForm = new Form1(
+                    formServices.GetRequiredService<IThemeService>(),
+                    formServices.GetRequiredService<INotificationService>(),
+                    formServices.GetRequiredService<IThumbnailProvider>(),
+                    formServices.GetRequiredService<IShareService>(),
+                    formServices.GetRequiredService<IFileService>());
+
+                if (mainForm == null)
+                {
+                    MessageBox.Show("Failed to create main form", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                // Инициализируем остальные сервисы
+                var serviceCollection = new ServiceCollection();
+                serviceCollection
+                    .AddLogging(configure =>
+                        configure.AddDebug()
+                                .SetMinimumLevel(LogLevel.Information))
+                    .AddSingleton<IMainView>(mainForm)
+                    .AddSingleton<MainPresenter>()
+                    .AddSingleton<MainViewModel>()
+                    .AddSingleton<IQueueRepository, QueueRepository>()
+                    .AddSingleton<IConversionCommandBuilder, ConversionCommandBuilder>()
+                    .AddSingleton<IConversionOrchestrator, ConversionOrchestrator>()
+                    .AddSingleton<IConversionUseCase, ConversionUseCase>()
+                    .AddSingleton<IProfileProvider, ProfileProvider>()
+                    .AddSingleton<IOutputPathBuilder, OutputPathBuilder>()
+                    .AddSingleton<IProgressReporter, UiProgressReporter>()
+                    .AddSingleton<IThemeManager, ThemeManager>()
+                    .AddSingleton<IThemeService, ThemeService>()
+                    .AddSingleton<IQueueProcessor, ChannelQueueProcessor>()
+                    .AddSingleton<IFilePicker, WinFormsFilePicker>()
+                    .AddSingleton<IFolderPicker, WinFormsFolderPicker>()
+                    .AddSingleton<IFileService, FileService>()
+                    .AddInfrastructureServices(configuration);
+
+                var serviceProvider = serviceCollection.BuildServiceProvider();
+
+                // Получаем презентер и инициализируем его
+                var presenter = serviceProvider.GetRequiredService<MainPresenter>();
+                var queueProcessor = serviceProvider.GetRequiredService<IQueueProcessor>();
+                
+                // Initialize FFmpeg in background
+                var ffmpegBootstrap = serviceProvider.GetRequiredService<FfmpegBootstrapService>();
+                _ = Task.Run(async () => 
+                {
+                    try
+                    {
+                        await ffmpegBootstrap.EnsureFfmpegAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"FFmpeg initialization error: {ex.Message}");
+                    }
+                });
 
                 try
                 {
@@ -98,21 +142,43 @@ namespace Converter
                         queueProcessor.StopProcessingAsync().GetAwaiter().GetResult();
 
                         // Dispose async/sync resources if implemented
-                        (queueProcessor as IAsyncDisposable)?.DisposeAsync().AsTask().GetAwaiter().GetResult();
-                        (queueProcessor as IDisposable)?.Dispose();
+                        if (queueProcessor is IAsyncDisposable asyncDisposable)
+                        {
+                            asyncDisposable.DisposeAsync().GetAwaiter().GetResult();
+                        }
+                        else if (queueProcessor is IDisposable disposable)
+                        {
+                            disposable.Dispose();
+                        }
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Ignore shutdown errors to avoid masking original exceptions
+                    // Log shutdown errors but don't mask original exceptions
+                    System.Diagnostics.Debug.WriteLine($"Shutdown error: {ex.Message}");
                 }
-
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Fatal error: {ex.Message}\n\n{ex.StackTrace}", 
                     "Fatal Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+            finally
+            {
+                try
+                {
+                    if (host != null)
+                    {
+                        host.StopAsync().GetAwaiter().GetResult();
+                        host.Dispose();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Host shutdown error: {ex.Message}");
+                }
+            }
         }
+
     }
 }

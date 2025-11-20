@@ -5,53 +5,114 @@ using System.Threading.Tasks;
 namespace Converter.Application.Services
 {
     /// <summary>
-    /// Простая реализация асинхронного AutoResetEvent для синхронизации задач
+    /// Асинхронный AutoResetEvent для синхронизации задач с поддержкой паузы
     /// </summary>
-    public sealed class AsyncAutoResetEvent
+    public sealed class AsyncAutoResetEvent : IAsyncDisposable
     {
+        private readonly object _lock = new();
         private TaskCompletionSource<bool> _tcs = new();
         private readonly CancellationTokenSource _cts = new();
         private bool _isPaused = false;
+        private bool _disposed = false;
 
         public AsyncAutoResetEvent()
         {
             _tcs.SetResult(true); // Изначально сигнализирован
         }
 
-        public bool IsPaused => _isPaused;
+        public bool IsPaused
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _isPaused;
+                }
+            }
+        }
 
         public async Task WaitAsync(CancellationToken cancellationToken = default)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(AsyncAutoResetEvent));
+
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
-            try
+            var token = linkedCts.Token;
+
+            while (true)
             {
-                await _tcs.Task;
-            }
-            catch (TaskCanceledException) when (linkedCts.Token.IsCancellationRequested)
-            {
-                // Ожидание отменено
+                token.ThrowIfCancellationRequested();
+
+                lock (_lock)
+                {
+                    if (!_isPaused)
+                    {
+                        // Если не на паузе, создаём новый TCS и выходим
+                        _tcs = new TaskCompletionSource<bool>();
+                        return;
+                    }
+                }
+
+                // Вне блокировки ждём сигнала
+                try
+                {
+                    await _tcs.Task.ConfigureAwait(false);
+                    // После получения сигнала проверим снова состояние
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
             }
         }
 
         public void Set()
         {
-            _isPaused = false;
-            
-            // Атомарно заменяем TaskCompletionSource
-            var oldTcs = Interlocked.Exchange(ref _tcs, new TaskCompletionSource<bool>());
-            oldTcs.SetResult(true);
+            if (_disposed)
+                return;
+
+            lock (_lock)
+            {
+                if (_isPaused)
+                {
+                    _isPaused = false;
+                    // Сигнализируем текущий TCS
+                    _tcs.SetResult(true);
+                }
+            }
         }
 
         public void Reset()
         {
-            _isPaused = true;
-            _tcs = new TaskCompletionSource<bool>();
+            if (_disposed)
+                return;
+
+            lock (_lock)
+            {
+                _isPaused = true;
+                // Создаём новый TCS для блокировки новых ожиданий
+                _tcs = new TaskCompletionSource<bool>();
+            }
         }
 
         public void Dispose()
         {
-            _cts.Cancel();
-            _tcs.SetCanceled();
+            if (_disposed)
+                return;
+
+            _disposed = true;
+
+            lock (_lock)
+            {
+                _cts.Cancel();
+                _tcs.SetCanceled();
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            Dispose();
+            await Task.CompletedTask;
         }
     }
 }

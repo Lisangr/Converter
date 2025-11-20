@@ -1,4 +1,5 @@
 using Converter.Application.Abstractions;
+using Converter.Application.Services;
 using Converter.Infrastructure.Ffmpeg;
 using Converter.Infrastructure.Notifications;
 using Converter.Infrastructure.Persistence;
@@ -30,8 +31,15 @@ namespace Converter.Infrastructure
             services.AddSingleton<INotificationSettingsStore, NotificationSettingsStore>();
             services.AddSingleton<INotificationService, NotificationService>();
             
+            // Theme infrastructure
+            services.AddSingleton<IThemeManager, ThemeManager>();
+            services.AddSingleton<IThemeService, ThemeService>();
+            
             // Share service
             services.AddSingleton<IShareService, ShareService>();
+            
+            // File service
+            services.AddSingleton<IFileService, FileService>();
             
             return services;
         }

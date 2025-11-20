@@ -62,10 +62,13 @@ namespace Converter.Application.Presenters
             _queueProcessor.ProgressChanged += OnProgressChanged;
             _queueProcessor.QueueCompleted += OnQueueCompleted;
 
+            // Subscribe to sync view events
+            _view.StartConversionRequested += OnStartConversionRequested;
+
             // Subscribe to async view events (нормализованный подход)
             _view.PresetSelected += OnPresetSelected;
             _view.SettingsChanged += OnSettingsChanged;
-            //_view.StartConversionRequestedAsync += OnStartConversionRequestedAsync;
+            _view.StartConversionRequestedAsync += OnStartConversionRequestedAsync;
             _view.CancelConversionRequestedAsync += OnCancelConversionRequestedAsync;
             _view.FilesDroppedAsync += OnFilesDroppedAsync;
             _view.RemoveSelectedFilesRequestedAsync += OnRemoveSelectedFilesRequestedAsync;
@@ -486,10 +489,42 @@ namespace Converter.Application.Presenters
         }
 
         // Async event handlers (нормализованный подход)
-/*        private async Task OnStartConversionRequestedAsync()
+        private void OnStartConversionRequested(object? sender, EventArgs e)
         {
-            await OnStartConversionRequestedAsync(this, EventArgs.Empty);
-        }*/
+            // Delegate to async version to ensure proper async handling
+            _ = Task.Run(async () => await OnStartConversionRequestedAsync());
+        }
+
+        private async Task OnStartConversionRequestedAsync()
+        {
+            try
+            {
+                _logger.LogInformation("Start conversion requested");
+                
+                if (_viewModel.QueueItems.Count == 0)
+                {
+                    _view.ShowInfo("Нет файлов для конвертации");
+                    return;
+                }
+
+                _view.IsBusy = true;
+                _view.StatusText = "Запуск конвертации...";
+                
+                // Start the queue processor
+                await _queueProcessor.StartProcessingAsync(_cancellationTokenSource.Token);
+                
+                _view.StatusText = "Конвертация запущена";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error starting conversion");
+                _view.ShowError($"Ошибка при запуске конвертации: {ex.Message}");
+            }
+            finally
+            {
+                _view.IsBusy = false;
+            }
+        }
 
         private async Task OnCancelConversionRequestedAsync()
         {
@@ -538,7 +573,8 @@ namespace Converter.Application.Presenters
                 if (_view != null)
                 {
                     //_view.AddFilesRequestedAsync -= OnAddFilesRequestedAsync;
-                    //_view.StartConversionRequestedAsync -= OnStartConversionRequestedAsync;
+                    _view.StartConversionRequested -= OnStartConversionRequested;
+                    _view.StartConversionRequestedAsync -= OnStartConversionRequestedAsync;
                     _view.CancelConversionRequestedAsync -= OnCancelConversionRequestedAsync;
                     _view.FilesDroppedAsync -= OnFilesDroppedAsync;
                     _view.RemoveSelectedFilesRequestedAsync -= OnRemoveSelectedFilesRequestedAsync;

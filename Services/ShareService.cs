@@ -15,8 +15,10 @@ using Converter.Models;
 
 namespace Converter.Services;
 
-public class ShareService : IShareService
+public class ShareService : IShareService, IDisposable
 {
+    private bool _disposed = false;
+    
     public ShareReport? GenerateReport(List<QueueItem> completedItems)
     {
         var successfulItems = completedItems
@@ -206,6 +208,11 @@ public class ShareService : IShareService
         if (ts.TotalMinutes >= 1)
             return $"{(int)ts.TotalMinutes}м {ts.Seconds}с";
         return $"{ts.Seconds}с";
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
     }
 }
 

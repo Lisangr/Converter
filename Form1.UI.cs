@@ -87,8 +87,6 @@ namespace Converter
         // Estimation
         private Services.EstimationService _estimationService = new Services.EstimationService();
         private UI.Controls.EstimatePanel? _estimatePanel;
-        private System.Windows.Forms.Timer? _estimateDebounce;
-        private CancellationTokenSource? _estimateCts;
 
         // MVVM binding helpers
         private BindingSource? _queueBindingSource;
@@ -105,165 +103,13 @@ namespace Converter
             InitializeAdvancedTheming();
         }
 
-        private void InitEstimateDebounce()
-        {
-            _estimateDebounce = new System.Windows.Forms.Timer();
-            _estimateDebounce.Interval = 300;
-            _estimateDebounce.Tick += (s, e) =>
-            {
-                _estimateDebounce?.Stop();
-                _ = RecomputeEstimateAsync();
-            };
-        }
+        
 
-        private void WireEstimateTriggers()
-        {
-            // Guard: avoid duplicate handlers
-            cbVideoCodec.SelectedIndexChanged -= EstimateTriggerHandler;
-            cbAudioCodec.SelectedIndexChanged -= EstimateTriggerHandler;
-            cbAudioBitrate.SelectedIndexChanged -= EstimateTriggerHandler;
-            chkEnableAudio.CheckedChanged -= EstimateTriggerHandler;
-            cbQuality.SelectedIndexChanged -= EstimateTriggerHandler;
-            cbPreset.SelectedIndexChanged -= EstimateTriggerHandler;
-            nudPercent.ValueChanged -= EstimateTriggerHandler;
-            rbUsePreset.CheckedChanged -= EstimateTriggerHandler;
-            rbUsePercent.CheckedChanged -= EstimateTriggerHandler;
+        
 
-            cbVideoCodec.SelectedIndexChanged += EstimateTriggerHandler;
-            cbAudioCodec.SelectedIndexChanged += EstimateTriggerHandler;
-            cbAudioBitrate.SelectedIndexChanged += EstimateTriggerHandler;
-            chkEnableAudio.CheckedChanged += EstimateTriggerHandler;
-            cbQuality.SelectedIndexChanged += EstimateTriggerHandler;
-            cbPreset.SelectedIndexChanged += EstimateTriggerHandler;
-            nudPercent.ValueChanged += EstimateTriggerHandler;
-            rbUsePreset.CheckedChanged += EstimateTriggerHandler;
-            rbUsePercent.CheckedChanged += EstimateTriggerHandler;
-        }
+        
 
-        private void EstimateTriggerHandler(object? sender, EventArgs e) => DebounceEstimate();
-
-        private void DebounceEstimate()
-        {
-            if (_estimatePanel == null) return;
-            _estimatePanel.ShowCalculating();
-            _estimateDebounce?.Stop();
-            _estimateDebounce?.Start();
-        }
-
-        private async Task RecomputeEstimateAsync()
-        {
-            try
-            {
-                _estimateCts?.Cancel();
-                _estimateCts = new CancellationTokenSource();
-                var ct = _estimateCts.Token;
-
-                if (filesPanel.Controls.Count == 0)
-                {
-                    _estimatePanel?.ShowCalculating();
-                    return;
-                }
-
-                long totalInput = 0;
-                long totalOutput = 0;
-                TimeSpan totalTime = TimeSpan.Zero;
-
-                foreach (FileListItem item in filesPanel.Controls)
-                {
-                    var path = item.FilePath;
-                    if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) continue;
-
-                    // Get file info
-                    var fileInfo = new System.IO.FileInfo(path);
-                    var f = new FileConversionInfo 
-                    { 
-                        FilePath = path,
-                        Width = 1920, // Default values - will be updated by ProbeFileAsync
-                        Height = 1080,
-                        Duration = TimeSpan.FromSeconds(180) // Default 3 minutes
-                    };
-
-                    // Determine target resolution
-                    int? targetH = null;
-                    int? targetW = null;
-                    if (rbUsePreset.Checked && cbPreset.SelectedItem is string pres)
-                    {
-                        targetH = PresetToHeight(pres);
-                    }
-                    else if (rbUsePercent.Checked)
-                    {
-                        if (f.Height > 0)
-                            targetH = Math.Max(2, (int)Math.Round(f.Height * (decimal)nudPercent.Value / 100m));
-                    }
-
-                    if (targetH.HasValue && f.Height > 0 && f.Width > 0)
-                    {
-                        double scale = targetH.Value / (double)f.Height;
-                        targetW = Math.Max(2, (int)Math.Round(f.Width * scale));
-                        // make even
-                        if (targetW % 2 != 0) targetW++;
-                        if (targetH.Value % 2 != 0) targetH++;
-                    }
-
-                    // Determine codec and CRF -> approximate bitrate
-                    var vCodec = ExtractCodecName(cbVideoCodec.SelectedItem?.ToString() ?? "libx264");
-                    int crf = ExtractCRF(cbQuality.SelectedItem?.ToString() ?? "CRF 23");
-
-                    int audioKbps = 0;
-                    bool audioCopy = false;
-                    if (chkEnableAudio.Checked)
-                    {
-                        var selAudio = cbAudioCodec.SelectedItem?.ToString() ?? string.Empty;
-                        if (selAudio.StartsWith("copy", StringComparison.OrdinalIgnoreCase))
-                        {
-                            audioCopy = true;
-                        }
-                        else
-                        {
-                            var s = cbAudioBitrate.SelectedItem?.ToString() ?? "128k";
-                            if (s.EndsWith("k", StringComparison.OrdinalIgnoreCase)) s = s[..^1];
-                            int.TryParse(s, out audioKbps);
-                            if (audioKbps == 0) audioKbps = 128;
-                        }
-                    }
-
-                    var est = await _estimationService.EstimateConversion(
-                        path,
-                        0,
-                        targetW,
-                        targetH,
-                        vCodec,
-                        chkEnableAudio.Checked,
-                        audioKbps,
-                        crf,
-                        audioCopy,
-                        ct);
-
-                    totalInput += est.InputFileSizeBytes;
-                    totalOutput += est.EstimatedOutputSizeBytes;
-                    totalTime += est.EstimatedDuration;
-                }
-
-                var summary = new ConversionEstimate
-                {
-                    InputFileSizeBytes = totalInput,
-                    EstimatedOutputSizeBytes = totalOutput,
-                    EstimatedDuration = totalTime,
-                    CompressionRatio = totalInput > 0 ? totalOutput / (double)totalInput : 0,
-                    SpaceSavedBytes = Math.Max(0, totalInput - totalOutput)
-                };
-
-                _estimatePanel?.UpdateEstimate(summary);
-            }
-            catch (OperationCanceledException)
-            {
-                // ignore
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"Ошибка оценки: {ex.Message}");
-            }
-        }
+        
 
         private void SyncQueueSelectionWithFileItem(FileListItem item)
         {
@@ -325,7 +171,6 @@ namespace Converter
             this.MinimumSize = new Size(1100, 650);
             this.ClientSize = new Size(1300, 750);
             this.BackColor = Color.FromArgb(240, 240, 245);
-            this.AllowDrop = true;
             this.DragEnter += Form1_DragEnter;
             this.DragDrop += Form1_DragDrop;
 
@@ -1107,7 +952,20 @@ namespace Converter
             btnStart.ForeColor = Color.White;
             btnStart.FlatAppearance.BorderSize = 0;
             // IMainView: запуск конвертации
-            btnStart.Click += (s, e) => StartConversionRequested?.Invoke(this, EventArgs.Empty);
+            btnStart.Click += async (s, e) => 
+            {
+                try
+                {
+                    await RaiseStartConversionRequestedAsync();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Ошибка при запуске конвертации: {ex.Message}", 
+                        "Ошибка", 
+                        MessageBoxButtons.OK, 
+                        MessageBoxIcon.Error);
+                }
+            };
 
             btnStop = CreateStyledButton("⏹ Остановить", 180);
             btnStop.Top = _estimatePanel.Bottom + 10;
@@ -1562,23 +1420,7 @@ namespace Converter
             return int.TryParse(sanitized, out var parsed) ? parsed : null;
         }
 
-        private Image CreatePlaceholderThumbnail(int width, int height, string text)
-        {
-            var bmp = new Bitmap(width, height);
-            using (var g = Graphics.FromImage(bmp))
-            {
-                g.Clear(Color.FromArgb(50, 50, 50));
-
-                using var font = new Font("Segoe UI", Math.Min(width, height) / 8);
-                var textSize = g.MeasureString(text, font);
-                var textX = (width - textSize.Width) / 2;
-                var textY = (height - textSize.Height) / 2;
-
-                g.DrawString(text, font, Brushes.White, textX, textY);
-            }
-
-            return bmp;
-        }
+        
 
         private async Task LoadThumbnailAsync(FileListItem item, CancellationToken ct)
         {
@@ -1594,14 +1436,16 @@ namespace Converter
                     return;
                 }
 
-                item.Thumbnail = CreatePlaceholderThumbnail(120, 90, "⏳");
+                item.Thumbnail = _fileService.CreatePlaceholderThumbnail(120, 90, "⏳");
 
-                using var stream = await _thumbnailProvider.GetThumbnailAsync(item.FilePath, 120, 90, ct);
+                var thumbnail = await _fileService.GetThumbnailAsync(item.FilePath, 120, 90, ct);
+                
                 if (ct.IsCancellationRequested || item.IsDisposed || IsDisposed)
                 {
                     return;
                 }
-                item.Thumbnail = Image.FromStream(stream);
+                
+                item.Thumbnail = thumbnail;
             }
             catch (OperationCanceledException)
             {
@@ -1615,7 +1459,7 @@ namespace Converter
             {
                 if (!ct.IsCancellationRequested && !item.IsDisposed)
                 {
-                    item.Thumbnail = CreatePlaceholderThumbnail(120, 90, "❌");
+                    item.Thumbnail = _fileService.CreatePlaceholderThumbnail(120, 90, "❌");
                     AppendLog($"Ошибка загрузки превью: {ex.Message}");
                 }
             }
@@ -1635,14 +1479,16 @@ namespace Converter
                     return;
                 }
 
-                item.Thumbnail = CreatePlaceholderThumbnail(120, 90, "⏳");
+                item.Thumbnail = _fileService.CreatePlaceholderThumbnail(120, 90, "⏳");
 
-                using var stream = await _thumbnailProvider.GetThumbnailAsync(item.FilePath, 120, 90, ct);
+                var thumbnail = await _fileService.GetThumbnailAsync(item.FilePath, 120, 90, ct);
+                
                 if (ct.IsCancellationRequested || item.IsDisposed || IsDisposed)
                 {
                     return;
                 }
-                item.Thumbnail = Image.FromStream(stream);
+                
+                item.Thumbnail = thumbnail;
             }
             catch (OperationCanceledException)
             {
@@ -1656,7 +1502,7 @@ namespace Converter
             {
                 if (!ct.IsCancellationRequested && !item.IsDisposed)
                 {
-                    item.Thumbnail = CreatePlaceholderThumbnail(120, 90, "❌");
+                    item.Thumbnail = _fileService.CreatePlaceholderThumbnail(120, 90, "❌");
                     AppendLog($"Ошибка обновления превью: {ex.Message}");
                 }
             }
@@ -1912,7 +1758,7 @@ namespace Converter
             }
         }
 
-        private async Task SendCompletionNotificationAsync((int total, int ok, int failed, List<QueueItem> processedItems) result, DateTime startTime)
+        private async Task SendCompletionNotificationAsync((int total, int ok, int failed, List<QueueItem> processedItems) result, DateTime startTime, CancellationToken cancellationToken = default)
         {
             if (_notificationService == null)
             {
@@ -2500,6 +2346,177 @@ namespace Converter
             public TimeSpan Duration { get; set; }
             public int Width { get; set; }
             public int Height { get; set; }
+        }
+
+        // Debounce functionality for estimation updates
+        private System.Windows.Forms.Timer _estimateDebounceTimer = new System.Windows.Forms.Timer();
+        private bool _estimatePending = false;
+
+        private void InitEstimateDebounce()
+        {
+            _estimateDebounceTimer.Interval = 500; // 500ms debounce
+            _estimateDebounceTimer.Tick += EstimateDebounceTimer_Tick;
+            _estimateDebounceTimer.Stop();
+        }
+
+        private void EstimateDebounceTimer_Tick(object? sender, EventArgs e)
+        {
+            _estimateDebounceTimer.Stop();
+            _estimatePending = false;
+            _ = UpdateEstimateAsync();
+        }
+
+        private void DebounceEstimate()
+        {
+            if (_estimatePending)
+            {
+                _estimateDebounceTimer.Stop();
+            }
+            
+            _estimatePending = true;
+            _estimateDebounceTimer.Start();
+        }
+
+        private async Task UpdateEstimateAsync()
+        {
+            try
+            {
+                if (_estimatePanel == null) return;
+
+                var files = GetCurrentFiles();
+                if (files.Length == 0)
+                {
+                    _estimatePanel.ShowCalculating();
+                    return;
+                }
+
+                // Calculate cumulative estimate
+                var totalEstimate = new Converter.Models.ConversionEstimate
+                {
+                    InputFileSizeBytes = 0,
+                    EstimatedOutputSizeBytes = 0,
+                    EstimatedDuration = TimeSpan.Zero,
+                    CompressionRatio = 0,
+                    SpaceSavedBytes = 0
+                };
+
+                int processedFiles = 0;
+                foreach (var file in files)
+                {
+                    if (!System.IO.File.Exists(file)) continue;
+
+                    try
+                    {
+                        var settings = CreateConversionSettings();
+                        var format = (settings.ContainerFormat ?? "mp4").ToLowerInvariant();
+                        var videoCodec = settings.VideoCodec ?? "libx264";
+                        var audioCodec = settings.AudioCodec ?? "aac";
+                        var audioBitrate = settings.AudioBitrate ?? 128;
+                        var crf = settings.Crf ?? 23;
+
+                        int? targetWidth = null;
+                        int? targetHeight = null;
+                        
+                        // Resolution handling
+                        if (rbUsePreset.Checked && cbPreset.SelectedItem is string preset)
+                        {
+                            targetHeight = PresetToHeight(preset);
+                        }
+                        else if (rbUsePercent.Checked)
+                        {
+                            // Dynamic scaling based on percentage
+                            targetHeight = null; // Will be calculated as percentage
+                        }
+
+                        var estimate = await _estimationService.EstimateConversion(
+                            file,
+                            0, // Let service determine video bitrate
+                            targetWidth,
+                            targetHeight,
+                            videoCodec,
+                            chkEnableAudio.Checked,
+                            audioBitrate,
+                            crf,
+                            false, // audioCopy - we'll determine this based on codec selection
+                            CancellationToken.None);
+
+                        totalEstimate.InputFileSizeBytes += estimate.InputFileSizeBytes;
+                        totalEstimate.EstimatedOutputSizeBytes += estimate.EstimatedOutputSizeBytes;
+                        totalEstimate.EstimatedDuration = totalEstimate.EstimatedDuration.Add(estimate.EstimatedDuration);
+                        totalEstimate.SpaceSavedBytes += estimate.SpaceSavedBytes;
+                        
+                        processedFiles++;
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLog($"Ошибка оценки файла {System.IO.Path.GetFileName(file)}: {ex.Message}");
+                    }
+                }
+
+                if (processedFiles > 0)
+                {
+                    // Calculate overall compression ratio
+                    totalEstimate.CompressionRatio = totalEstimate.EstimatedOutputSizeBytes > 0 
+                        ? Math.Min(1.0, Math.Max(0.0, totalEstimate.EstimatedOutputSizeBytes / (double)Math.Max(1, totalEstimate.InputFileSizeBytes)))
+                        : 0;
+
+                    _estimatePanel.UpdateEstimate(totalEstimate);
+                }
+                else
+                {
+                    _estimatePanel.ShowCalculating();
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Ошибка обновления оценки: {ex.Message}");
+                _estimatePanel?.ShowCalculating();
+            }
+        }
+
+        private string[] GetCurrentFiles()
+        {
+            if (_dragDropPanel != null)
+            {
+                return _dragDropPanel.GetFilePaths();
+            }
+            
+            if (filesPanel != null)
+            {
+                return filesPanel.Controls
+                    .OfType<FileListItem>()
+                    .Select(item => item.FilePath)
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .ToArray();
+            }
+
+            return Array.Empty<string>();
+        }
+
+        private void WireEstimateTriggers()
+        {
+            // Wire up all the controls that should trigger estimate updates
+            var controls = new Control[]
+            {
+                cbFormat, cbVideoCodec, cbQuality, cbPreset, nudPercent,
+                chkEnableAudio, cbAudioCodec, cbAudioBitrate,
+                txtOutputFolder, chkCreateConvertedFolder, cbNamingPattern,
+                rbUsePreset, rbUsePercent
+            };
+
+            foreach (var control in controls)
+            {
+                if (control is ComboBox comboBox)
+                    comboBox.SelectedIndexChanged += (s, e) => DebounceEstimate();
+                else if (control is NumericUpDown numericUpDown)
+                    numericUpDown.ValueChanged += (s, e) => DebounceEstimate();
+                else if (control is CheckBox checkBox)
+                    checkBox.CheckedChanged += (s, e) => DebounceEstimate();
+                else if (control is RadioButton radioButton)
+                    radioButton.CheckedChanged += (s, e) => DebounceEstimate();
+                else if (control is TextBox textBox)
+                    textBox.TextChanged += (s, e) => DebounceEstimate();
+            }
         }
     }
 }

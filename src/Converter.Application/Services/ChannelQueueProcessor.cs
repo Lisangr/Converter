@@ -60,19 +60,30 @@ namespace Converter.Application.Services
             _logger.LogInformation("Starting queue processor");
             _isProcessing = true;
 
+            // Create a new CTS for this processing session
+            _processingCts?.Dispose();
             _processingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var token = _processingCts.Token;
 
             _processingTask = ProcessQueueAsync(token);
 
-            // Загружаем существующие элементы из очереди
-            var pendingItems = await _queueRepository.GetPendingItemsAsync();
-            foreach (var item in pendingItems)
+            try
             {
-                await WriteItemToChannelAsync(item, token);
-            }
+                // Load existing items from the queue
+                var pendingItems = await _queueRepository.GetPendingItemsAsync();
+                foreach (var item in pendingItems)
+                {
+                    token.ThrowIfCancellationRequested();
+                    await WriteItemToChannelAsync(item, token).ConfigureAwait(false);
+                }
 
-            _logger.LogInformation("Queue processor started");
+                _logger.LogInformation("Queue processor started");
+            }
+            catch (OperationCanceledException)
+            {
+                await StopProcessingAsync().ConfigureAwait(false);
+                throw;
+            }
         }
 
         public async Task StopProcessingAsync()
@@ -82,17 +93,22 @@ namespace Converter.Application.Services
 
             _logger.LogInformation("Stopping queue processor");
 
+            // Cancel the current processing
             _processingCts?.Cancel();
 
             if (_processingTask != null)
             {
                 try
                 {
-                    await _processingTask;
+                    await _processingTask.ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
-                    // Ожидается при завершении работы
+                    // Expected during shutdown
+                }
+                finally
+                {
+                    _processingTask = null;
                 }
             }
 
@@ -110,15 +126,15 @@ namespace Converter.Application.Services
             _logger.LogInformation("Queue processor paused");
         }
 
-        public Task ResumeProcessingAsync()
+        public async Task ResumeProcessingAsync()
         {
             if (!IsRunning || !IsPaused)
-                return Task.CompletedTask;
+                return;
 
             _logger.LogInformation("Resuming queue processor");
             _pauseEvent.Set();
             _logger.LogInformation("Queue processor resumed");
-            return Task.CompletedTask;
+            await Task.CompletedTask;
         }
 
         public async Task ProcessItemAsync(QueueItem item, CancellationToken cancellationToken = default)
@@ -215,10 +231,13 @@ namespace Converter.Application.Services
                 {
                     try
                     {
-                        // Ожидаем снятия паузы
-                        await _pauseEvent.WaitAsync(stoppingToken).ConfigureAwait(false);
+                        // Handle pausing with proper cancellation
+                        while (IsPaused)
+                        {
+                            await Task.Delay(100, stoppingToken).ConfigureAwait(false);
+                        }
 
-                        await ProcessItemAsync(item, stoppingToken);
+                        await ProcessItemAsync(item, stoppingToken).ConfigureAwait(false);
                     }
                     catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                     {
@@ -226,13 +245,13 @@ namespace Converter.Application.Services
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Error processing queue item {ItemId}", item.Id);
+                        _logger.LogError(ex, "Error processing queue item {ItemId}", item?.Id);
                     }
                 }
             }
             catch (OperationCanceledException)
             {
-                // Ожидается при завершении работы
+                // Expected during shutdown
             }
             catch (Exception ex)
             {
@@ -247,29 +266,47 @@ namespace Converter.Application.Services
 
         private async Task WriteItemToChannelAsync(QueueItem item, CancellationToken cancellationToken = default)
         {
-            if (item == null)
+            if (item == null || _disposed)
                 return;
 
             try
             {
                 while (await _itemChannel.Writer.WaitToWriteAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    if (_itemChannel.Writer.TryWrite(item))
+                    try
                     {
+                        // Use WriteAsync instead of TryWrite for better backpressure handling
+                        await _itemChannel.Writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
                         return;
                     }
+                    catch (ChannelClosedException)
+                    {
+                        _logger.LogWarning("Channel was closed while trying to write item {ItemId}", item.Id);
+                        return;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        _logger.LogInformation("Writing item {ItemId} was cancelled", item.Id);
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error writing item {ItemId} to channel", item.Id);
+                        // Add a small delay before retry to prevent tight loop on error
+                        await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+                    }
                 }
+
+                _logger.LogWarning("Failed to enqueue item {ItemId}: channel is closed", item.Id);
             }
             catch (OperationCanceledException)
             {
-                // Игнорируем отмену, вызванную завершением процессора
+                // Expected during shutdown
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to enqueue item {ItemId}", item.Id);
+                _logger.LogError(ex, "Unexpected error while writing item {ItemId} to channel", item.Id);
             }
-
-            _logger.LogWarning("Failed to enqueue item {ItemId}: item channel is closed", item.Id);
         }
 
         private void OnItemAdded(object? sender, QueueItem item)
