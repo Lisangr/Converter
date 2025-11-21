@@ -1,21 +1,34 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Converter.Application.Models;
+using Converter.Services;
+using FluentAssertions;
 using Xunit;
 
 namespace Converter.Tests.UnitTests.Services.AudioVideo;
 
 public class TimelineEditingServiceTests
 {
-    [Fact(Skip = "Requires timeline editing implementation")]
-    public void MoveSegment_ShouldUpdateOffsets()
+    [Fact]
+    public async Task CutToSingleFileAsync_WithEmptyInputPath_ShouldThrow()
     {
+        // Act
+        Func<Task> act = () => TimelineEditingService.CutToSingleFileAsync("", "out.mp4", Array.Empty<TimelineSegment>(), SegmentEditMode.KeepOnly);
+
+        // Assert
+        await act.Should().ThrowAsync<ArgumentNullException>()
+            .WithParameterName("inputPath");
     }
 
-    [Fact(Skip = "Requires timeline editing implementation")]
-    public void TrimSegment_ShouldAdjustDuration()
+    [Fact]
+    public async Task CutToSingleFileAsync_WithEmptyOutputPath_ShouldThrow()
     {
-    }
+        // Act
+        Func<Task> act = () => TimelineEditingService.CutToSingleFileAsync("in.mp4", "", Array.Empty<TimelineSegment>(), SegmentEditMode.KeepOnly);
 
-    [Fact(Skip = "Requires timeline editing implementation")]
-    public void InsertSegment_ShouldShiftFollowingSegments()
-    {
+        // Assert
+        await act.Should().ThrowAsync<ArgumentNullException>()
+            .WithParameterName("outputPath");
     }
 }

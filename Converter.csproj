@@ -8,6 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <PlatformTarget>x64</PlatformTarget>
     <StartupObject>Converter.Program</StartupObject>
+    <SubSystem>Windows</SubSystem>
   </PropertyGroup>
 
   <!-- Exclude generated files from nested projects (src/**/obj, src/**/bin) to prevent duplicate assembly attributes -->

@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -20,9 +21,22 @@ namespace Converter
 {
     internal static class Program
     {
+        // Windows API для скрытия консольного окна
+        [DllImport("kernel32.dll")]
+        private static extern IntPtr GetConsoleWindow();
+
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        private const int SW_HIDE = 0;
+        private const int SW_SHOW = 5;
+
         [System.STAThread]
         static int Main(string[] args)
         {
+            // Скрываем консольное окно при старте (если оно есть)
+            HideConsoleWindow();
+
             System.Windows.Forms.Application.EnableVisualStyles();
             System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
 
@@ -40,16 +54,26 @@ namespace Converter
             }
         }
 
+        private static void HideConsoleWindow()
+        {
+            try
+            {
+                var consoleWindow = GetConsoleWindow();
+                if (consoleWindow != IntPtr.Zero)
+                {
+                    ShowWindow(consoleWindow, SW_HIDE);
+                }
+            }
+            catch
+            {
+                // Игнорируем ошибки - консольного окна может и не быть
+            }
+        }
+
+
         private static int RunApplication(string[] args)
         {
             using var cts = new CancellationTokenSource();
-
-            // Обработка завершения через Ctrl+C (на всякий случай, если консоль подключена)
-            Console.CancelKeyPress += (s, e) =>
-            {
-                e.Cancel = true;
-                cts.Cancel();
-            };
 
             IHost? host = null;
 

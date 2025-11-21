@@ -46,7 +46,8 @@ public class XmlPresetLoader
 <presets>
 </presets>";
 
-        using var writer = new StreamWriter(stream);
+        // Не закрываем внешний поток, ответственность за его Dispose лежит на вызывающем коде
+        using var writer = new StreamWriter(stream, System.Text.Encoding.UTF8, bufferSize: 1024, leaveOpen: true);
         await writer.WriteAsync(xmlContent);
     }
 }

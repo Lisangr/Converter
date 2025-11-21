@@ -1,21 +1,23 @@
+using System.IO;
+using System.Threading.Tasks;
+using Converter.Application.Services;
+using FluentAssertions;
 using Xunit;
 
 namespace Converter.Tests.UnitTests.Services.FileMedia;
 
 public class ThumbnailServiceTests
 {
-    [Fact(Skip = "Requires preview generation implementation")]
-    public void GenerateThumbnail_ShouldCreateCachedImage()
+    [Fact]
+    public async Task GetThumbnailAsync_ShouldReturnStream()
     {
-    }
+        // Arrange
+        var service = new ThumbnailService(new ThumbnailGenerator());
 
-    [Fact(Skip = "Requires caching implementation")]
-    public void GetThumbnail_ShouldUseCacheWhenAvailable()
-    {
-    }
+        // Act
+        var result = await service.GetThumbnailAsync("video.mp4", 320, 180);
 
-    [Fact(Skip = "Requires cache cleanup implementation")]
-    public void ClearCache_ShouldRemoveStoredThumbnails()
-    {
+        // Assert
+        result.Should().NotBeNull();
     }
 }

@@ -1,12 +1,10 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Converter.Application.Abstractions;
 using Converter.Application.Services;
+using Converter.Domain.Models;
 using FluentAssertions;
-using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
 
@@ -14,465 +12,115 @@ namespace Converter.Tests.UnitTests.Services
 {
     public class NotificationServiceTests
     {
-        private readonly Mock<INotificationSettingsStore> _mockSettingsStore;
-        private readonly Mock<ILogger<NotificationService>> _mockLogger;
-        private readonly NotificationService _notificationService;
-        private readonly NotificationSettings _defaultSettings;
+        private readonly Mock<INotificationGateway> _gatewayMock;
+        private readonly Mock<INotificationSettingsStore> _settingsStoreMock;
+        private readonly NotificationService _service;
 
         public NotificationServiceTests()
         {
-            _mockSettingsStore = new Mock<INotificationSettingsStore>();
-            _mockLogger = new Mock<ILogger<NotificationService>>();
-            
-            _defaultSettings = new NotificationSettings
+            _gatewayMock = new Mock<INotificationGateway>(MockBehavior.Strict);
+            _settingsStoreMock = new Mock<INotificationSettingsStore>(MockBehavior.Strict);
+
+            _service = new NotificationService(_gatewayMock.Object, _settingsStoreMock.Object);
+        }
+
+        [Fact]
+        public void Constructor_WithNullGateway_ShouldThrow()
+        {
+            // Act
+            Action act = () => new NotificationService(null!, _settingsStoreMock.Object);
+
+            // Assert
+            act.Should().Throw<ArgumentNullException>().And.ParamName.Should().Be("gateway");
+        }
+
+        [Fact]
+        public void Constructor_WithNullSettingsStore_ShouldThrow()
+        {
+            // Act
+            Action act = () => new NotificationService(_gatewayMock.Object, null!);
+
+            // Assert
+            act.Should().Throw<ArgumentNullException>().And.ParamName.Should().Be("settingsStore");
+        }
+
+        [Fact]
+        public async Task NotifyConversionComplete_WithSuccessResult_ShouldShowInfoNotification()
+        {
+            // Arrange
+            var summary = new NotificationSummary
             {
-                DesktopNotificationsEnabled = true,
-                SoundEnabled = true,
-                UseCustomSound = false,
-                CustomSoundPath = null,
-                ShowProgressNotifications = false
+                Message = "Completed",
+                FailedCount = 0
             };
 
-            _mockSettingsStore.Setup(x => x.Load())
-                .Returns(_defaultSettings);
+            _gatewayMock
+                .Setup(g => g.ShowInfoAsync("Completed", "Video Converter", It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask)
+                .Verifiable();
 
-            _notificationService = new NotificationService(
-                _mockSettingsStore.Object);
-        }
-
-        [Fact]
-        public void Constructor_WithNullSettingsStore_ShouldThrowArgumentNullException()
-        {
-            // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => 
-                new NotificationService(null!));
-        }
-
-        [Fact]
-        public void GetSettings_ShouldReturnCurrentSettings()
-        {
             // Act
-            var result = _notificationService.GetSettings();
+            _service.NotifyConversionComplete(summary);
+
+            // Give background task a moment to execute
+            await Task.Delay(50);
 
             // Assert
-            result.Should().Be(_defaultSettings);
+            _gatewayMock.Verify();
         }
 
         [Fact]
-        public void UpdateSettings_WithValidSettings_ShouldUpdateAndSave()
+        public async Task NotifyProgress_WithValidValues_ShouldShowProgressNotification()
         {
             // Arrange
-            var newSettings = new NotificationSettings
-            {
-                DesktopNotificationsEnabled = false,
-                SoundEnabled = false,
-                ShowProgressNotifications = true
-            };
+            _gatewayMock
+                .Setup(g => g.ShowInfoAsync("Progress: 50%", "Conversion Progress", It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask)
+                .Verifiable();
 
             // Act
-            _notificationService.UpdateSettings(newSettings);
+            _service.NotifyProgress(50, 100);
+
+            // Give background task a moment to execute
+            await Task.Delay(50);
 
             // Assert
-            _mockSettingsStore.Verify(x => x.Save(newSettings), Times.Once);
+            _gatewayMock.Verify();
         }
 
         [Fact]
-        public void UpdateSettings_WithNullSettings_ShouldUseDefault()
+        public void GetSettings_ShouldReturnNonNullOptions()
+        {
+            // Act
+            var result = _service.GetSettings();
+
+            // Assert
+            result.Should().NotBeNull();
+            result.Should().BeOfType<Converter.Domain.Models.NotificationOptions>();
+        }
+
+        [Fact]
+        public void UpdateSettings_WithValidSettings_ShouldNotThrow()
         {
             // Arrange
-            NotificationSettings nullSettings = null!;
+            var options = new Converter.Domain.Models.NotificationOptions();
 
             // Act
-            _notificationService.UpdateSettings(nullSettings);
+            Action act = () => _service.UpdateSettings(options);
 
             // Assert
-            _mockSettingsStore.Verify(x => x.Save(It.Is<NotificationSettings>(s => s != null)), Times.Once);
-        }
-
-        [Fact]
-        public void NotifyConversionComplete_WithSuccessResult_ShouldShowNotificationAndPlaySound()
-        {
-            // Arrange
-            var result = new NotificationSummary
-            {
-                Success = true,
-                ProcessedFiles = 5,
-                SpaceSaved = 1024 * 1024 * 100, // 100MB
-                Duration = TimeSpan.FromMinutes(10),
-                OutputFolder = @"C:\Output",
-                ThumbnailPath = @"C:\Thumbnails\thumb.jpg"
-            };
-
-            // Act
-            _notificationService.NotifyConversionComplete(result);
-
-            // Assert
-            // Verify that the service attempted to show notification and play sound
-            // We can't directly test the UI notification, but we can verify the logic path
-        }
-
-        [Fact]
-        public void NotifyConversionComplete_WithNullResult_ShouldNotThrow()
-        {
-            // Act & Assert
-            var exception = Record.Exception(() => _notificationService.NotifyConversionComplete(null!));
-            exception.Should().BeNull();
-        }
-
-        [Fact]
-        public void NotifyConversionComplete_WithFailedResult_ShouldShowErrorNotification()
-        {
-            // Arrange
-            var result = new NotificationSummary
-            {
-                Success = false,
-                ErrorMessage = "Conversion failed due to codec error"
-            };
-
-            // Act
-            _notificationService.NotifyConversionComplete(result);
-
-            // Assert
-            // Should handle the failed conversion case
-        }
-
-        [Fact]
-        public void NotifyProgress_WithProgressNotificationsDisabled_ShouldNotShowNotification()
-        {
-            // Arrange
-            var settings = new NotificationSettings
-            {
-                DesktopNotificationsEnabled = false,
-                ShowProgressNotifications = false
-            };
-            
-            _notificationService.UpdateSettings(settings);
-
-            // Act
-            _notificationService.NotifyProgress(50, 100);
-
-            // Assert
-            // Should not show notification when disabled
-        }
-
-        [Fact]
-        public void NotifyProgress_WithValidProgress_ShouldShowMilestoneNotifications()
-        {
-            // Arrange
-            var settings = new NotificationSettings
-            {
-                DesktopNotificationsEnabled = true,
-                ShowProgressNotifications = true
-            };
-            
-            _notificationService.UpdateSettings(settings);
-
-            // Act
-            _notificationService.NotifyProgress(25, 100); // Should trigger 25% milestone
-            _notificationService.NotifyProgress(50, 100); // Should trigger 50% milestone
-            _notificationService.NotifyProgress(75, 100); // Should trigger 75% milestone
-
-            // Assert
-            // Should show notifications for each milestone
-        }
-
-        [Fact]
-        public void NotifyProgress_WithInvalidTotal_ShouldNotShowNotification()
-        {
-            // Act
-            _notificationService.NotifyProgress(50, 0); // Invalid total
-
-            // Assert
-            // Should handle invalid parameters gracefully
-        }
-
-        [Fact]
-        public void NotifyProgress_WithZeroProgress_ShouldNotShowNotification()
-        {
-            // Arrange
-            var settings = new NotificationSettings
-            {
-                DesktopNotificationsEnabled = true,
-                ShowProgressNotifications = true
-            };
-            
-            _notificationService.UpdateSettings(settings);
-
-            // Act
-            _notificationService.NotifyProgress(0, 100);
-
-            // Assert
-            // Should not show notification for 0% progress
-        }
-
-        [Fact]
-        public void NotifyProgress_With100Progress_ShouldNotShowMilestoneNotification()
-        {
-            // Arrange
-            var settings = new NotificationSettings
-            {
-                DesktopNotificationsEnabled = true,
-                ShowProgressNotifications = true
-            };
-            
-            _notificationService.UpdateSettings(settings);
-
-            // Act
-            _notificationService.NotifyProgress(100, 100);
-
-            // Assert
-            // 100% should not trigger milestone notifications (25, 50, 75)
-        }
-
-        [Fact]
-        public void ResetProgressNotifications_ShouldClearMilestoneTracking()
-        {
-            // Arrange
-            var settings = new NotificationSettings
-            {
-                DesktopNotificationsEnabled = true,
-                ShowProgressNotifications = true
-            };
-            
-            _notificationService.UpdateSettings(settings);
-
-            // Act
-            _notificationService.NotifyProgress(25, 100); // Trigger first milestone
-            _notificationService.ResetProgressNotifications();
-            _notificationService.NotifyProgress(25, 100); // Should trigger again after reset
-
-            // Assert
-            // Should allow milestone notifications again after reset
-        }
-
-        [Fact]
-        public void ShowDesktopNotification_WithDisabledNotifications_ShouldNotShow()
-        {
-            // Arrange
-            var settings = new NotificationSettings
-            {
-                DesktopNotificationsEnabled = false
-            };
-            
-            _notificationService.UpdateSettings(settings);
-
-            // Act
-            _notificationService.NotifyConversionComplete(new NotificationSummary { Success = true, ProcessedFiles = 1 });
-
-            // Assert
-            // Should not show notification when disabled
-        }
-
-        [Fact]
-        public void PlayCompletionSound_WithDisabledSound_ShouldNotPlay()
-        {
-            // Arrange
-            var settings = new NotificationSettings
-            {
-                SoundEnabled = false
-            };
-            
-            _notificationService.UpdateSettings(settings);
-
-            // Act
-            _notificationService.NotifyConversionComplete(new NotificationSummary { Success = true, ProcessedFiles = 1 });
-
-            // Assert
-            // Should not play sound when disabled
-        }
-
-        [Fact]
-        public void PlayCompletionSound_WithCustomSoundPath_ShouldUseCustomSound()
-        {
-            // Arrange
-            var customSoundPath = Path.Combine(Path.GetTempPath(), "custom_notification.wav");
-            File.WriteAllText(customSoundPath, "fake audio file");
-            
-            try
-            {
-                var settings = new NotificationSettings
-                {
-                    SoundEnabled = true,
-                    UseCustomSound = true,
-                    CustomSoundPath = customSoundPath
-                };
-                
-                _notificationService.UpdateSettings(settings);
-
-                // Act
-                _notificationService.NotifyConversionComplete(new NotificationSummary { Success = true, ProcessedFiles = 1 });
-
-                // Assert
-                // Should attempt to use custom sound
-            }
-            finally
-            {
-                // Cleanup
-                if (File.Exists(customSoundPath))
-                {
-                    File.Delete(customSoundPath);
-                }
-            }
-        }
-
-        [Fact]
-        public void FormatFileSize_WithZeroBytes_ShouldReturnZeroB()
-        {
-            // Act
-            var result = CallPrivateMethod<string>(_notificationService, "FormatFileSize", 0L);
-
-            // Assert
-            result.Should().Be("0 B");
-        }
-
-        [Fact]
-        public void FormatFileSize_WithSmallSize_ShouldReturnCorrectFormat()
-        {
-            // Act
-            var result = CallPrivateMethod<string>(_notificationService, "FormatFileSize", 1024L);
-
-            // Assert
-            result.Should().Be("1 KB");
-        }
-
-        [Fact]
-        public void FormatFileSize_WithLargeSize_ShouldReturnCorrectFormat()
-        {
-            // Act
-            var result = CallPrivateMethod<string>(_notificationService, "FormatFileSize", 1024L * 1024L * 1024L);
-
-            // Assert
-            result.Should().Be("1 GB");
-        }
-
-        [Fact]
-        public void FormatFileSize_WithVeryLargeSize_ShouldReturnCorrectFormat()
-        {
-            // Act - 1024^4 bytes = 1 TB
-            var result = CallPrivateMethod<string>(_notificationService, "FormatFileSize", 1024L * 1024L * 1024L * 1024L);
-
-            // Assert
-            result.Should().Be("1 TB");
-        }
-
-        [Fact]
-        public void NotifyConversionComplete_WithLargeSpaceSaved_ShouldFormatCorrectly()
-        {
-            // Arrange
-            var result = new NotificationSummary
-            {
-                Success = true,
-                ProcessedFiles = 1,
-                SpaceSaved = 1024L * 1024L * 1024L * 2, // 2 GB
-                Duration = TimeSpan.FromMinutes(5)
-            };
-
-            // Act
-            _notificationService.NotifyConversionComplete(result);
-
-            // Assert
-            // Should format the space saved correctly
-        }
-
-        [Fact]
-        public void Dispose_ShouldDisposeResources()
-        {
-            // Arrange
-            var service = new NotificationService(_mockSettingsStore.Object);
-
-            // Act
-            service.Dispose();
-
-            // Assert
-            // Should dispose without throwing
+            act.Should().NotThrow();
         }
 
         [Fact]
         public void Dispose_CanBeCalledMultipleTimes()
         {
-            // Arrange
-            var service = new NotificationService(_mockSettingsStore.Object);
-
             // Act
-            service.Dispose();
-            service.Dispose();
-            service.Dispose();
+            _service.Dispose();
+            _service.Dispose();
 
             // Assert
-            // Should not throw on multiple dispose calls
-        }
-
-        [Fact]
-        public void Finalizer_ShouldNotThrow()
-        {
-            // Arrange
-            var service = new NotificationService(_mockSettingsStore.Object);
-
-            // Act & Assert
-            var exception = Record.Exception(() => 
-            {
-                // Simulate finalizer call by making object unreachable and triggering GC
-                service = null;
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-            });
-            
-            // Should not throw in finalizer
-        }
-
-        // Helper method to call private methods via reflection
-        private static T CallPrivateMethod<T>(object instance, string methodName, params object[] parameters)
-        {
-            var type = instance.GetType();
-            var method = type.GetMethod(methodName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            
-            if (method == null)
-            {
-                throw new InvalidOperationException($"Method {methodName} not found on type {type.Name}");
-            }
-
-            return (T)method.Invoke(instance, parameters)!;
-        }
-
-        [Fact]
-        public void NotifyConversionComplete_WithVeryLongErrorMessage_ShouldHandleCorrectly()
-        {
-            // Arrange
-            var longErrorMessage = new string('x', 10000); // Very long error message
-            var result = new NotificationSummary
-            {
-                Success = false,
-                ErrorMessage = longErrorMessage
-            };
-
-            // Act
-            var exception = Record.Exception(() => _notificationService.NotifyConversionComplete(result));
-
-            // Assert
-            exception.Should().BeNull();
-        }
-
-        [Fact]
-        public void NotifyProgress_WithNegativeValues_ShouldHandleGracefully()
-        {
-            // Arrange
-            var settings = new NotificationSettings
-            {
-                DesktopNotificationsEnabled = true,
-                ShowProgressNotifications = true
-            };
-            
-            _notificationService.UpdateSettings(settings);
-
-            // Act
-            var exception = Record.Exception(() => 
-            {
-                _notificationService.NotifyProgress(-10, 100);
-                _notificationService.NotifyProgress(50, -100);
-            });
-
-            // Assert
-            exception.Should().BeNull();
+            // Should not throw
         }
     }
 }

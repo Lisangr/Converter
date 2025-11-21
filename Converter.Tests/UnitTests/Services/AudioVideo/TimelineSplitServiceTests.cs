@@ -1,21 +1,33 @@
+using System;
+using System.Threading.Tasks;
+using Converter.Application.Models;
+using Converter.Services;
+using FluentAssertions;
 using Xunit;
 
 namespace Converter.Tests.UnitTests.Services.AudioVideo;
 
 public class TimelineSplitServiceTests
 {
-    [Fact(Skip = "Requires timeline split implementation")]
-    public void SplitVideo_ShouldCreateSegments()
+    [Fact]
+    public async Task SplitBySegmentsAsync_WithEmptyInputPath_ShouldThrow()
     {
+        // Act
+        Func<Task> act = () => TimelineSplitService.SplitBySegmentsAsync("", "out", Array.Empty<TimelineSegment>(), true);
+
+        // Assert
+        await act.Should().ThrowAsync<ArgumentNullException>()
+            .WithParameterName("inputPath");
     }
 
-    [Fact(Skip = "Requires timeline split implementation")]
-    public void SplitVideo_ShouldHandleOverlappingMarks()
+    [Fact]
+    public async Task SplitBySegmentsAsync_WithEmptyOutputFolder_ShouldThrow()
     {
-    }
+        // Act
+        Func<Task> act = () => TimelineSplitService.SplitBySegmentsAsync("in.mp4", "", Array.Empty<TimelineSegment>(), true);
 
-    [Fact(Skip = "Requires timeline split implementation")]
-    public void SplitVideo_ShouldMaintainOrdering()
-    {
+        // Assert
+        await act.Should().ThrowAsync<ArgumentNullException>()
+            .WithParameterName("outputFolder");
     }
 }
