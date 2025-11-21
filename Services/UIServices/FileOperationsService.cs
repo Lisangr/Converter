@@ -40,15 +40,23 @@ namespace Converter.Services.UIServices
         {
             if (filePaths == null) throw new ArgumentNullException(nameof(filePaths));
 
-            _logger.LogInformation("Начало добавления файлов: {FileCount} файлов", filePaths.Count());
+            var filePathsList = filePaths.ToList();
+            _logger.LogInformation("Начало добавления файлов: {FileCount} файлов", filePathsList.Count);
             
+            if (!filePathsList.Any())
+            {
+                _logger.LogInformation("No files to add to the queue");
+                return;
+            }
+
             try
             {
-                foreach (var filePath in filePaths)
+                foreach (var filePath in filePathsList)
                 {
-                    if (!System.IO.File.Exists(filePath))
+                    // Skip local files that don't exist, but allow network paths and UNC paths
+                    if (!IsValidFilePath(filePath))
                     {
-                        _logger.LogWarning("Файл не найден: {FilePath}", filePath);
+                        _logger.LogWarning("Skipping non-existent file: {FilePath}", filePath);
                         continue;
                     }
 
@@ -64,7 +72,7 @@ namespace Converter.Services.UIServices
                     _logger.LogInformation("Файл добавлен в очередь: {FilePath}", filePath);
                 }
                 
-                _logger.LogInformation("Успешно добавлено {FileCount} файлов в очередь", filePaths.Count());
+                _logger.LogInformation("Успешно добавлено {FileCount} файлов в очередь", filePathsList.Count);
             }
             catch (Exception ex)
             {
@@ -77,13 +85,22 @@ namespace Converter.Services.UIServices
         {
             if (selectedItems == null) throw new ArgumentNullException(nameof(selectedItems));
 
+            var itemsList = selectedItems.ToList();
+            if (!itemsList.Any())
+            {
+                _logger.LogInformation("No files to remove from the queue");
+                return;
+            }
+
             try
             {
-                var removeTasks = selectedItems
+                var removeTasks = itemsList
                     .Where(item => item != null)
                     .Select(item => _queueRepository.RemoveAsync(item.Id));
 
                 await Task.WhenAll(removeTasks);
+                
+                _logger.LogInformation("Removed {FileCount} files from the queue", itemsList.Count);
             }
             catch (Exception ex)
             {
@@ -97,8 +114,16 @@ namespace Converter.Services.UIServices
             try
             {
                 var items = await _queueRepository.GetAllAsync();
+                if (!items.Any())
+                {
+                    _logger.LogInformation("No files to clear from the queue");
+                    return;
+                }
+                
                 var removeTasks = items.Select(item => _queueRepository.RemoveAsync(item.Id));
                 await Task.WhenAll(removeTasks);
+                
+                _logger.LogInformation("Cleared all files from the queue");
             }
             catch (Exception ex)
             {
@@ -107,11 +132,22 @@ namespace Converter.Services.UIServices
             }
         }
 
+        private bool IsValidFilePath(string filePath)
+        {
+            // Allow network paths (\\server\share)
+            if (filePath.StartsWith(@"\\") || filePath.StartsWith("//"))
+                return true;
+                
+            // Check if local file exists
+            return System.IO.File.Exists(filePath);
+        }
+
         public IReadOnlyList<QueueItem> GetQueueItems()
         {
             // В реальном приложении это может быть асинхронным вызовом
             return _queueRepository.GetAllAsync().GetAwaiter().GetResult().ToList();
         }
+        
         public async Task UpdateQueueItem(QueueItem item)
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
@@ -119,6 +155,7 @@ namespace Converter.Services.UIServices
             try
             {
                 await _queueRepository.UpdateAsync(item);
+                _logger.LogInformation("Updated queue item {ItemId}", item.Id);
             }
             catch (Exception ex)
             {
@@ -193,20 +230,29 @@ namespace Converter.Services.UIServices
             }
         }
 
-        public void Dispose()
+        protected virtual void Dispose(bool disposing)
         {
             if (!_disposed)
             {
-                // Отписываемся от событий
-                if (_itemAddedHandler != null)
-                    _queueRepository.ItemAdded -= _itemAddedHandler;
-                if (_itemUpdatedHandler != null)
-                    _queueRepository.ItemUpdated -= _itemUpdatedHandler;
-                if (_itemRemovedHandler != null)
-                    _queueRepository.ItemRemoved -= _itemRemovedHandler;
+                if (disposing)
+                {
+                    // Отписываемся от событий
+                    if (_itemAddedHandler != null)
+                        _queueRepository.ItemAdded -= _itemAddedHandler;
+                    if (_itemUpdatedHandler != null)
+                        _queueRepository.ItemUpdated -= _itemUpdatedHandler;
+                    if (_itemRemovedHandler != null)
+                        _queueRepository.ItemRemoved -= _itemRemovedHandler;
+                }
                 
                 _disposed = true;
             }
+        }
+
+        public void Dispose()
+        {
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
         }
 
         ~FileOperationsService()

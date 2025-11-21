@@ -133,23 +133,52 @@ namespace Converter.Services
             string[] sizes = { "B", "KB", "MB", "GB", "TB" };
             double len = bytes;
             int order = 0;
+            
+            // Convert to appropriate unit
             while (len >= 1024 && order < sizes.Length - 1)
             {
                 order++;
                 len /= 1024;
             }
 
-            return $"{len:0.##} {sizes[order]}";
+            // Format with appropriate precision based on the value
+            string formatted;
+            if (len >= 100)
+            {
+                // For values >= 100, show as integer
+                formatted = $"{len:0}";
+            }
+            else if (len >= 10)
+            {
+                // For values 10-99.9, show with 1 decimal place
+                formatted = $"{len:0.#}";
+            }
+            else
+            {
+                // For values < 10, show with 2 decimal places
+                formatted = $"{len:0.##}";
+            }
+
+            return $"{formatted} {sizes[order]}";
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    _soundPlayer?.Stop();
+                    _soundPlayer?.Dispose();
+                }
+                _disposed = true;
+            }
         }
 
         public void Dispose()
         {
-            if (!_disposed)
-            {
-                _soundPlayer?.Stop();
-                _soundPlayer?.Dispose();
-                _disposed = true;
-            }
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
         }
 
         ~NotificationService()

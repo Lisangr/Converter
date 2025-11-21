@@ -300,15 +300,24 @@ namespace Converter.Services
             dgv.BorderStyle = BorderStyle.None;
         }
 
-        public void Dispose()
+        protected virtual void Dispose(bool disposing)
         {
             if (!_disposed)
             {
-                _transitionTimer?.Stop();
-                _transitionTimer?.Dispose();
-                _transitionTimer = null;
+                if (disposing)
+                {
+                    _transitionTimer?.Stop();
+                    _transitionTimer?.Dispose();
+                    _transitionTimer = null;
+                }
                 _disposed = true;
             }
+        }
+
+        public void Dispose()
+        {
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
         }
 
         ~ThemeManager()

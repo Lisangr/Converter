@@ -30,6 +30,13 @@
     <PackageReference Include="System.Reactive" Version="6.0.0" />
   </ItemGroup>
 
+  <!-- Test dependencies for test projects -->
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" Version="8.8.0" />
+    <PackageReference Include="Moq" Version="4.20.72" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+  </ItemGroup>
+
   <!-- Prevent duplicate resource generation for Form1.resx (MSB3577) -->
   <ItemGroup>
     <EmbeddedResource Remove="Form1.resx" />

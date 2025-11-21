@@ -213,12 +213,22 @@ public class ShareService : IShareService, IDisposable
         return $"{ts.Seconds}с";
     }
 
-    public void Dispose()
+    protected virtual void Dispose(bool disposing)
     {
         if (!_disposed)
         {
+            if (disposing)
+            {
+                // Освобождение управляемых ресурсов
+            }
             _disposed = true;
         }
+    }
+
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
     }
 
     ~ShareService()

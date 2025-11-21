@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Converter.Infrastructure.Ffmpeg
 {
-    public sealed class FFmpegExecutor : IFFmpegExecutor, IDisposable
+    public class FFmpegExecutor : IFFmpegExecutor, IDisposable
     {
         private readonly string? _ffmpegPath;
         private readonly ILogger<FFmpegExecutor>? _logger;
@@ -193,13 +193,22 @@ namespace Converter.Infrastructure.Ffmpeg
             return fallbackExeName;
         }
 
-        public void Dispose()
+        protected virtual void Dispose(bool disposing)
         {
             if (!_disposed)
             {
+                if (disposing)
+                {
+                    // Add any cleanup if needed
+                }
                 _disposed = true;
-                // Add any cleanup if needed
             }
+        }
+
+        public void Dispose()
+        {
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
         }
 
         ~FFmpegExecutor()

@@ -168,13 +168,22 @@ namespace Converter.Infrastructure.Persistence
         }
     };
 }
-        public void Dispose()
+        protected virtual void Dispose(bool disposing)
         {
             if (!_disposed)
             {
+                if (disposing)
+                {
+                    _cachedPresets = null;
+                }
                 _disposed = true;
-                _cachedPresets = null;
             }
+        }
+
+        public void Dispose()
+        {
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
         }
 
         ~JsonPresetRepository()

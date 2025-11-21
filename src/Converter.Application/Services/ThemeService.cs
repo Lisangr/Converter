@@ -100,7 +100,39 @@ public class ThemeService : IThemeService
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _themeManager = themeManager ?? throw new ArgumentNullException(nameof(themeManager));
         _themeManager.ThemeChanged += OnManagerThemeChanged;
-        _ = InitializeFromSettingsAsync();
+        
+        // Initialize with default preferences first to avoid null reference issues
+        _preferences = new UserPreferences();
+        
+        // Try to load settings asynchronously in background
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var userPrefs = await _settingsStore.GetUserPreferencesAsync();
+                _preferences = userPrefs;
+                
+                // Load theme if specified
+                if (!string.IsNullOrWhiteSpace(_preferences.ThemeName))
+                {
+                    var target = Theme.GetAllThemes().FirstOrDefault(t => t.Name == _preferences.ThemeName);
+                    if (target != null)
+                    {
+                        _themeManager.SetTheme(target, animate: false);
+                    }
+                }
+                
+                // Setup auto-switch if enabled
+                if (AutoSwitchEnabled)
+                {
+                    await EnableAutoSwitchAsync(true);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error loading theme settings: {ex.Message}");
+            }
+        });
     }
 
     private async Task InitializeFromSettingsAsync()
@@ -239,16 +271,26 @@ public class ThemeService : IThemeService
         ThemeChanged?.Invoke(this, theme);
     }
 
-    public void Dispose()
+    protected virtual void Dispose(bool disposing)
     {
         if (!_disposed)
         {
-            _themeManager.ThemeChanged -= OnManagerThemeChanged;
-            _autoSwitchTimer?.Stop();
-            _autoSwitchTimer?.Dispose();
-            _autoSwitchTimer = null;
+            if (disposing)
+            {
+                _themeManager.ThemeChanged -= OnManagerThemeChanged;
+                _themeManager.Dispose();
+                _autoSwitchTimer?.Stop();
+                _autoSwitchTimer?.Dispose();
+                _autoSwitchTimer = null;
+            }
             _disposed = true;
         }
+    }
+
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
     }
 
     ~ThemeService()
