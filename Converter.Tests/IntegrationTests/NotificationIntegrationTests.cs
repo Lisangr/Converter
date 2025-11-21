@@ -8,7 +8,7 @@ using Xunit;
 
 namespace Converter.Tests.IntegrationTests;
 
-public class NotificationIntegrationTests
+public class NotificationIntegrationTests : IDisposable
 {
     [Fact]
     public async Task Notification_ShouldFireOnCompletion()

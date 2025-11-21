@@ -11,7 +11,7 @@ using Xunit;
 
 namespace Converter.Tests.IntegrationTests;
 
-public class QueueProcessingIntegrationTests
+public class QueueProcessingIntegrationTests : IDisposable
 {
     [Fact]
     public async Task QueueProcessing_ShouldRunMultipleItems()

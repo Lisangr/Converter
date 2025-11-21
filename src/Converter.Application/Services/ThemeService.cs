@@ -103,43 +103,13 @@ public class ThemeService : IThemeService
         
         // Initialize with default preferences first to avoid null reference issues
         _preferences = new UserPreferences();
-        
-        // Try to load settings asynchronously in background
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                var userPrefs = await _settingsStore.GetUserPreferencesAsync();
-                _preferences = userPrefs;
-                
-                // Load theme if specified
-                if (!string.IsNullOrWhiteSpace(_preferences.ThemeName))
-                {
-                    var target = Theme.GetAllThemes().FirstOrDefault(t => t.Name == _preferences.ThemeName);
-                    if (target != null)
-                    {
-                        _themeManager.SetTheme(target, animate: false);
-                    }
-                }
-                
-                // Setup auto-switch if enabled
-                if (AutoSwitchEnabled)
-                {
-                    await EnableAutoSwitchAsync(true);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error loading theme settings: {ex.Message}");
-            }
-        });
     }
 
-    private async Task InitializeFromSettingsAsync()
+    public async Task InitializeAsync(CancellationToken ct = default)
     {
         try
         {
-            _preferences = await _settingsStore.GetUserPreferencesAsync();
+            _preferences = await _settingsStore.GetUserPreferencesAsync().ConfigureAwait(false);
             
             // Load theme
             if (!string.IsNullOrWhiteSpace(_preferences.ThemeName))
@@ -154,7 +124,7 @@ public class ThemeService : IThemeService
             // Setup auto-switch if enabled
             if (AutoSwitchEnabled)
             {
-                await EnableAutoSwitchAsync(true);
+                await EnableAutoSwitchAsync(true, ct).ConfigureAwait(false);
             }
         }
         catch (Exception ex)

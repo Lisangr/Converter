@@ -1,3 +1,15 @@
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using Converter.Application.Abstractions;
+using Converter.Application.Models;
+using Converter.Application.Services;
+using Converter.Domain.Models;
+using Converter.Infrastructure.Ffmpeg;
+using FluentAssertions;
+using Microsoft.Extensions.Logging;
+using Moq;
 using Xunit;
 using Converter.Application.Abstractions;
 using Converter.Application.Builders;
@@ -14,7 +26,7 @@ using System.Threading.Tasks;
 
 namespace Converter.Tests.IntegrationTests;
 
-public class EndToEndConversionTests
+public class EndToEndConversionTests : IDisposable
 {
     [Fact]
     public async Task FullConversion_ShouldProduceExpectedOutput()
