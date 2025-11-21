@@ -1,3 +1,15 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Converter.Application.Models;
+using Converter.Application.Services.FileMedia;
+using Converter.Infrastructure.Persistence;
+using FluentAssertions;
+using Microsoft.Extensions.Logging;
+using Moq;
 using Xunit;
 using Converter.Application.Models;
 using Converter.Application.Services;
@@ -8,7 +20,7 @@ using System.Threading.Tasks;
 
 namespace Converter.Tests.IntegrationTests;
 
-public class PresetLoadingIntegrationTests
+public class PresetLoadingIntegrationTests : IDisposable
 {
     [Fact]
     public async Task PresetLoading_ShouldLoadFromEmbeddedResources()

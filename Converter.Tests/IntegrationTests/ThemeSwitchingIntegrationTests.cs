@@ -10,7 +10,7 @@ using Xunit;
 
 namespace Converter.Tests.IntegrationTests;
 
-public class ThemeSwitchingIntegrationTests
+public class ThemeSwitchingIntegrationTests : IDisposable
 {
     [Fact]
     public void ThemeSwitch_ShouldUpdateUi()
