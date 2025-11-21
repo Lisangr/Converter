@@ -72,6 +72,22 @@ namespace Converter.Application.Abstractions
         /// <param name="item">Элемент очереди для обработки</param>
         /// <param name="cancellationToken">Токен отмены операции</param>
         Task ProcessItemAsync(QueueItem item, CancellationToken cancellationToken = default);
+        
+        /// <summary>
+        /// Добавляет элемент в очередь на обработку.
+        /// Реализация на базе Channel должна быть потокобезопасной и не блокирующей UI.
+        /// </summary>
+        /// <param name="item">Элемент очереди</param>
+        /// <param name="cancellationToken">Токен отмены операции</param>
+        Task EnqueueAsync(QueueItem item, CancellationToken cancellationToken = default);
+        
+        /// <summary>
+        /// Возвращает асинхронную последовательность элементов очереди для фонового обработчика.
+        /// Используется hosted-сервисом для последовательного чтения из Channel.
+        /// </summary>
+        /// <param name="cancellationToken">Токен отмены операции</param>
+        /// <returns>Асинхронный поток элементов очереди</returns>
+        IAsyncEnumerable<QueueItem> GetItemsAsync(CancellationToken cancellationToken = default);
     }
 
     /// <summary>

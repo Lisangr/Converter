@@ -38,6 +38,7 @@ namespace Converter.Infrastructure
             // Theme infrastructure
             services.AddSingleton<IThemeManager, ThemeManager>();
             services.AddSingleton<IThemeService, ThemeService>();
+            services.AddHostedService<ThemeBootstrapHostedService>();
             
             // Share service
             services.AddSingleton<IShareService, ShareService>();
