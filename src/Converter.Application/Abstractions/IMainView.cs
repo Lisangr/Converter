@@ -25,7 +25,7 @@ namespace Converter.Application.Abstractions
         event EventHandler CancelConversionRequested;
         
         /// <summary>Событие выбора пресета конвертации</summary>
-        event EventHandler<Converter.Models.ConversionProfile> PresetSelected;
+        event EventHandler<Converter.Application.Models.ConversionProfile> PresetSelected;
         
         /// <summary>Событие изменения настроек приложения</summary>
         event EventHandler SettingsChanged;
@@ -68,10 +68,10 @@ namespace Converter.Application.Abstractions
         string OutputFolder { get; set; }
         
         /// <summary>Коллекция доступных пресетов конвертации</summary>
-        ObservableCollection<Converter.Models.ConversionProfile> AvailablePresets { get; set; }
+        ObservableCollection<Converter.Application.Models.ConversionProfile> AvailablePresets { get; set; }
         
         /// <summary>Текущий выбранный пресет конвертации</summary>
-        Converter.Models.ConversionProfile? SelectedPreset { get; set; }
+        Converter.Application.Models.ConversionProfile? SelectedPreset { get; set; }
 
         // ===== MVVM/MVP СВОЙСТВА ПРИВЯЗКИ =====
         

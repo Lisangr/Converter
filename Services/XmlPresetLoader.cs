@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
-using Converter.Models;
+using Converter.Application.Models;
 
 namespace Converter.Services
 {
@@ -13,11 +13,53 @@ namespace Converter.Services
 
         public XmlPresetLoader(string? presetsDirectory = null)
         {
-            _presetsDirectory = presetsDirectory ?? 
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "Presets");
+            if (!string.IsNullOrEmpty(presetsDirectory))
+            {
+                _presetsDirectory = presetsDirectory;
+            }
+            else
+            {
+                // Пробуем несколько вариантов пути
+                var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                var candidates = new[]
+                {
+                    Path.Combine(baseDir, "Presets"),
+                    Path.Combine(baseDir, "..", "Presets"),
+                    Path.Combine(baseDir, "..", "..", "Presets"),
+                    Path.Combine(baseDir, "..", "..", "..", "Presets"),
+                    Path.Combine(Path.GetDirectoryName(baseDir), "Presets")
+                };
+                
+                foreach (var candidate in candidates)
+                {
+                    var fullPath = Path.GetFullPath(candidate);
+                    if (Directory.Exists(fullPath))
+                    {
+                        _presetsDirectory = fullPath;
+                        break;
+                    }
+                }
+                
+                // Если ничего не найдено, используем последний вариант
+                if (string.IsNullOrEmpty(_presetsDirectory))
+                {
+                    _presetsDirectory = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "Presets"));
+                }
+            }
             
-            // Normalize path
-            _presetsDirectory = Path.GetFullPath(_presetsDirectory);
+            // Создаем директорию если не существует
+            if (!Directory.Exists(_presetsDirectory))
+            {
+                try
+                {
+                    Directory.CreateDirectory(_presetsDirectory);
+                    System.Diagnostics.Debug.WriteLine($"Created presets directory: {_presetsDirectory}");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Failed to create presets directory: {ex.Message}");
+                }
+            }
             
             System.Diagnostics.Debug.WriteLine($"XmlPresetLoader initialized with path: {_presetsDirectory}");
         }
@@ -51,11 +93,63 @@ namespace Converter.Services
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"Error loading presets from {file}: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"Stack trace: {ex.StackTrace}");
                 }
             }
 
             System.Diagnostics.Debug.WriteLine($"Total XML presets loaded: {presets.Count}");
+            
+            // Если пресеты не найдены, создадим тестовые
+            if (presets.Count == 0)
+            {
+                System.Diagnostics.Debug.WriteLine("No presets found, creating fallback presets");
+                presets.AddRange(CreateFallbackPresets());
+            }
+            
             return presets;
+        }
+        
+        private List<PresetProfile> CreateFallbackPresets()
+        {
+            return new List<PresetProfile>
+            {
+                new PresetProfile
+                {
+                    Id = "fallback_youtube_1080p",
+                    Name = "YouTube 1080p (Fallback)",
+                    Category = "Video Platforms",
+                    Icon = "🎬",
+                    Description = "1920x1080, H.264, 8Mbps",
+                    Width = 1920,
+                    Height = 1080,
+                    VideoCodec = "libx264",
+                    Bitrate = 8000,
+                    Format = "mp4",
+                    IncludeAudio = true,
+                    AudioCodec = "aac",
+                    AudioBitrate = 256,
+                    ColorHex = "#FF0000",
+                    IsPro = false
+                },
+                new PresetProfile
+                {
+                    Id = "fallback_instagram_story",
+                    Name = "Instagram Story (Fallback)",
+                    Category = "Social Media",
+                    Icon = "📱",
+                    Description = "1080x1920, H.264, 5Mbps",
+                    Width = 1080,
+                    Height = 1920,
+                    VideoCodec = "libx264",
+                    Bitrate = 5000,
+                    Format = "mp4",
+                    IncludeAudio = true,
+                    AudioCodec = "aac",
+                    AudioBitrate = 128,
+                    ColorHex = "#E4405F",
+                    IsPro = false
+                }
+            };
         }
 
         public List<PresetProfile> LoadFromFile(string filePath)
@@ -107,10 +201,10 @@ namespace Converter.Services
                 {
                     preset.Width = ParseNullableInt(videoElement.Attribute("Width")?.Value);
                     preset.Height = ParseNullableInt(videoElement.Attribute("Height")?.Value);
-                    preset.VideoCodec = videoElement.Attribute("Codec")?.Value;
+                    preset.VideoCodec = videoElement.Attribute("Codec")?.Value ?? "";
                     preset.Bitrate = ParseNullableInt(videoElement.Attribute("Bitrate")?.Value);
                     preset.CRF = ParseNullableInt(videoElement.Attribute("CRF")?.Value);
-                    preset.Format = videoElement.Attribute("Format")?.Value;
+                    preset.Format = videoElement.Attribute("Format")?.Value ?? "";
                 }
 
                 // Parse Audio settings
@@ -118,7 +212,7 @@ namespace Converter.Services
                 if (audioElement != null)
                 {
                     preset.IncludeAudio = ParseBool(audioElement.Attribute("Enabled")?.Value, true);
-                    preset.AudioCodec = audioElement.Attribute("Codec")?.Value;
+                    preset.AudioCodec = audioElement.Attribute("Codec")?.Value ?? "";
                     preset.AudioBitrate = ParseNullableInt(audioElement.Attribute("Bitrate")?.Value);
                 }
 

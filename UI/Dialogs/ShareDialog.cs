@@ -4,7 +4,7 @@ using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using Converter.Models;
+using Converter.Application.Models;
 using Converter.Services;
 
 namespace Converter.UI.Dialogs;

@@ -6,7 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Converter.Domain.Models;
-using Converter.Models;
+using Converter.Application.Models;
 
 namespace Converter.Services;
 
@@ -410,10 +410,7 @@ public class QueueManager
             }
 
                 item.CompletedAt = DateTime.Now;
-                if (item.StartedAt.HasValue && item.CompletedAt.HasValue)
-                {
-                    item.ConversionDuration = item.CompletedAt.Value - item.StartedAt.Value;
-                }
+                // ConversionDuration вычисляется автоматически из StartedAt и CompletedAt
             }
 
             Post(() => ItemStatusChanged?.Invoke(this, item));
@@ -521,7 +518,7 @@ public class QueueManager
             item.ErrorMessage = null;
             item.StartedAt = null;
             item.CompletedAt = null;
-            item.ConversionDuration = null;
+            // ConversionDuration очищается автоматически при установке StartedAt в null
             item.OutputFileSizeBytes = null;
             Post(() => ItemStatusChanged?.Invoke(this, item));
         }
@@ -638,14 +635,14 @@ public class QueueManager
         double seconds = 0;
         foreach (var item in items)
         {
-            if (item.Status == ConversionStatus.Processing && item.Progress > 0 && item.Duration.TotalSeconds > 0)
+            if (item.Status == ConversionStatus.Processing && item.Progress > 0 && item.ConversionDuration.HasValue && item.ConversionDuration.Value.TotalSeconds > 0)
             {
-                var estimatedTotal = item.Duration.TotalSeconds * 100 / Math.Max(1, item.Progress);
-                seconds += Math.Max(0, estimatedTotal - item.Duration.TotalSeconds);
+                var estimatedTotal = item.ConversionDuration.Value.TotalSeconds * 100 / Math.Max(1, item.Progress);
+                seconds += Math.Max(0, estimatedTotal - item.ConversionDuration.Value.TotalSeconds);
             }
-            else if (item.Status == ConversionStatus.Pending && item.Duration.TotalSeconds > 0)
+            else if (item.Status == ConversionStatus.Pending && item.ConversionDuration.HasValue && item.ConversionDuration.Value.TotalSeconds > 0)
             {
-                seconds += item.Duration.TotalSeconds;
+                seconds += item.ConversionDuration.Value.TotalSeconds;
             }
         }
 
@@ -667,7 +664,7 @@ public class QueueManager
 
     public void SortByDuration()
     {
-        ReorderQueue(items => items.OrderByDescending(x => x.Duration));
+        ReorderQueue(items => items.OrderByDescending(x => x.ConversionDuration ?? TimeSpan.Zero));
     }
 
     public void SortByAddedDate()

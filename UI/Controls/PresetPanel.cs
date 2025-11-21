@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
-using Converter.Models;
+using Converter.Application.Models;
 using Converter.Services;
 
 namespace Converter.UI.Controls

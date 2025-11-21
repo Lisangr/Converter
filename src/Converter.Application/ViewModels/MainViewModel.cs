@@ -1,6 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using Converter.Models;
+using Converter.Application.Models;
 
 namespace Converter.Application.ViewModels
 {

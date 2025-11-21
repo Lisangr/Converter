@@ -7,6 +7,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <PlatformTarget>x64</PlatformTarget>
+    <StartupObject>Converter.Program</StartupObject>
   </PropertyGroup>
 
   <!-- Exclude generated files from nested projects (src/**/obj, src/**/bin) to prevent duplicate assembly attributes -->
@@ -15,27 +16,67 @@
     <Compile Remove="**/bin/**/*.cs" />
     <None Remove="**/obj/**" />
     <None Remove="**/bin/**" />
+    <!-- Не компилируем исходники тестового проекта в основном проекте -->
+    <Compile Remove="Converter.Tests/**/*.cs" />
+    <!-- Не компилируем вспомогательные консольные утилиты, содержащие собственные Program.cs/top-level код -->
+    <Compile Remove="Diagnostics/**/*.cs" />
+    <Compile Remove="TestPresets/**/*.cs" />
+  </ItemGroup>
+
+  <!-- Копируем XML пресеты рядом с exe, чтобы XmlPresetLoader мог их найти в runtime -->
+  <ItemGroup>
+    <Content Include="Presets\*.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Core Dependencies -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.0" />
+    
+    <!-- Media Processing -->
     <PackageReference Include="Xabe.FFmpeg" Version="6.0.2" />
     <PackageReference Include="Xabe.FFmpeg.Downloader" Version="5.1.0" />
+    
+    <!-- JSON Handling -->
     <PackageReference Include="System.Text.Json" Version="9.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    
+    <!-- UI and Notifications -->
     <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
     <PackageReference Include="System.Reactive" Version="6.0.0" />
+    
+    <!-- Async and Parallelism -->
+    <PackageReference Include="System.Threading.Tasks.Extensions" Version="4.5.4" />
+    
+    <!-- Logging -->
+    <PackageReference Include="Serilog" Version="3.1.1" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="5.0.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
+    
+    <!-- Testing Support -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector" Version="6.0.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
   </ItemGroup>
 
-  <!-- Test dependencies for test projects -->
-  <ItemGroup>
-    <PackageReference Include="FluentAssertions" Version="8.8.0" />
-    <PackageReference Include="Moq" Version="4.20.72" />
-    <PackageReference Include="xunit" Version="2.5.3" />
-  </ItemGroup>
+  <!-- Test dependencies (moved to main dependencies since this is the main project) -->
+
+  <!-- NOTE: исходники слоёв Application/Domain/Infrastructure/Presentation
+       компилируются напрямую этим проектом через Include="**/*.cs", поэтому
+       отдельные project references на Converter.*.csproj здесь не нужны. -->
 
   <!-- Prevent duplicate resource generation for Form1.resx (MSB3577) -->
   <ItemGroup>

@@ -57,8 +57,10 @@ namespace Converter.Infrastructure
             services.AddSingleton<IThemeManager, ThemeManager>();
             // IThemeService is already registered in AddInfrastructureServices()
 
-            // Queue processing
+            // Queue processing - наследуется от BackgroundService, поэтому автоматически запускается как hosted service
+            // Добавляем как Singleton (для DI) и BackgroundService (для автозапуска)
             services.AddSingleton<IQueueProcessor, QueueProcessor>();
+            services.AddHostedService(provider => provider.GetRequiredService<IQueueProcessor>() as QueueProcessor);
 
             // File system services
             services.AddScoped<IFileOperationsService, FileOperationsService>();
@@ -73,9 +75,6 @@ namespace Converter.Infrastructure
             // Register FFmpeg bootstrap as hosted service
             services.AddSingleton<FfmpegBootstrapService>();
             services.AddHostedService(provider => provider.GetRequiredService<FfmpegBootstrapService>());
-            
-            // QueueProcessor наследуется от BackgroundService, поэтому он уже зарегистрирован как hosted service
-            services.AddSingleton<IQueueProcessor, QueueProcessor>();
             
             return services;
         }

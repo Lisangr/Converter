@@ -20,7 +20,7 @@ namespace Converter
 {
     internal static class Program
     {
-        [STAThread]
+        [System.STAThread]
         static int Main(string[] args)
         {
             System.Windows.Forms.Application.EnableVisualStyles();

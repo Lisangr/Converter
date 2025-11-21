@@ -1,47 +1,56 @@
-using System.Text;
+using System;
 using Converter.Application.Abstractions;
+using Converter.Domain.Models;
 
 namespace Converter.Application.Builders;
 
+/// <summary>
+/// Построитель команд конвертации FFmpeg.
+/// </summary>
 public interface IConversionCommandBuilder
 {
+    /// <summary>
+    /// Строит команду FFmpeg для конвертации.
+    /// </summary>
+    /// <param name="request">Запрос на конвертацию</param>
+    /// <returns>Строка команды FFmpeg</returns>
     string Build(ConversionRequest request);
 }
 
-public sealed class ConversionCommandBuilder : IConversionCommandBuilder
+/// <summary>
+/// Реализация построителя команд конвертации.
+/// </summary>
+public class ConversionCommandBuilder : IConversionCommandBuilder
 {
     public string Build(ConversionRequest request)
     {
-        var sb = new StringBuilder();
-        sb.Append("-y ");
-        sb.Append("-i ").Append(Escape(request.InputPath)).Append(' ');
+        if (request == null) throw new ArgumentNullException(nameof(request));
 
-        var profile = request.Profile;
-        if (!string.IsNullOrWhiteSpace(profile.VideoCodec))
-            sb.Append("-c:v ").Append(profile.VideoCodec).Append(' ');
-
-        if (profile.Crf.HasValue)
-            sb.Append("-crf ").Append(profile.Crf.Value).Append(' ');
-
-        if (!string.IsNullOrWhiteSpace(profile.AudioCodec))
-            sb.Append("-c:a ").Append(profile.AudioCodec).Append(' ');
-
-        if (!string.IsNullOrWhiteSpace(profile.AudioBitrateK))
-            sb.Append("-b:a ").Append(profile.AudioBitrateK).Append(' ');
-
-        // Add resolution scaling if specified
-        if (request.TargetWidth.HasValue || request.TargetHeight.HasValue)
+        var args = "-i \"" + request.InputPath + "\" ";
+        
+        // Добавляем видео настройки
+        if (!string.IsNullOrEmpty(request.Profile.VideoCodec))
         {
-            var width = request.TargetWidth.HasValue ? request.TargetWidth.Value : -1;
-            var height = request.TargetHeight.HasValue ? request.TargetHeight.Value : -2;
-            sb.Append("-vf ").Append($"scale={width}:{height}").Append(' ');
+            args += "-c:v " + request.Profile.VideoCodec + " ";
         }
-
-        // container is inferred by output extension
-        sb.Append(Escape(request.OutputPath));
-        return sb.ToString();
+        
+        if (request.Profile.CRF.HasValue)
+        {
+            args += "-crf " + request.Profile.CRF.Value + " ";
+        }
+        
+        // Добавляем аудио настройки
+        if (!string.IsNullOrEmpty(request.Profile.AudioCodec))
+        {
+            args += "-c:a " + request.Profile.AudioCodec + " ";
+        }
+        
+        if (request.Profile.AudioBitrate.HasValue)
+        {
+            args += "-b:a " + request.Profile.AudioBitrate.Value + "k ";
+        }
+        
+        args += "\"" + request.OutputPath + "\"";
+        return args.Trim();
     }
-
-    private static string Escape(string path)
-        => $"\"{path.Replace("\"", "\\\"")}\"";
 }

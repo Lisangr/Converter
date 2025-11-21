@@ -1,7 +1,7 @@
 namespace Converter.Application.Abstractions;
 
 using System;
-using Converter.Services;
+using Converter.Domain.Models;
 
 /// <summary>
 /// Сервис уведомлений для управления системными и пользовательскими уведомлениями.
@@ -35,9 +35,9 @@ public interface INotificationService : IDisposable
     
     /// <summary>Получает текущие настройки уведомлений</summary>
     /// <returns>Объект с настройками уведомлений</returns>
-    NotificationSettings GetSettings();
+    Converter.Domain.Models.NotificationOptions GetSettings();
     
     /// <summary>Обновляет настройки уведомлений</summary>
     /// <param name="settings">Новые настройки уведомлений</param>
-    void UpdateSettings(NotificationSettings settings);
+    void UpdateSettings(Converter.Domain.Models.NotificationOptions settings);
 }

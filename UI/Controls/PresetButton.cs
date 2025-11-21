@@ -25,7 +25,7 @@ namespace Converter.UI.Controls
             BackColor = Color.White;
             Cursor = Cursors.Hand;
             Margin = new Padding(6);
-                       
+            Text = ""; // Устанавливаем пустой текст по умолчанию
         }
 
         protected override void OnMouseEnter(EventArgs e)

@@ -2,7 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 using Converter.Domain.Models;
-using Converter.Models;
+using Converter.Application.Models;
 
 namespace Converter.UI.Controls;
 

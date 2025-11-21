@@ -5,7 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Converter.Application.Abstractions;
-using Converter.Models;
+using Converter.Application.Models;
 using Converter.UI.Dialogs;
 
 namespace Converter.UI.Controls

@@ -2,7 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Converter.Domain.Models;
-using Converter.Models;
+using Converter.Application.Models;
 
 namespace Converter.Application.Abstractions
 {

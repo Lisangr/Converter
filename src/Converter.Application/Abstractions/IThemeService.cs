@@ -4,7 +4,7 @@ using System;
 using System.Windows.Forms; // Added namespace for Control class
 using System.Threading;
 using System.Threading.Tasks;
-using Converter.Models;
+using Converter.Application.Models;
 
 /// <summary>
 /// Сервис управления темами с расширенными настройками.

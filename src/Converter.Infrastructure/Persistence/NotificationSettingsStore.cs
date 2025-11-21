@@ -1,62 +1,75 @@
+using Converter.Application.Abstractions;
+using Converter.Domain.Models;
+using Microsoft.Extensions.Logging;
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
-using Converter.Application.Abstractions;
-using Converter.Services;
+using System.Threading.Tasks;
 
 namespace Converter.Infrastructure.Persistence;
 
+/// <summary>
+/// Хранилище настроек уведомлений.
+/// </summary>
 public class NotificationSettingsStore : INotificationSettingsStore
 {
-    private string GetPath() =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Converter",
-            "notifications.json");
+    private readonly string _settingsPath;
+    private readonly Microsoft.Extensions.Logging.ILogger<NotificationSettingsStore> _logger;
 
-    public NotificationSettings Load()
+    // Конструктор для DI в приложении: путь к файлу берём из AppData
+    public NotificationSettingsStore(Microsoft.Extensions.Logging.ILogger<NotificationSettingsStore> logger)
+    {
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        _settingsPath = Path.Combine(appData, "Converter", "notificationSettings.json");
+    }
+
+    // Конструктор для тестов/ручной инициализации с явным путём
+    public NotificationSettingsStore(string settingsPath, Microsoft.Extensions.Logging.ILogger<NotificationSettingsStore> logger)
+    {
+        _settingsPath = settingsPath ?? throw new ArgumentNullException(nameof(settingsPath));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    public Converter.Domain.Models.NotificationOptions Load()
     {
         try
         {
-            var path = GetPath();
-            if (File.Exists(path))
+            if (File.Exists(_settingsPath))
             {
-                var json = File.ReadAllText(path);
-                var settings = JsonSerializer.Deserialize<NotificationSettings>(json);
-                if (settings != null)
-                    return settings;
+                var json = File.ReadAllText(_settingsPath);
+                var options = JsonSerializer.Deserialize<Converter.Domain.Models.NotificationOptions>(json);
+                return options ?? new Converter.Domain.Models.NotificationOptions();
             }
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Не удалось загрузить настройки уведомлений: {ex.Message}");
+            _logger.LogError(ex, "Ошибка при загрузке настроек уведомлений");
         }
 
-        return new NotificationSettings();
+        return new Converter.Domain.Models.NotificationOptions();
     }
 
-    public void Save(NotificationSettings settings)
+    public void Save(Converter.Domain.Models.NotificationOptions settings)
     {
+        if (settings == null) throw new ArgumentNullException(nameof(settings));
+
         try
         {
-            var path = GetPath();
-            var directory = Path.GetDirectoryName(path);
-            if (!string.IsNullOrWhiteSpace(directory))
+            var directory = Path.GetDirectoryName(_settingsPath);
+            if (!string.IsNullOrEmpty(directory))
             {
                 Directory.CreateDirectory(directory);
             }
 
-            var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions
-            {
-                WriteIndented = true
-            });
-
-            File.WriteAllText(path, json);
+            var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(_settingsPath, json);
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Не удалось сохранить настройки уведомлений: {ex.Message}");
+            _logger.LogError(ex, "Ошибка при сохранении настроек уведомлений");
+            throw;
         }
     }
 }

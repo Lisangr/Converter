@@ -3,13 +3,14 @@ using System.Drawing;
 using System.IO;
 using System.Media;
 using System.Windows.Forms;
-using Converter.Services;
+using Converter.Application.Abstractions;
+using Converter.Domain.Models;
 
 namespace Converter.UI.Dialogs
 {
     public class NotificationSettingsForm : Form
     {
-        private NotificationSettings _settings;
+        private Converter.Domain.Models.NotificationOptions _settings;
 
         private CheckBox _chkDesktopNotifications = null!;
         private CheckBox _chkProgressNotifications = null!;
@@ -23,11 +24,11 @@ namespace Converter.UI.Dialogs
         private Button _btnSave = null!;
         private Button _btnCancel = null!;
 
-        public NotificationSettings Settings => _settings;
+        public Converter.Domain.Models.NotificationOptions Settings => _settings;
 
-        public NotificationSettingsForm(NotificationSettings settings)
+        public NotificationSettingsForm(Converter.Domain.Models.NotificationOptions settings)
         {
-            _settings = settings ?? new NotificationSettings();
+            _settings = settings ?? new Converter.Domain.Models.NotificationOptions();
             InitializeComponent();
             LoadSettings();
         }
@@ -161,7 +162,7 @@ namespace Converter.UI.Dialogs
             _chkProgressNotifications.Checked = _settings.ShowProgressNotifications;
             _chkSoundEnabled.Checked = _settings.SoundEnabled;
             _chkCustomSound.Checked = _settings.UseCustomSound;
-            _txtCustomSoundPath.Text = _settings.CustomSoundPath ?? string.Empty;
+            _txtCustomSoundPath.Text = _settings.CustomSoundPath;
             UpdateSoundControls();
         }
 
@@ -266,11 +267,16 @@ namespace Converter.UI.Dialogs
                 return;
             }
 
+            SaveSettings();
+        }
+
+        private void SaveSettings()
+        {
             _settings.DesktopNotificationsEnabled = _chkDesktopNotifications.Checked;
             _settings.ShowProgressNotifications = _chkProgressNotifications.Checked;
             _settings.SoundEnabled = _chkSoundEnabled.Checked;
             _settings.UseCustomSound = _chkCustomSound.Checked;
-            _settings.CustomSoundPath = _txtCustomSoundPath.Text;
+            _settings.CustomSoundPath = _chkCustomSound.Checked ? _txtCustomSoundPath.Text : null;
         }
     }
 }

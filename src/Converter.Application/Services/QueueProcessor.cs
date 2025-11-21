@@ -47,19 +47,39 @@ namespace Converter.Application.Services
             _queueStore = queueStore ?? throw new ArgumentNullException(nameof(queueStore));
             _conversionUseCase = conversionUseCase ?? throw new ArgumentNullException(nameof(conversionUseCase));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            
+            // Инициализация состояния - изначально на паузе до активации
+            _isRunning = false;
+            _isPaused = true;
         }
 
         public async Task StartProcessingAsync(CancellationToken cancellationToken = default)
         {
-            if (_isRunning) return;
-
-            _logger.LogInformation("Запуск обработки очереди...");
-            _processingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            _isRunning = true;
-            _isPaused = false;
+            _logger.LogInformation("Активация обработки очереди...");
             
-            await base.StartAsync(cancellationToken);
-            _logger.LogInformation("Queue processor запущен");
+            // Сбрасываем состояние паузы и активируем обработку
+            _isPaused = false;
+            _isRunning = true;
+            
+            _processingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _logger.LogInformation("Queue processor активирован для обработки. IsPaused={IsPaused}, IsRunning={IsRunning}", _isPaused, _isRunning);
+            
+            // Попробуем получить элементы из очереди для проверки
+            try
+            {
+                var pendingItems = await _queueRepository.GetPendingItemsAsync();
+                _logger.LogInformation("В StartProcessingAsync найдено элементов в очереди: {Count}", pendingItems.Count);
+                
+                foreach (var item in pendingItems)
+                {
+                    _logger.LogInformation("Элемент в очереди: {ItemId} - {FileName} - {Status}", 
+                        item.Id, item.FileName, item.Status);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при получении элементов очереди в StartProcessingAsync");
+            }
         }
 
         public async Task StopProcessingAsync()
@@ -68,19 +88,11 @@ namespace Converter.Application.Services
 
             _logger.LogInformation("Остановка обработки очереди...");
             _isRunning = false;
-            _processingCts?.Cancel();
+            _isPaused = true; // Ставим на паузу вместо полной остановки
             
             try
             {
-                // Ждем завершения текущей задачи обработки
-                if (_processingTask != null && !_processingTask.IsCompleted)
-                {
-                    await Task.WhenAny(
-                        _processingTask,
-                        Task.Delay(Timeout.Infinite)
-                    );
-                }
-                await base.StopAsync(default);
+                _processingCts?.Cancel();
                 _logger.LogInformation("Queue processor остановлен");
             }
             catch (OperationCanceledException)
@@ -112,25 +124,44 @@ namespace Converter.Application.Services
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            _logger.LogInformation("Queue processor ExecuteAsync запущен. IsPaused={IsPaused}, IsRunning={IsRunning}", _isPaused, _isRunning);
+            
             while (!stoppingToken.IsCancellationRequested)
             {
+                var lockTaken = false;
                 try
                 {
                     await _processingLock.WaitAsync(stoppingToken);
+                    lockTaken = true;
 
                     if (_isPaused)
                     {
+                        _logger.LogInformation("Queue processor на паузе, ожидание... IsPaused={IsPaused}, IsRunning={IsRunning}", _isPaused, _isRunning);
+                        // Освобождаем семафор перед ожиданием, чтобы после снятия паузы цикл мог продолжиться
+                        lockTaken = false;
+                        _processingLock.Release();
                         await Task.Delay(1000, stoppingToken);
                         continue;
                     }
 
-                    var nextItem = (await _queueRepository.GetPendingItemsAsync()).FirstOrDefault();
+                    var pendingItems = await _queueRepository.GetPendingItemsAsync();
+                    _logger.LogInformation("Найдено элементов в очереди: {Count}", pendingItems.Count);
+                    
+                    foreach (var item in pendingItems)
+                    {
+                        _logger.LogInformation("Элемент в очереди: {ItemId} - {FileName} - {Status}", 
+                            item.Id, item.FileName, item.Status);
+                    }
+                    
+                    var nextItem = pendingItems.FirstOrDefault();
                     if (nextItem == null)
                     {
+                        _logger.LogDebug("Нет элементов для обработки, ожидание...");
                         await Task.Delay(1000, stoppingToken);
                         continue;
                     }
 
+                    _logger.LogInformation("Найден элемент для обработки: {ItemId} - {FileName}", nextItem.Id, nextItem.FileName);
                     await ProcessItemAsync(nextItem, stoppingToken);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -145,7 +176,7 @@ namespace Converter.Application.Services
                 }
                 finally
                 {
-                    if (!_isPaused)
+                    if (lockTaken)
                     {
                         _processingLock.Release();
                     }

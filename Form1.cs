@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Extensions.Hosting;
 using Converter.Application.Abstractions;
-using Converter.Models;
+using Converter.Application.Models;
 using Converter.Domain.Models;
 using Converter.Services;
 using Converter.UI;
@@ -28,7 +28,7 @@ namespace Converter
         private readonly INotificationService _notificationService;
         private readonly IThumbnailProvider _thumbnailProvider;
         private readonly IShareService _shareService;
-        private readonly IFileService _fileService;
+        private readonly Converter.Services.FileService _fileService;
         private readonly Converter.Services.UIServices.IFileOperationsService _fileOperationsService;
         private readonly CancellationTokenSource _lifecycleCts = new();
         private IHost? _host;
@@ -46,7 +46,7 @@ namespace Converter
         public event EventHandler? AddFilesRequested;
         public event EventHandler? StartConversionRequested;
         public event EventHandler? CancelConversionRequested;
-        public event EventHandler<Converter.Models.ConversionProfile>? PresetSelected;
+        public event EventHandler<Converter.Application.Models.ConversionProfile>? PresetSelected;
         public event EventHandler? SettingsChanged;
         public event EventHandler<string[]>? FilesDropped;
         public event EventHandler? RemoveSelectedFilesRequested;
@@ -87,10 +87,10 @@ namespace Converter
             set { _outputFolder = value ?? string.Empty; }
         }
 
-        public ObservableCollection<Converter.Models.ConversionProfile> AvailablePresets { get; set; } = new();
+        public ObservableCollection<Converter.Application.Models.ConversionProfile> AvailablePresets { get; set; } = new();
 
-        private Converter.Models.ConversionProfile? _selectedPreset;
-        public Converter.Models.ConversionProfile? SelectedPreset
+        private Converter.Application.Models.ConversionProfile? _selectedPreset;
+        public Converter.Application.Models.ConversionProfile? SelectedPreset
         {
             get => _selectedPreset;
             set
@@ -135,7 +135,7 @@ namespace Converter
             INotificationService notificationService,
             IThumbnailProvider thumbnailProvider,
             IShareService shareService,
-            IFileService fileService,
+            Converter.Services.FileService fileService,
             Converter.Services.UIServices.IFileOperationsService fileOperationsService)
         {
             _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
@@ -157,7 +157,7 @@ namespace Converter
             SetLogger(logger);
         }
 
-        public void UpdatePresetControls(Converter.Models.ConversionProfile preset)
+        public void UpdatePresetControls(Converter.Application.Models.ConversionProfile preset)
         {
             // minimal placeholder: reflect selected preset name in title/status
             if (InvokeRequired) { BeginInvoke(new Action(() => UpdatePresetControls(preset))); return; }

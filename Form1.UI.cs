@@ -12,8 +12,10 @@ using System.Windows.Forms;
 using Microsoft.Extensions.Logging;
 using Xabe.FFmpeg;
 using Xabe.FFmpeg.Downloader;
+using Converter.Application.Abstractions;
 using Converter.Domain.Models;
-using Converter.Models;
+using Converter.Application.Models;
+using NotificationOptions = Converter.Domain.Models.NotificationOptions;
 using Converter.Services;
 using Converter.Services.UIServices;
 using Converter.UI;
@@ -29,7 +31,7 @@ namespace Converter
         private FlowLayoutPanel filesPanel = null!;
         private DragDropPanel? _dragDropPanel;
         private readonly List<QueueItem> _conversionHistory = new();
-        private NotificationSettings _notificationSettings = new();
+        private Converter.Domain.Models.NotificationOptions _notificationSettings = new();
 
         // Button fields - initialized in UI building methods
         private Button btnAddFiles = null!;
@@ -447,12 +449,20 @@ namespace Converter
 
             // Ensure binding source exists and is hooked up to the current binding list from IMainView
             _queueBindingSource ??= new BindingSource();
-            
-            // Загружаем текущие элементы из FileOperationsService
-            var queueItems = FileOperationsService?.GetQueueItems() ?? new List<QueueItem>();
-            var viewModels = queueItems.Select(item => Converter.Application.ViewModels.QueueItemViewModel.FromModel(item)).ToList();
-            var bindingList = new System.ComponentModel.BindingList<Converter.Application.ViewModels.QueueItemViewModel>(viewModels);
-            
+
+            // Если QueueItemsBinding уже установлен через IMainView/MainPresenter,
+            // используем его как единый источник правды. Иначе создаём список из FileOperationsService
+            // и сохраняем его в _queueItemsBinding, чтобы последующие обновления шли по одному списку.
+            if (_queueItemsBinding == null)
+            {
+                var queueItems = FileOperationsService?.GetQueueItems() ?? new List<QueueItem>();
+                var viewModels = queueItems
+                    .Select(item => Converter.Application.ViewModels.QueueItemViewModel.FromModel(item))
+                    .ToList();
+                _queueItemsBinding = new System.ComponentModel.BindingList<Converter.Application.ViewModels.QueueItemViewModel>(viewModels);
+            }
+
+            var bindingList = _queueItemsBinding;
             _queueBindingSource.DataSource = bindingList;
 
             _queueGrid = new DataGridView
@@ -550,7 +560,7 @@ namespace Converter
         }
 
 
-        private async Task<Converter.Models.ConversionResult> ConvertQueueItemAsync(QueueItem item, IProgress<int> progress, CancellationToken cancellationToken)
+        private async Task<Converter.Application.Models.ConversionResult> ConvertQueueItemAsync(QueueItem item, IProgress<int> progress, CancellationToken cancellationToken)
         {
             try
             {
@@ -587,7 +597,7 @@ namespace Converter
                     outputSize = new System.IO.FileInfo(output).Length;
                 }
 
-                return new Converter.Models.ConversionResult
+                return new Converter.Application.Models.ConversionResult
                 {
                     Success = true,
                     OutputFileSize = outputSize ?? 0,
@@ -600,7 +610,7 @@ namespace Converter
             }
             catch (Exception ex)
             {
-                return new Converter.Models.ConversionResult
+                return new Converter.Application.Models.ConversionResult
                 {
                     Success = false,
                     ErrorMessage = ex.Message
@@ -610,130 +620,98 @@ namespace Converter
 
         private void BuildPresetsTab()
         {
-            var mainPanel = new Panel
+            // Простейшая реализация: просто набор кнопок пресетов в FlowLayoutPanel
+            tabPresets.Controls.Clear();
+
+            var container = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                Padding = new Padding(10)
+                AutoScroll = true,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                Padding = new Padding(10),
+                BackColor = Color.White
             };
 
-            // Создаем вложенный TabControl для категорий пресетов
-            var categoryTabControl = new TabControl
+            tabPresets.Controls.Add(container);
+
+            var presets = _presetService?.GetAllPresets() ?? new List<Converter.Application.Models.PresetProfile>();
+            AppendLog($"Загружено пресетов из сервиса: {presets.Count}");
+
+            if (presets.Count == 0)
             {
-                Dock = DockStyle.Fill,
-                Appearance = TabAppearance.FlatButtons,
-                Multiline = true
-            };
-
-            if (_presetService != null)
-            {
-                var presets = _presetService.GetAllPresets();
-                AppendLog($"Загружено пресетов из сервиса: {presets.Count}");
-
-                // Группируем по категориям
-                var groups = presets
-                    .GroupBy(p => string.IsNullOrWhiteSpace(p.Category) ? "Прочее" : p.Category)
-                    .OrderBy(g => g.Key);
-
-                foreach (var group in groups)
+                container.Controls.Add(new Label
                 {
-                    // Создаем вкладку для категории
-                    var categoryTab = new TabPage(group.Key);
-                    var categoryPanel = new Panel
-                    {
-                        Dock = DockStyle.Fill,
-                        Padding = new Padding(15),
-                        AutoScroll = true
-                    };
-
-                    // Сохраняем пресеты для пересборки
-                    var presetsList = group.ToList();
-
-                    // Функция для пересборки кнопок
-                    Action rebuildButtons = () =>
-                    {
-                        categoryPanel.SuspendLayout();
-                        categoryPanel.Controls.Clear();
-
-                        int y = 10;
-                        int buttonWidth = 180;
-                        int buttonHeight = 40;
-                        int spacing = 10;
-
-                        // Вычисляем количество кнопок в ряду адаптивно
-                        int maxButtonsPerRow = Math.Max(1, (categoryPanel.ClientSize.Width - 30) / (buttonWidth + spacing));
-
-                        int x = 10;
-                        int buttonsInCurrentRow = 0;
-
-                        foreach (var preset in presetsList)
-                        {
-                            var btn = new Button
-                            {
-                                Text = $"{preset.Icon} {preset.Name}",
-                                Left = x,
-                                Top = y,
-                                Width = buttonWidth,
-                                Height = buttonHeight,
-                                BackColor = Color.LightBlue,
-                                FlatStyle = FlatStyle.Flat,
-                                FlatAppearance = { BorderSize = 0 },
-                                TextAlign = ContentAlignment.MiddleLeft,
-                                Padding = new Padding(10, 0, 0, 0)
-                            };
-                            
-                            btn.Click += (_, __) =>
-                            {
-                                try
-                                {
-                                    ApplyPresetToUi(preset);
-                                    AppendLog($"Выбран пресет: {preset.Name}");
-                                    DebounceEstimate();
-                                }
-                                catch (Exception ex)
-                                {
-                                    AppendLog($"Ошибка применения пресета: {ex.Message}");
-                                }
-                            };
-                            
-                            categoryPanel.Controls.Add(btn);
-                            
-                            // Расположение кнопок в адаптивной сетке
-                            buttonsInCurrentRow++;
-                            x += buttonWidth + spacing;
-                            
-                            if (buttonsInCurrentRow >= maxButtonsPerRow)
-                            {
-                                x = 10;
-                                y += buttonHeight + spacing;
-                                buttonsInCurrentRow = 0;
-                            }
-                        }
-                        
-                        categoryPanel.ResumeLayout();
-                    };
-                    
-                    // Подписываемся на изменение размера для пересборки сетки
-                    categoryPanel.Resize += (sender, e) => rebuildButtons();
-                    
-                    // Первоначальная сборка
-                    rebuildButtons();
-                    
-                    categoryTab.Controls.Add(categoryPanel);
-                    categoryTabControl.TabPages.Add(categoryTab);
-                }
-            
+                    Text = "Пресеты не найдены",
+                    AutoSize = true,
+                    ForeColor = Color.Gray,
+                    Font = new Font("Segoe UI", 11F, FontStyle.Regular),
+                    Padding = new Padding(5),
+                    Margin = new Padding(5)
+                });
+                return;
             }
-            else
+
+            // Группируем по категории, но внутри просто кнопки
+            foreach (var group in presets
+                         .GroupBy(p => string.IsNullOrWhiteSpace(p.Category) ? "Прочее" : p.Category)
+                         .OrderBy(g => g.Key))
             {
-                var errorTab = new TabPage("Ошибка");
-                var errorPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(15) };
-                errorPanel.Controls.Add(CreateLabel("Сервис пресетов не инициализирован", 10, 10));
-                errorTab.Controls.Add(errorPanel);
-                categoryTabControl.TabPages.Add(errorTab);
-            }
+                var gb = new GroupBox
+                {
+                    Text = group.Key,
+                    AutoSize = true,
+                    AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                    Padding = new Padding(10),
+                    Margin = new Padding(5),
+                    BackColor = Color.FromArgb(248, 249, 250)
+                };
 
-            mainPanel.Controls.Add(categoryTabControl);
-            tabPresets.Controls.Add(mainPanel);
+                var inner = new FlowLayoutPanel
+                {
+                    Dock = DockStyle.Fill,
+                    AutoSize = true,
+                    AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                    FlowDirection = FlowDirection.LeftToRight,
+                    WrapContents = true,
+                    BackColor = Color.Transparent,
+                    Padding = new Padding(5)
+                };
+
+                gb.Controls.Add(inner);
+
+                foreach (var preset in group)
+                {
+                    var btn = new Button
+                    {
+                        AutoSize = true,
+                        AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                        Margin = new Padding(5),
+                        Padding = new Padding(10, 5, 10, 5),
+                        Text = $"{preset.Icon} {preset.Name}",
+                        Tag = preset,
+                        FlatStyle = FlatStyle.System
+                    };
+
+                    btn.Click += (_, __) =>
+                    {
+                        try
+                        {
+                            ApplyPresetToUi(preset);
+                            AppendLog($"Выбран пресет: {preset.Name}");
+                            DebounceEstimate();
+                        }
+                        catch (Exception ex)
+                        {
+                            AppendLog($"Ошибка применения пресета: {ex.Message}");
+                        }
+                    };
+
+                    inner.Controls.Add(btn);
+                }
+
+                container.Controls.Add(gb);
+            }
         }
 
         private void BuildVideoTab()
@@ -2048,12 +2026,11 @@ namespace Converter
 
         private void BtnNotificationSettings_Click(object? sender, EventArgs e)
         {
-            var settingsCopy = new NotificationSettings
+            var settingsCopy = new NotificationOptions
             {
                 DesktopNotificationsEnabled = _notificationSettings.DesktopNotificationsEnabled,
                 ShowProgressNotifications = _notificationSettings.ShowProgressNotifications,
                 SoundEnabled = _notificationSettings.SoundEnabled,
-                UseCustomSound = _notificationSettings.UseCustomSound,
                 CustomSoundPath = _notificationSettings.CustomSoundPath
             };
 
@@ -2078,21 +2055,14 @@ namespace Converter
 
             var summary = new NotificationSummary
             {
-                Success = result.failed == 0,
-                ProcessedFiles = successfulItems.Count,
-                SpaceSaved = CalculateSpaceSaved(successfulItems),
-                Duration = DateTime.Now - startTime,
-                OutputFolder = txtOutputFolder.Text
+                SuccessCount = successfulItems.Count,
+                FailedCount = result.failed,
+                TotalSpaceSaved = CalculateSpaceSaved(successfulItems),
+                TotalProcessingTime = DateTime.Now - startTime,
+                Message = result.failed == 0 
+                    ? $"Успешно конвертировано: {successfulItems.Count} файлов"
+                    : $"Успешно: {result.ok} из {result.total}. Ошибок: {result.failed}."
             };
-
-            if (summary.Success)
-            {
-                summary.ThumbnailPath = await GenerateNotificationThumbnailAsync(successfulItems);
-            }
-            else
-            {
-                summary.ErrorMessage = $"Успешно: {result.ok} из {result.total}. Ошибок: {result.failed}.";
-            }
 
             _notificationService.NotifyConversionComplete(summary);
         }
@@ -2698,7 +2668,7 @@ namespace Converter
                 }
 
                 // Calculate cumulative estimate
-                var totalEstimate = new Converter.Models.ConversionEstimate
+                var totalEstimate = new Converter.Application.Models.ConversionEstimate
                 {
                     InputFileSizeBytes = 0,
                     EstimatedOutputSizeBytes = 0,

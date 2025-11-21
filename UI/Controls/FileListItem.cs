@@ -3,7 +3,7 @@ using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
 using Converter.Application.Abstractions;
-using Converter.Models;
+using Converter.Application.Models;
 
 namespace Converter.UI.Controls
 {

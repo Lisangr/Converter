@@ -7,6 +7,10 @@ using Converter.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using FileService = Converter.Application.Services.FileService;
+using IFileService = Converter.Application.Services.IFileService;
+using NotificationService = Converter.Application.Services.NotificationService;
+using ThumbnailProvider = Converter.Infrastructure.Ffmpeg.ThumbnailProvider;
 
 namespace Converter.Infrastructure
 {
@@ -15,8 +19,8 @@ namespace Converter.Infrastructure
         public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
         {
             // Configuration
-            services.Configure<SettingsOptions>(configuration.GetSection("Settings"));
-            
+            services.Configure<Converter.Domain.Models.AppSettings>(configuration.GetSection("Settings"));
+
             // Persistence services
             services.AddSingleton<ISettingsStore, JsonSettingsStore>();
             services.AddSingleton<IQueueStore, JsonQueueStore>();
@@ -25,10 +29,10 @@ namespace Converter.Infrastructure
             services.AddSingleton<IFFmpegExecutor, FFmpegExecutor>();
             services.AddSingleton<FfmpegBootstrapService>(); // This is IHostedService
             services.AddSingleton<IThumbnailProvider, ThumbnailProvider>();
-            
+
             // Notification infrastructure
             services.AddSingleton<INotificationGateway, NotificationGateway>();
-            services.AddSingleton<INotificationSettingsStore, NotificationSettingsStore>();
+            services.AddSingleton<INotificationSettingsStore, Persistence.NotificationSettingsStore>();
             services.AddSingleton<INotificationService, NotificationService>();
             
             // Theme infrastructure
@@ -38,8 +42,9 @@ namespace Converter.Infrastructure
             // Share service
             services.AddSingleton<IShareService, ShareService>();
             
-            // File service
-            services.AddSingleton<IFileService, FileService>();
+            // File services
+            services.AddSingleton<IFileService, FileService>(); // application-level file service
+            services.AddSingleton<Converter.Services.FileService>(); // UI-level file service for thumbnails
             
             // UI services
             services.AddSingleton<Converter.Services.UIServices.IFileOperationsService, Converter.Services.UIServices.FileOperationsService>();

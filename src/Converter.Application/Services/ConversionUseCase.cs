@@ -11,6 +11,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Converter.Application.Abstractions;
+using Converter.Application.Models;
 using Converter.Domain.Models;
 using Microsoft.Extensions.Logging;
 
@@ -35,7 +36,7 @@ namespace Converter.Application.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public async Task<Converter.Models.ConversionResult> ExecuteAsync(
+        public async Task<Converter.Application.Models.ConversionResult> ExecuteAsync(
             QueueItem item, 
             IProgress<int>? progress = null, 
             CancellationToken cancellationToken = default)
@@ -66,7 +67,7 @@ namespace Converter.Application.Services
                     profile.VideoCodec ?? string.Empty,
                     profile.AudioCodec ?? string.Empty,
                     profile.AudioBitrate.HasValue ? $"{profile.AudioBitrate.Value}k" : null,
-                    profile.CRF);
+                    profile.CRF ?? 23);
 
                 var request = new ConversionRequest(
                     item.FilePath, 
@@ -99,7 +100,7 @@ namespace Converter.Application.Services
                     _logger.LogInformation("Successfully converted item {ItemId} to {OutputPath}",
                         item.Id, outputPath);
 
-                    return new Converter.Models.ConversionResult
+                    return new Converter.Application.Models.ConversionResult
                     {
                         Success = true,
                         OutputFileSize = size ?? 0,
@@ -108,7 +109,7 @@ namespace Converter.Application.Services
                 }
 
                 _logger.LogError("Conversion failed for item {ItemId}: {Error}", item.Id, outcome.ErrorMessage);
-                return new Converter.Models.ConversionResult
+                return new Converter.Application.Models.ConversionResult
                 {
                     Success = false,
                     ErrorMessage = outcome.ErrorMessage
@@ -122,7 +123,7 @@ namespace Converter.Application.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error converting item {ItemId}", item.Id);
-                return new Converter.Models.ConversionResult
+                return new Converter.Application.Models.ConversionResult
                 {
                     Success = false,
                     ErrorMessage = ex.Message
@@ -130,7 +131,7 @@ namespace Converter.Application.Services
             }
         }
 
-        private async Task<Converter.Models.ConversionProfile> GetConversionProfile(QueueItem item)
+        private async Task<Converter.Application.Models.ConversionProfile> GetConversionProfile(QueueItem item)
         {
             // Currently we always use the default profile; per-item profiles are not wired yet
             return await _profileProvider.GetDefaultProfileAsync();

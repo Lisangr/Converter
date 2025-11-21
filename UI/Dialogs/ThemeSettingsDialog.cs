@@ -4,7 +4,7 @@ using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 using Converter.Application.Abstractions;
-using Converter.Models;
+using Converter.Application.Models;
 
 namespace Converter.UI.Dialogs
 {

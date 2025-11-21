@@ -117,8 +117,60 @@ namespace Converter.Infrastructure.Ffmpeg
 
             var tcs = new TaskCompletionSource<ProcessResult>();
 
+            // Плавный синтетический прогресс: пока процесс выполняется, раз в секунду увеличиваем процент,
+            // а по завершении выставляем 100%. Это даёт визуальную обратную связь даже без парсинга вывода FFmpeg.
+            CancellationTokenSource? progressCts = null;
+            if (progress != null)
+            {
+                progressCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                var localToken = progressCts.Token;
+                _ = Task.Run(async () =>
+                {
+                    double value = 0;
+                    try
+                    {
+                        // Начальное значение
+                        progress.Report(0);
+                        while (!localToken.IsCancellationRequested && !process.HasExited)
+                        {
+                            // Плавно увеличиваем, но оставляем запас до 100%,
+                            // чтобы финальный отчёт выставил точное значение.
+                            value = Math.Min(99, value + 1);
+                            progress.Report(value);
+                            await Task.Delay(1000, localToken).ConfigureAwait(false);
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Игнорируем отмену
+                    }
+                    catch
+                    {
+                        // Ошибки прогресса не должны падать весь процесс
+                    }
+                }, CancellationToken.None);
+            }
+
             process.Exited += (_, _) =>
             {
+                try
+                {
+                    if (progress != null)
+                    {
+                        // По факту завершения процесса выставляем 100%
+                        progress.Report(100);
+                    }
+                }
+                catch
+                {
+                    // Игнорируем ошибки визуального прогресса
+                }
+                finally
+                {
+                    try { progressCts?.Cancel(); } catch { }
+                    progressCts?.Dispose();
+                }
+
                 tcs.TrySetResult(new ProcessResult
                 {
                     ExitCode = process.ExitCode,

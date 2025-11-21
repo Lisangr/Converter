@@ -11,7 +11,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using Converter.Application.Abstractions;
 using Converter.Domain.Models;
-using Converter.Models;
+using Converter.Application.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Converter.Application.Services
@@ -54,16 +54,83 @@ namespace Converter.Application.Services
             return outputPath;
         }
 
-        public string BuildOutputPath(QueueItem item, Models.ConversionProfile profile)
+        public string BuildOutputPath(QueueItem item, Converter.Application.Models.ConversionProfile profile)
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
             if (profile == null) throw new ArgumentNullException(nameof(profile));
+            
             var outputDir = !string.IsNullOrWhiteSpace(item.OutputDirectory)
                 ? item.OutputDirectory
                 : Path.GetDirectoryName(item.FilePath) ?? string.Empty;
-            var extension = Path.GetExtension(item.FilePath);
 
-            return BuildOutputPath(item, outputDir, extension);
+            // Используем оригинальное расширение файла (как в тестах)
+            var extension = Path.GetExtension(item.FilePath);
+            
+            // Если есть пользовательские настройки именования, применяем их
+            var fileName = GetOutputFileName(item, profile);
+            var outputPath = Path.Combine(outputDir, $"{fileName}{extension}");
+
+            // Если файл существует, делаем имя уникальным
+            if (File.Exists(outputPath))
+            {
+                outputPath = GenerateUniqueFileName(outputPath);
+            }
+
+            _logger.LogDebug("Built output path with naming pattern: {OutputPath}", outputPath);
+            return outputPath;
+        }
+
+        private string GetOutputFileName(QueueItem item, Converter.Application.Models.ConversionProfile profile)
+        {
+            var originalName = Path.GetFileNameWithoutExtension(item.FilePath);
+            var safeOriginalName = SanitizeFileName(originalName);
+            
+            // Паттерн по умолчанию
+            var pattern = "{original}_converted";
+            
+            // TODO: В будущем можно добавить поддержку кастомных паттернов из настроек
+            // Сейчас используем стандартный паттерн с поддержкой базовых замен
+            
+            var outputName = pattern
+                .Replace("{original}", safeOriginalName)
+                .Replace("{format}", (profile.Format ?? "mp4").ToUpperInvariant())
+                .Replace("{codec}", ExtractCodecName(profile))
+                .Replace("{resolution}", GetResolutionString(profile));
+
+            return SanitizeFileName(outputName);
+        }
+
+        private string ExtractCodecName(Converter.Application.Models.ConversionProfile profile)
+        {
+            var codec = profile.VideoCodec?.ToLowerInvariant() ?? "libx264";
+            return codec switch
+            {
+                "libx264" => "h264",
+                "libx265" => "h265", 
+                "libvpx-vp9" => "vp9",
+                "libaom-av1" => "av1",
+                _ => codec
+            };
+        }
+
+        private string GetResolutionString(Converter.Application.Models.ConversionProfile profile)
+        {
+            if (profile.Width.HasValue && profile.Height.HasValue)
+            {
+                return $"{profile.Width}x{profile.Height}";
+            }
+            
+            if (profile.Width.HasValue)
+            {
+                return $"{profile.Width}w";
+            }
+            
+            if (profile.Height.HasValue)
+            {
+                return $"{profile.Height}h";
+            }
+            
+            return "original";
         }
 
         public string GenerateUniqueFileName(string basePath)

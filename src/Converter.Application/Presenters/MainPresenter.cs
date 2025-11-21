@@ -9,7 +9,7 @@ using Converter.Application.Abstractions;
 using Converter.Application.ViewModels;
 using Converter.Domain.Models;
 using Converter.Extensions;
-using Converter.Models;
+using Converter.Application.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Converter.Application.Presenters
@@ -125,7 +125,7 @@ namespace Converter.Application.Presenters
         {
             // Load profiles from provider and push to view
             var profiles = await _profileProvider.GetAllProfilesAsync();
-            _view.AvailablePresets = new System.Collections.ObjectModel.ObservableCollection<Converter.Models.ConversionProfile>(profiles);
+            _view.AvailablePresets = new System.Collections.ObjectModel.ObservableCollection<Converter.Application.Models.ConversionProfile>(profiles);
 
             _viewModel.Presets.Clear();
             foreach (var profile in profiles)
@@ -138,7 +138,7 @@ namespace Converter.Application.Presenters
             _viewModel.SelectedPreset = defaultProfile;
         }
 
-        private void OnPresetSelected(object? sender, Converter.Models.ConversionProfile profile)
+        private void OnPresetSelected(object? sender, Converter.Application.Models.ConversionProfile profile)
         {
             if (profile == null) return;
             _logger.LogInformation("Preset selected: {Name}", profile.Name);
@@ -205,7 +205,8 @@ namespace Converter.Application.Presenters
                     }
                 }
 
-                // 4. Reset for next conversion
+                // 4. Reset for next conversion (создаем новый токен только после полной остановки)
+                await Task.Delay(1000); // Даем время для завершения текущих операций
                 ResetProcessingCancellationToken();
 
                 // 5. Reset UI state
@@ -527,10 +528,11 @@ namespace Converter.Application.Presenters
                 _view.IsBusy = true;
                 _view.StatusText = "Запуск конвертации...";
                 
-                // Start the queue processor
+                // QueueProcessor уже запущен как BackgroundService, активируем обработку
                 await _queueProcessor.StartProcessingAsync(_cancellationTokenSource.Token);
                 
                 _view.StatusText = "Конвертация запущена";
+                _view.ShowInfo("Процесс конвертации начат");
             }
             catch (Exception ex)
             {

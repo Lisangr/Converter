@@ -1,6 +1,6 @@
 using System;
 using System.Linq;
-using Converter.Models;
+using Converter.Application.Models;
 
 namespace Converter.Services;
 

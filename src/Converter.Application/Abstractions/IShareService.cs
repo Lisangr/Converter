@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Converter.Domain.Models;
-using Converter.Models;
+using Converter.Application.Models;
 
 /// <summary>
 /// Сервис для создания и распространения отчетов о результатах конвертации.

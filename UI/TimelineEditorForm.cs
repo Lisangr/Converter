@@ -6,7 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using Converter.Models;
+using Converter.Application.Models;
 using Converter.Services;
 using Xabe.FFmpeg;
 

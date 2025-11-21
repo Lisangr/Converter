@@ -29,6 +29,17 @@ public interface IConversionOrchestrator
     Task<ConversionOutcome> ConvertAsync(ConversionRequest request, IProgress<int> progress, CancellationToken ct);
 }
 
-public sealed record ConversionRequest(string InputPath, string OutputPath, ConversionProfile Profile, int? TargetWidth = null, int? TargetHeight = null);
-public sealed record ConversionProfile(string Name, string VideoCodec, string AudioCodec, string? AudioBitrateK, int? Crf);
+/// <summary>
+/// Запрос на конвертацию видео.
+/// </summary>
+/// <param name="InputPath">Путь к входному файлу</param>
+/// <param name="OutputPath">Путь к выходному файлу</param>
+/// <param name="Profile">Профиль конвертации</param>
+/// <param name="TargetWidth">Целевая ширина (опционально)</param>
+/// <param name="TargetHeight">Целевая высота (опционально)</param>
+public sealed record ConversionRequest(string InputPath, string OutputPath, Converter.Application.Models.ConversionProfile Profile, int? TargetWidth = null, int? TargetHeight = null);
+
+/// <summary>
+/// Результат операции конвертации.
+/// </summary>
 public sealed record ConversionOutcome(bool Success, long? OutputSize, string? ErrorMessage);

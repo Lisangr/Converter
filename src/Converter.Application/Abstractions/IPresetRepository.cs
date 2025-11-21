@@ -1,30 +1,41 @@
+using Converter.Application.Models;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+
 namespace Converter.Application.Abstractions;
 
 /// <summary>
-/// Репозиторий пресетов конвертации.
-/// Обеспечивает CRUD операции с пользовательскими пресетами конвертации,
-/// включая загрузку, сохранение и удаление настроек конвертации.
+/// Репозиторий для работы с пресетами конвертации.
 /// </summary>
 public interface IPresetRepository
 {
     /// <summary>
-    /// Получает все доступные пресеты конвертации.
-    /// Включает как встроенные, так и пользовательские пресеты.
+    /// Получает все доступные пресеты.
     /// </summary>
-    /// <returns>Коллекция всех доступных пресетов</returns>
-    Task<IReadOnlyList<Converter.Models.ConversionProfile>> GetAllPresetsAsync();
+    /// <param name="ct">Токен отмены</param>
+    /// <returns>Коллекция пресетов</returns>
+    Task<IReadOnlyList<ConversionProfile>> GetPresetsAsync(CancellationToken ct = default);
     
     /// <summary>
-    /// Сохраняет пользовательский пресет конвертации.
-    /// Обновляет существующий пресет или создает новый.
+    /// Получает пресет по идентификатору.
+    /// </summary>
+    /// <param name="id">Идентификатор пресета</param>
+    /// <param name="ct">Токен отмены</param>
+    /// <returns>Пресет или null если не найден</returns>
+    Task<ConversionProfile?> GetPresetAsync(string id, CancellationToken ct = default);
+    
+    /// <summary>
+    /// Сохраняет пресет.
     /// </summary>
     /// <param name="preset">Пресет для сохранения</param>
-    Task SavePresetAsync(Converter.Models.ConversionProfile preset);
+    /// <param name="ct">Токен отмены</param>
+    Task SavePresetAsync(ConversionProfile preset, CancellationToken ct = default);
     
     /// <summary>
-    /// Удаляет пользовательский пресет по имени.
-    /// Не может удалить встроенные пресеты.
+    /// Удаляет пресет.
     /// </summary>
-    /// <param name="presetName">Имя удаляемого пресета</param>
-    Task DeletePresetAsync(string presetName);
+    /// <param name="id">Идентификатор пресета</param>
+    /// <param name="ct">Токен отмены</param>
+    Task DeletePresetAsync(string id, CancellationToken ct = default);
 }

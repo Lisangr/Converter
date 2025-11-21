@@ -1,46 +1,44 @@
 using System;
 using System.Windows.Forms;
-using Converter.Models;
+using Converter.Application.Models;
 
-namespace Converter.Application.Abstractions
+namespace Converter.Application.Abstractions;
+
+/// <summary>
+/// Менеджер тем интерфейса.
+/// </summary>
+public interface IThemeManager : IDisposable
 {
     /// <summary>
-    /// Менеджер тем интерфейса с поддержкой анимированных переходов.
-    /// Отвечает за применение визуальных тем к формам и элементам управления,
-    /// включая плавные анимации переходов между темами.
+    /// Текущая активная тема.
     /// </summary>
-    public delegate void ThemeTransitionProgressEventHandler(object? sender, float progress);
+    Theme CurrentTheme { get; }
 
-    public interface IThemeManager : IDisposable
-    {
-        // ===== СОСТОЯНИЕ =====
-        
-        /// <summary>Текущая активная тема интерфейса</summary>
-        Theme CurrentTheme { get; }
+    /// <summary>
+    /// Событие изменения темы.
+    /// </summary>
+    event EventHandler<Theme>? ThemeChanged;
 
-        // ===== СОБЫТИЯ =====
-        
-        /// <summary>Событие изменения темы</summary>
-        event EventHandler<Theme>? ThemeChanged;
-        
-        /// <summary>Событие прогресса анимированного перехода между темами</summary>
-        event ThemeTransitionProgressEventHandler? ThemeTransitionProgress;
+    /// <summary>
+    /// Событие прогресса перехода между темами.
+    /// </summary>
+    event ThemeTransitionProgressEventHandler? ThemeTransitionProgress;
 
-        // ===== ОПЕРАЦИИ =====
-        
-        /// <summary>
-        /// Устанавливает новую тему с возможностью анимированного перехода.
-        /// Поддерживает плавную смену цветов и стилей интерфейса.
-        /// </summary>
-        /// <param name="theme">Новая тема для применения</param>
-        /// <param name="animate">Использовать ли анимацию перехода</param>
-        void SetTheme(Theme theme, bool animate = true);
-        
-        /// <summary>
-        /// Применяет текущую тему к указанной форме и всем её элементам.
-        /// Рекурсивно обрабатывает все дочерние элементы управления.
-        /// </summary>
-        /// <param name="form">Форма для применения темы</param>
-        void ApplyTheme(Form form);
-    }
+    /// <summary>
+    /// Устанавливает новую тему.
+    /// </summary>
+    /// <param name="theme">Новая тема</param>
+    /// <param name="animate">Использовать анимацию</param>
+    void SetTheme(Theme theme, bool animate = true);
+
+    /// <summary>
+    /// Применяет тему к форме.
+    /// </summary>
+    /// <param name="form">Форма для применения темы</param>
+    void ApplyTheme(Form form);
 }
+
+/// <summary>
+/// Делегат для события прогресса перехода темы.
+/// </summary>
+public delegate void ThemeTransitionProgressEventHandler(object? sender, float progress);

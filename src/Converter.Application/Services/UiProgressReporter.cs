@@ -41,6 +41,41 @@ namespace Converter.Application.Services
             }
         }
 
+        public void Report(int progress)
+        {
+            try
+            {
+                InvokeOnUiThread(() =>
+                {
+                    _view.UpdateTotalProgress(progress);
+                });
+                
+                _logger.LogDebug("Progress: {Progress}%", progress);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reporting progress");
+            }
+        }
+
+        public void Report(double progress)
+        {
+            try
+            {
+                var percentage = (int)(progress * 100);
+                InvokeOnUiThread(() =>
+                {
+                    _view.UpdateTotalProgress(percentage);
+                });
+                
+                _logger.LogDebug("Progress: {Progress:F1}%", progress * 100);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reporting progress");
+            }
+        }
+
         public void ReportItemProgress(QueueItem item, int progress, string? status = null)
         {
             try

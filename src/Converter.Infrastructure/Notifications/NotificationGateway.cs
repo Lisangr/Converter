@@ -1,91 +1,113 @@
 using Converter.Application.Abstractions;
 using Converter.Domain.Models;
+using Microsoft.Extensions.Logging;
 using System;
-using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Converter.Infrastructure.Notifications;
 
-public sealed class NotificationGateway : INotificationGateway
+/// <summary>
+/// Реализация шлюза уведомлений.
+/// Реализует как INotificationGateway, так и методы для тестов.
+/// </summary>
+public class NotificationGateway : INotificationGateway
 {
+    private readonly Microsoft.Extensions.Logging.ILogger<NotificationGateway> _logger;
+
+    public NotificationGateway(Microsoft.Extensions.Logging.ILogger<NotificationGateway> logger)
+    {
+        _logger = logger;
+    }
+
+    public Task ShowInfoAsync(string message, string? title = null, CancellationToken ct = default)
+    {
+        _logger.LogInformation("Info: {Message}", message);
+        return Task.CompletedTask;
+    }
+
+    public Task ShowWarningAsync(string message, string? title = null, CancellationToken ct = default)
+    {
+        _logger.LogWarning("Warning: {Message}", message);
+        return Task.CompletedTask;
+    }
+
+    public Task ShowErrorAsync(string message, string? title = null, CancellationToken ct = default)
+    {
+        _logger.LogError("Error: {Message}", message);
+        return Task.CompletedTask;
+    }
+
+    public Task ShowSuccessAsync(string message, string? title = null, CancellationToken ct = default)
+    {
+        _logger.LogInformation("Success: {Message}", message);
+        return Task.CompletedTask;
+    }
+
+    public Task ShowToastAsync(string message, TimeSpan duration, CancellationToken ct = default)
+    {
+        _logger.LogInformation("Toast: {Message}", message);
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> ShowConfirmationAsync(string message, string title, string confirmText, string cancelText, CancellationToken ct = default)
+    {
+        _logger.LogInformation("Confirmation: {Title} - {Message}", title, message);
+        return Task.FromResult(true);
+    }
+
     public IProgressReporter CreateProgressReporter(string operationName)
     {
-        return new ProgressReporter(operationName, this);
+        return new ProgressReporter(operationName, _logger);
     }
 
-    public async Task ShowInfoAsync(string message, string? title = null, CancellationToken ct = default)
+    // Класс для реализации IProgressReporter из INotificationGateway
+    private class ProgressReporter : IProgressReporter
     {
-        Debug.WriteLine($"INFO: {title ?? "Info"} - {message}");
-        await Task.CompletedTask;
-    }
+        private readonly string _operationName;
+        private readonly Microsoft.Extensions.Logging.ILogger _logger;
 
-    public async Task ShowWarningAsync(string message, string? title = null, CancellationToken ct = default)
-    {
-        Debug.WriteLine($"WARNING: {title ?? "Warning"} - {message}");
-        await Task.CompletedTask;
-    }
+        public ProgressReporter(string operationName, Microsoft.Extensions.Logging.ILogger logger)
+        {
+            _operationName = operationName;
+            _logger = logger;
+        }
 
-    public async Task ShowErrorAsync(string message, string? title = null, CancellationToken ct = default)
-    {
-        Debug.WriteLine($"ERROR: {title ?? "Error"} - {message}");
-        await Task.CompletedTask;
-    }
+        public void Report(int progress)
+        {
+            _logger.LogInformation("{Operation}: Progress {Progress}%", _operationName, progress);
+        }
 
-    public async Task ShowSuccessAsync(string message, string? title = null, CancellationToken ct = default)
-    {
-        Debug.WriteLine($"SUCCESS: {title ?? "Success"} - {message}");
-        await Task.CompletedTask;
-    }
+        public void Report(double progress)
+        {
+            _logger.LogInformation("{Operation}: Progress {Progress:F1}%", _operationName, progress * 100);
+        }
 
-    public async Task ShowToastAsync(string message, TimeSpan duration, CancellationToken ct = default)
-    {
-        Debug.WriteLine($"TOAST ({duration}): {message}");
-        await Task.CompletedTask;
-    }
+        public void ReportItemProgress(QueueItem item, int progress, string? status = null)
+        {
+            _logger.LogInformation("Item {ItemId}: Progress {Progress}% {Status}", 
+                item.Id, progress, status ?? string.Empty);
+        }
 
-    public async Task<bool> ShowConfirmationAsync(string message, string title, string confirmText, string cancelText, CancellationToken ct = default)
-    {
-        Debug.WriteLine($"CONFIRM: {title} - {message} [{confirmText}/{cancelText}]");
-        // For simplicity, always return true in the debug implementation
-        // In a real implementation, this would show a dialog and return the user\'s choice
-        return await Task.FromResult(true);
-    }
-}
+        public void ReportGlobalProgress(int progress, string? status = null)
+        {
+            _logger.LogInformation("Global Progress: {Progress}% {Status}", 
+                progress, status ?? string.Empty);
+        }
 
-public class ProgressReporter : IProgressReporter
-{
-    private readonly string _operationName;
-    private readonly INotificationGateway _notificationGateway;
+        public void ReportError(QueueItem item, string error)
+        {
+            _logger.LogError("Item {ItemId} Error: {Error}", item.Id, error);
+        }
 
-    public ProgressReporter(string operationName, INotificationGateway notificationGateway)
-    {
-        _operationName = operationName;
-        _notificationGateway = notificationGateway;
-    }
+        public void ReportWarning(QueueItem item, string warning)
+        {
+            _logger.LogWarning("Item {ItemId} Warning: {Warning}", item.Id, warning);
+        }
 
-    public void ReportItemProgress(QueueItem item, int progress, string? status = null)
-    {
-        Debug.WriteLine($"PROGRESS ({_operationName}) - Item {item.Id}: {progress}% - {status}");
-    }
-
-    public void ReportGlobalProgress(int progress, string? status = null)
-    {
-        Debug.WriteLine($"PROGRESS ({_operationName}) - Global: {progress}% - {status}");
-    }
-
-    public void ReportError(QueueItem item, string error)
-    {
-        _notificationGateway.ShowErrorAsync($"Item {item.Id}: {error}", "Error").ConfigureAwait(false);
-    }
-
-    public void ReportWarning(QueueItem item, string warning)
-    {
-        _notificationGateway.ShowWarningAsync($"Item {item.Id}: {warning}", "Warning").ConfigureAwait(false);
-    }
-
-    public void ReportInfo(QueueItem item, string message)
-    {
-        _notificationGateway.ShowInfoAsync($"Item {item.Id}: {message}", "Info").ConfigureAwait(false);
+        public void ReportInfo(QueueItem item, string message)
+        {
+            _logger.LogInformation("Item {ItemId}: {Message}", item.Id, message);
+        }
     }
 }

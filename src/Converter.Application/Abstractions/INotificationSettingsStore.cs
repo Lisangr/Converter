@@ -1,24 +1,20 @@
-namespace Converter.Application.Abstractions;
+using System;
+using Converter.Domain.Models;
 
-using Converter.Services;
+namespace Converter.Application.Abstractions;
 
 /// <summary>
 /// Хранилище настроек уведомлений.
-/// Обеспечивает персистентность пользовательских настроек уведомлений
-/// между сеансами работы приложения.
 /// </summary>
 public interface INotificationSettingsStore
 {
     /// <summary>
-    /// Загружает сохраненные настройки уведомлений.
-    /// Возвращает настройки по умолчанию, если сохраненных настроек нет.
+    /// Загружает настройки уведомлений.
     /// </summary>
-    /// <returns>Объект с настройками уведомлений</returns>
-    NotificationSettings Load();
-    
+    Converter.Domain.Models.NotificationOptions Load();
+
     /// <summary>
-    /// Сохраняет настройки уведомлений в постоянное хранилище.
+    /// Сохраняет настройки уведомлений.
     /// </summary>
-    /// <param name="settings">Настройки для сохранения</param>
-    void Save(NotificationSettings settings);
+    void Save(Converter.Domain.Models.NotificationOptions settings);
 }

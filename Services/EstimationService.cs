@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Converter.Models;
+using Converter.Application.Models;
 using Xabe.FFmpeg;
 
 namespace Converter.Services

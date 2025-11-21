@@ -13,7 +13,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Converter.Application.Abstractions;
-using Converter.Models;
+using Converter.Application.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Converter.Application.Services
@@ -24,7 +24,7 @@ namespace Converter.Application.Services
         private const string DefaultProfileId = "default";
         
         private readonly ILogger<ProfileProvider> _logger;
-        private readonly Dictionary<string, Converter.Models.ConversionProfile> _profiles = new();
+        private readonly Dictionary<string, Converter.Application.Models.ConversionProfile> _profiles = new();
         private string _defaultProfileId;
 
         public ProfileProvider(ILogger<ProfileProvider> logger)
@@ -34,13 +34,13 @@ namespace Converter.Application.Services
             LoadProfilesFromDisk().GetAwaiter().GetResult();
         }
 
-        public Task<IReadOnlyList<Converter.Models.ConversionProfile>> GetAllProfilesAsync()
+        public Task<IReadOnlyList<Converter.Application.Models.ConversionProfile>> GetAllProfilesAsync()
         {
-            return Task.FromResult<IReadOnlyList<Converter.Models.ConversionProfile>>(
+            return Task.FromResult<IReadOnlyList<Converter.Application.Models.ConversionProfile>>(
                 _profiles.Values.OrderBy(p => p.Name).ToList());
         }
 
-        public Task<Converter.Models.ConversionProfile> GetProfileByIdAsync(string id)
+        public Task<Converter.Application.Models.ConversionProfile> GetProfileByIdAsync(string id)
         {
             if (string.IsNullOrEmpty(id)) 
                 throw new ArgumentException("Profile ID cannot be null or empty", nameof(id));
@@ -49,7 +49,7 @@ namespace Converter.Application.Services
             return Task.FromResult(profile);
         }
 
-        public Task<Converter.Models.ConversionProfile> GetDefaultProfileAsync()
+        public Task<Converter.Application.Models.ConversionProfile> GetDefaultProfileAsync()
         {
             if (!string.IsNullOrEmpty(_defaultProfileId) && _profiles.ContainsKey(_defaultProfileId))
             {
@@ -74,7 +74,7 @@ namespace Converter.Application.Services
             _logger.LogInformation("Set default profile to {ProfileId}", id);
         }
 
-        public async Task SaveProfileAsync(Converter.Models.ConversionProfile profile)
+        public async Task SaveProfileAsync(Converter.Application.Models.ConversionProfile profile)
         {
             if (profile == null) throw new ArgumentNullException(nameof(profile));
             if (string.IsNullOrEmpty(profile.Id))
@@ -117,7 +117,7 @@ namespace Converter.Application.Services
             // Add some default profiles if none exist
             if (_profiles.Count == 0)
             {
-                var defaultProfile = new Converter.Models.ConversionProfile
+                var defaultProfile = new Converter.Application.Models.ConversionProfile
                 {
                     Id = DefaultProfileId,
                     Name = "Default",
@@ -153,7 +153,7 @@ namespace Converter.Application.Services
                     try
                     {
                         var json = await File.ReadAllTextAsync(file);
-                        var profile = JsonSerializer.Deserialize<Converter.Models.ConversionProfile>(json);
+                        var profile = JsonSerializer.Deserialize<Converter.Application.Models.ConversionProfile>(json);
                         if (profile != null)
                         {
                             _profiles[profile.Id] = profile;
@@ -181,7 +181,7 @@ namespace Converter.Application.Services
             }
         }
 
-        private async Task SaveProfileToDiskAsync(Converter.Models.ConversionProfile profile)
+        private async Task SaveProfileToDiskAsync(Converter.Application.Models.ConversionProfile profile)
         {
             try
             {
@@ -224,9 +224,9 @@ namespace Converter.Application.Services
             return Path.Combine(ProfilesDirectory, $"{profileId}.json");
         }
 
-        private static Converter.Models.ConversionProfile CreateDefaultProfile()
+        private static Converter.Application.Models.ConversionProfile CreateDefaultProfile()
         {
-            return new Converter.Models.ConversionProfile
+            return new Converter.Application.Models.ConversionProfile
             {
                 Id = DefaultProfileId,
                 Name = "Default",

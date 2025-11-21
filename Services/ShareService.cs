@@ -11,7 +11,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Converter.Application.Abstractions;
 using Converter.Domain.Models;
-using Converter.Models;
+using Converter.Application.Models;
+using System.IO;
 
 namespace Converter.Services;
 
@@ -22,7 +23,7 @@ public class ShareService : IShareService, IDisposable
     // Note: All resources (Graphics, Image, Brush, Pen, Font) are properly
     // disposed using 'using' statements in methods, so no additional cleanup needed
     
-    public ShareReport? GenerateReport(List<QueueItem> completedItems)
+    public Converter.Application.Models.ShareReport? GenerateReport(List<QueueItem> completedItems)
     {
         var successfulItems = completedItems
             .Where(x => x.Status == ConversionStatus.Completed)
@@ -36,7 +37,7 @@ public class ShareService : IShareService, IDisposable
         var totalProcessingTime = TimeSpan.FromTicks(
             successfulItems.Sum(x => x.ConversionDuration?.Ticks ?? 0));
 
-        var report = new ShareReport
+        var report = new Converter.Application.Models.ShareReport
         {
             GeneratedAt = DateTime.Now,
             FilesConverted = successfulItems.Count,
@@ -94,7 +95,7 @@ public class ShareService : IShareService, IDisposable
         }
     }
 
-    public async Task<string> GenerateImageReport(ShareReport report, string outputPath)
+    public async Task<string> GenerateImageReport(Converter.Application.Models.ShareReport report, string outputPath)
     {
         var directory = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrEmpty(directory))
@@ -176,7 +177,7 @@ public class ShareService : IShareService, IDisposable
         });
     }
 
-    private void DrawStatItem(Graphics g, ShareReport report, string label, string value,
+    private void DrawStatItem(Graphics g, Converter.Application.Models.ShareReport report, string label, string value,
         int x, int y, Font valueFont, Font labelFont)
     {
         using var labelBrush = new SolidBrush(Color.FromArgb(180, 180, 180));

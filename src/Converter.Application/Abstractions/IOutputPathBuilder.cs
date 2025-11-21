@@ -1,6 +1,6 @@
 using System;
 using Converter.Domain.Models;
-using Converter.Models;
+using Converter.Application.Models;
 
 namespace Converter.Application.Abstractions
 {

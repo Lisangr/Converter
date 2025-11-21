@@ -16,21 +16,21 @@ namespace Converter.Application.Abstractions
         /// Включает встроенные и пользовательские профили.
         /// </summary>
         /// <returns>Коллекция всех профилей конвертации</returns>
-        Task<IReadOnlyList<Converter.Models.ConversionProfile>> GetAllProfilesAsync();
+        Task<IReadOnlyList<Converter.Application.Models.ConversionProfile>> GetAllProfilesAsync();
         
         /// <summary>
         /// Получает профиль конвертации по уникальному идентификатору.
         /// </summary>
         /// <param name="id">Уникальный идентификатор профиля</param>
         /// <returns>Профиль конвертации или null, если не найден</returns>
-        Task<Converter.Models.ConversionProfile> GetProfileByIdAsync(string id);
+        Task<Converter.Application.Models.ConversionProfile> GetProfileByIdAsync(string id);
         
         /// <summary>
         /// Получает профиль конвертации по умолчанию.
         /// Используется при первом запуске или отсутствии выбранного профиля.
         /// </summary>
         /// <returns>Профиль по умолчанию</returns>
-        Task<Converter.Models.ConversionProfile> GetDefaultProfileAsync();
+        Task<Converter.Application.Models.ConversionProfile> GetDefaultProfileAsync();
         
         /// <summary>
         /// Устанавливает указанный профиль как профиль по умолчанию.
@@ -43,7 +43,7 @@ namespace Converter.Application.Abstractions
         /// Сохраняет профиль конвертации (создание нового или обновление существующего).
         /// </summary>
         /// <param name="profile">Профиль для сохранения</param>
-        Task SaveProfileAsync(Converter.Models.ConversionProfile profile);
+        Task SaveProfileAsync(Converter.Application.Models.ConversionProfile profile);
         
         /// <summary>
         /// Удаляет профиль конвертации по идентификатору.
