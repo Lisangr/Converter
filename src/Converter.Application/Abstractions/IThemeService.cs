@@ -71,4 +71,12 @@ public interface IThemeService : IDisposable
     /// <param name="ct">Токен отмены операции</param>
     /// <returns>Асинхронная задача</returns>
     Task EnableAutoSwitchAsync(bool enable, CancellationToken ct = default);
+
+    /// <summary>
+    /// Инициализирует сервис тем: загружает пользовательские настройки,
+    /// применяет сохранённую тему и настраивает автопереключение.
+    /// Вызывается один раз при старте приложения.
+    /// </summary>
+    /// <param name="ct">Токен отмены операции</param>
+    Task InitializeAsync(CancellationToken ct = default);
 }

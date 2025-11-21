@@ -57,10 +57,11 @@ namespace Converter.Infrastructure
             services.AddSingleton<IThemeManager, ThemeManager>();
             // IThemeService is already registered in AddInfrastructureServices()
 
-            // Queue processing - наследуется от BackgroundService, поэтому автоматически запускается как hosted service
-            // Добавляем как Singleton (для DI) и BackgroundService (для автозапуска)
-            services.AddSingleton<IQueueProcessor, QueueProcessor>();
-            services.AddHostedService(provider => provider.GetRequiredService<IQueueProcessor>() as QueueProcessor);
+            // Queue processing - используем ChannelQueueProcessor и отдельный hosted service
+            // ChannelQueueProcessor инкапсулирует обработку через Channel<QueueItem>,
+            // а QueueWorkerHostedService управляет его жизненным циклом в качестве фонового сервиса
+            services.AddSingleton<IQueueProcessor, ChannelQueueProcessor>();
+            services.AddHostedService<QueueWorkerHostedService>();
 
             // File system services
             services.AddScoped<IFileOperationsService, FileOperationsService>();
