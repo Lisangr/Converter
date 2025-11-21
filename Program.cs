@@ -108,9 +108,9 @@ namespace Converter
                     return 1;
                 }
 
-                // Устанавливаем ссылку на презентер и хост в форме (для вспомогательных вызовов)
+                // Устанавливаем ссылку на презентер в форме (для взаимодействия View 
+                // с презентером через IMainView)
                 mainView.SetMainPresenter(presenter);
-                mainView.SetHost(host);
 
                 try
                 {
@@ -134,8 +134,7 @@ namespace Converter
                     System.Windows.Forms.Application.Run(mainView);
                 }
 
-                // Graceful shutdown
-                host.StopAsync().GetAwaiter().GetResult();
+                // Graceful shutdown будет выполнен в блоке finally ниже
                 return 0;
             }
             catch (OperationCanceledException)

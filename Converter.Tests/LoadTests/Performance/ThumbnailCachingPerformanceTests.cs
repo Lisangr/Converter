@@ -19,7 +19,7 @@ public class ThumbnailCachingPerformanceTests
         executor.Setup(e => e.ExecuteAsync(It.IsAny<string>(), It.IsAny<IProgress<double>>(), It.IsAny<CancellationToken>()))
             .Callback<string, IProgress<double>, CancellationToken>((args, _, _) =>
             {
-                var match = Regex.Match(args, "\"(?<path>[^\"]+\.jpg)\"$");
+                var match = Regex.Match(args, "\"(?<path>[^\"]+\\.jpg)\"$");
                 var path = match.Groups["path"].Value;
                 File.WriteAllText(path, "image");
             })

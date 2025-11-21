@@ -43,6 +43,9 @@
     <Compile Update="UI\Dialogs\NotificationSettingsForm.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Update="UI\Dialogs\QueueDemoForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Update="UI\Dialogs\ShareDialog.cs">
       <SubType>Form</SubType>
     </Compile>

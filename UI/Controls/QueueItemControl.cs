@@ -22,6 +22,9 @@ public class QueueItemControl : Panel
     private readonly ComboBox _priorityCombo;
     private readonly Panel _statusIndicator;
     private bool _updatingPriority;
+    private readonly System.Windows.Forms.Timer _animationTimer;
+    private int _displayedProgress;
+    private int _targetProgress;
 
     public QueueItemViewModel ViewModel { get; }
 
@@ -37,6 +40,12 @@ public class QueueItemControl : Panel
         Size = new Size(800, 80);
         BorderStyle = BorderStyle.FixedSingle;
         Padding = new Padding(5);
+
+        _animationTimer = new System.Windows.Forms.Timer
+        {
+            Interval = 30
+        };
+        _animationTimer.Tick += AnimationTimerOnTick;
 
         _statusIndicator = new Panel
         {
@@ -131,6 +140,9 @@ public class QueueItemControl : Panel
         // Subscribe to ViewModel property changes
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
 
+        _displayedProgress = Math.Clamp(viewModel.Progress, 0, 100);
+        _targetProgress = _displayedProgress;
+
         Controls.AddRange(new Control[]
         {
             _statusIndicator, _thumbnail, _fileName, _status,
@@ -198,7 +210,11 @@ public class QueueItemControl : Panel
 
     private void UpdateProgressDisplay()
     {
-        _progressBar.Value = Math.Clamp(ViewModel.Progress, 0, 100);
+        _targetProgress = Math.Clamp(ViewModel.Progress, 0, 100);
+        if (!_animationTimer.Enabled)
+        {
+            _animationTimer.Start();
+        }
         _eta.Text = $"ETA: {GetEta()}";
     }
 
@@ -250,5 +266,26 @@ public class QueueItemControl : Panel
         var minutes = estimatedSeconds / 60;
         var seconds = estimatedSeconds % 60;
         return $"{minutes:D2}:{seconds:D2}";
+    }
+
+    private void AnimationTimerOnTick(object? sender, EventArgs e)
+    {
+        if (_displayedProgress == _targetProgress)
+        {
+            _animationTimer.Stop();
+            return;
+        }
+
+        var step = 2;
+        if (_displayedProgress < _targetProgress)
+        {
+            _displayedProgress = Math.Min(_displayedProgress + step, _targetProgress);
+        }
+        else
+        {
+            _displayedProgress = Math.Max(_displayedProgress - step, _targetProgress);
+        }
+
+        _progressBar.Value = _displayedProgress;
     }
 }

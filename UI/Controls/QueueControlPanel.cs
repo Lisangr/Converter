@@ -95,7 +95,7 @@ public class QueueControlPanel : Panel
             Location = new Point(10, 35),
             Size = new Size(150, 20),
             Text = "Автозапуск",
-            Checked = true
+            Checked = false
         };
         _chkAutoStart.CheckedChanged += (_, _) => AutoStartChanged?.Invoke(this, _chkAutoStart.Checked);
 

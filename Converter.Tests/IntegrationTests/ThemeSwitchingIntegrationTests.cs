@@ -63,4 +63,9 @@ public class ThemeSwitchingIntegrationTests : IDisposable
 
         manager.Verify(m => m.ApplyTheme(form), Times.Once);
     }
+
+    public void Dispose()
+    {
+        // no-op test cleanup
+    }
 }

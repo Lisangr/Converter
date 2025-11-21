@@ -5,18 +5,13 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Converter.Application.Models;
-using Converter.Application.Services.FileMedia;
+using Converter.Application.Services;
 using Converter.Infrastructure.Persistence;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
-using Converter.Application.Models;
-using Converter.Application.Services;
 using Microsoft.Extensions.Logging.Abstractions;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace Converter.Tests.IntegrationTests;
 

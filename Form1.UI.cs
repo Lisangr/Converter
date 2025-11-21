@@ -235,16 +235,17 @@ namespace Converter
             // но далее синхронизирует очередь через async-событие FilesDroppedAsync.
             btnAddFiles.Click += btnAddFiles_Click;
 
-            // File management buttons - async IMainView events
+            // File management buttons - делегируем в Presenter через IMainView async-события
             //btnRemoveSelected.Click += async (s, e) => await RaiseRemoveSelectedFilesRequestedAsync();
             btnClearAll.Click += async (s, e) =>
             {
                 try
                 {
-                    // Сначала очищаем визуальные панели (filesPanel + DragDropPanel)
+                    // 1. Очищаем визуальные панели (filesPanel + DragDropPanel)
                     ClearAllFiles();
-                    // Затем очищаем очередь через FileOperationsService
-                    await FileOperationsService.ClearAllFilesAsync();
+
+                    // 2. Сообщаем Presenter'у, что нужно очистить очередь
+                    await RaiseClearAllFilesRequestedAsync().ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -324,7 +325,14 @@ namespace Converter
             {
                 if (files != null && files.Length > 0)
                 {
-                    await FileOperationsService.AddFilesAsync(files);
+                    // 1. Обновляем визуальное представление файловой панели
+                    AddFilesToList(files, syncDragDropPanel: false);
+
+                    // 2. Сообщаем Presenter'у через IMainView, чтобы добавить файлы в очередь
+                    await RaiseFilesDroppedAsync(files).ConfigureAwait(false);
+
+                    // 3. Обновляем оценку времени
+                    DebounceEstimate();
                 }
             }
             catch (Exception ex)
@@ -336,34 +344,27 @@ namespace Converter
 
         private void OnDragDropPanelFileRemoved(object? sender, string filePath)
         {
-            // Синхронизируем удаление с очередью и файловой панелью
-            if (!string.IsNullOrEmpty(filePath))
+            // Синхронизируем удаление только с визуальными элементами и делегируем
+            // фактическое удаление из очереди презентеру через IMainView
+            if (string.IsNullOrEmpty(filePath))
             {
-                // Удаляем из очередь через FileOperationsService
-                var queueItems = FileOperationsService.GetQueueItems().ToList();
-                var queueItem = queueItems
-                    .FirstOrDefault(i => string.Equals(i.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
-                
-                if (queueItem != null)
-                {
-                    // Удаляем из очереди через FileOperationsService
-                    _ = FileOperationsService.RemoveSelectedFilesAsync(new[] { queueItem });
-                }
-
-                // Удаляем из filesPanel если существует
-                var fileItem = filesPanel.Controls.OfType<FileListItem>()
-                    .FirstOrDefault(f => string.Equals(f.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
-                
-                if (fileItem != null)
-                {
-                    filesPanel.Controls.Remove(fileItem);
-                    fileItem.Dispose();
-                }
-
-                // Обновляем состояние UI
-                UpdateEditorButtonState();
-                UpdateShareButtonState();
+                return;
             }
+
+            // Удаляем из filesPanel если существует
+            var fileItem = filesPanel.Controls.OfType<FileListItem>()
+                .FirstOrDefault(f => string.Equals(f.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+
+            if (fileItem != null)
+            {
+                // Используем единый путь удаления, который синхронизирует
+                // выделение и инициирует сценарий удаления через Presenter
+                RemoveFileFromList(fileItem, syncDragDropPanel: false);
+            }
+
+            // Обновляем состояние UI
+            UpdateEditorButtonState();
+            UpdateShareButtonState();
         }        
 
         private void OnOpenEditorClick(object? sender, EventArgs e)
@@ -1035,7 +1036,13 @@ namespace Converter
             btnStop.FlatAppearance.MouseOverBackColor = Color.FromArgb(200, 60, 60);
             btnStop.FlatAppearance.MouseDownBackColor = Color.FromArgb(160, 40, 40);
             // IMainView: отмена/остановка
-            btnStop.Click += (s, e) => CancelConversionRequested?.Invoke(this, EventArgs.Empty);
+            btnStop.Click += async (s, e) =>
+            {
+                if (CancelConversionRequestedAsync != null)
+                {
+                    await RaiseCancelConversionRequestedAsync().ConfigureAwait(false);
+                }
+            };
 
             _btnNotificationSettings = CreateStyledButton("🔔 Уведомления", 310);
             _btnNotificationSettings.Top = _estimatePanel.Bottom + 10;
@@ -1607,7 +1614,7 @@ namespace Converter
             UpdateEditorButtonState();
 
             // Дополнительно синхронизируем очередь: помечаем соответствующие элементы как выбранные
-            // и инициируем стандартный сценарий удаления выбранных через IMainView-событие.
+            // и инициируем стандартный сценарий удаления выбранных через IMainView async-событие.
             if (_queueItemsBinding != null)
             {
                 foreach (var vm in _queueItemsBinding)
@@ -1616,58 +1623,13 @@ namespace Converter
                 }
 
                 // Запускаем общий механизм удаления выбранных файлов (Form1 → MainPresenter → QueueRepository)
-                RemoveSelectedFilesRequested?.Invoke(this, EventArgs.Empty);
+                _ = RaiseRemoveSelectedFilesRequestedAsync();
             }
         }
 
-        private async void RemoveFileByPath(string filePath)
-        {
-            if (string.IsNullOrEmpty(filePath)) return;
-
-            try
-            {
-                // 1. Get a fresh copy of queue items
-                var queueItems = FileOperationsService.GetQueueItems().ToList();
-                var queueItem = queueItems
-                    .FirstOrDefault(i => string.Equals(i.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
-                
-                if (queueItem != null)
-                {
-                    // 2. Remove from the queue via service
-                    await FileOperationsService.RemoveSelectedFilesAsync(new[] { queueItem });
-                }
-
-                // 3. Remove from filesPanel if exists
-                var fileItem = filesPanel.Controls.OfType<FileListItem>()
-                    .FirstOrDefault(f => string.Equals(f.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
-                
-                if (fileItem != null)
-                {
-                    filesPanel.Controls.Remove(fileItem);
-                    fileItem.Dispose();
-                }
-
-                // 4. Remove from DragDropPanel if exists
-                if (_dragDropPanel != null)
-                {
-                    _dragDropPanel.RemoveFile(filePath, notify: true);
-                }
-
-                // 5. Update the UI state
-                UpdateEditorButtonState();
-                UpdateShareButtonState();
-                
-                // 6. Force refresh the queue display
-                var currentItems = FileOperationsService.GetQueueItems();
-                OnQueueUpdated(this, new QueueUpdatedEventArgs(currentItems));
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"Ошибка при удалении файла: {ex.Message}");
-                MessageBox.Show($"Ошибка при удалении файла: {ex.Message}", "Ошибка", 
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
+        // Ранее RemoveFileByPath напрямую работал с FileOperationsService и очередью.
+        // Сейчас вся логика удаления делегируется через IMainView/Presenter, а этот
+        // метод больше не используется.
         private void ClearAllFiles()
         {
             filesPanel.Controls.Clear();
@@ -1683,162 +1645,10 @@ namespace Converter
             UpdateShareButtonState();
         }
 
-        private async Task RemoveSelectedItems(IEnumerable<QueueItem> items)
-        {
-            try
-            {
-                if (items?.Any() == true)
-                {
-                    await FileOperationsService.RemoveSelectedFilesAsync(items);
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка при удалении выбранных файлов: {ex.Message}", "Ошибка", 
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        
-
-        private async Task AddFilesToQueue(IEnumerable<string> filePaths, bool showProgress = true)
-        {
-            if (filePaths == null || !filePaths.Any())
-                return;
-
-            try
-            {
-                await FileOperationsService.AddFilesAsync(filePaths);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка при добавлении файлов в очередь: {ex.Message}", "Ошибка", 
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        
-
-        private void UpdateQueueGrid()
-        {
-            try
-            {
-                var items = FileOperationsService.GetQueueItems();
-                
-                if (_queueBindingSource != null)
-                {
-                    var viewModels = items
-                        .Select(item => Converter.Application.ViewModels.QueueItemViewModel.FromModel(item))
-                        .ToList();
-                    
-                    var bindingList = new System.ComponentModel.BindingList<Converter.Application.ViewModels.QueueItemViewModel>(viewModels);
-                    
-                    if (this.InvokeRequired)
-                    {
-                        this.Invoke(new Action(() =>
-                        {
-                            _queueBindingSource.DataSource = null;
-                            _queueBindingSource.DataSource = bindingList;
-                        }));
-                    }
-                    else
-                    {
-                        _queueBindingSource.DataSource = null;
-                        _queueBindingSource.DataSource = bindingList;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка при обновлении сетки очереди: {ex.Message}", "Ошибка", 
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        private void UpdateQueueStatus(IReadOnlyList<QueueItem> items)
-        {
-            if (items == null) return;
-
-            int total = items.Count;
-            int completed = items.Count(i => i.Status == ConversionStatus.Completed);
-            int failed = items.Count(i => i.Status == ConversionStatus.Failed);
-            int processing = items.Count(i => i.Status == ConversionStatus.Processing);
-            int pending = items.Count(i => i.Status == ConversionStatus.Pending);
-
-            string status = $"Файлов: {total} | Готово: {completed} | Ошибки: {failed} | В процессе: {processing} | Ожидание: {pending}";
-            
-            if (lblStatusTotal != null && !lblStatusTotal.IsDisposed)
-            {
-                if (lblStatusTotal.InvokeRequired)
-                {
-                    lblStatusTotal.Invoke(new Action(() => lblStatusTotal.Text = status));
-                }
-                else
-                {
-                    lblStatusTotal.Text = status;
-                }
-            }
-        }
-
-        private void UpdateQueueItemStatus(Guid itemId, ConversionStatus status)
-        {
-            try
-            {
-                var items = FileOperationsService.GetQueueItems();
-                var item = items.FirstOrDefault(i => i.Id == itemId);
-                if (item != null)
-                {
-                    item.Status = status;
-                    // Статус будет обновлен автоматически через событие QueueUpdated
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка при обновлении статуса элемента: {ex.Message}", "Ошибка", 
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        private void UpdateQueueItemProgress(Guid itemId, int progress)
-        {
-            try
-            {
-                var items = FileOperationsService.GetQueueItems();
-                var item = items.FirstOrDefault(i => i.Id == itemId);
-                if (item != null)
-                {
-                    item.Progress = progress;
-                    // Прогресс будет обновлен автоматически через событие QueueUpdated
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка при обновлении прогресса элемента: {ex.Message}", "Ошибка", 
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        private async void UpdateQueueItemError(Guid itemId, string errorMessage)
-{
-    try
-    {
-        var items = FileOperationsService.GetQueueItems();
-        var item = items.FirstOrDefault(i => i.Id == itemId);
-        if (item != null)
-        {
-            item.ErrorMessage = errorMessage;
-            item.Status = ConversionStatus.Failed;
-            
-            // Update the item through the service
-            await FileOperationsService.UpdateQueueItem(item);
-        }
-    }
-    catch (Exception ex)
-    {
-        MessageBox.Show($"Ошибка при обновлении ошибки элемента: {ex.Message}", "Ошибка", 
-            MessageBoxButtons.OK, MessageBoxIcon.Error);
-    }
-}
+        // Ранее здесь были вспомогательные методы обновления очереди через FileOperationsService
+        // (RemoveSelectedItems, AddFilesToQueue, UpdateQueueGrid/Status/Item*). Сейчас все
+        // изменения очереди выполняются через QueueRepository/IQueueProcessor и MainPresenter,
+        // а форма отвечает только за визуальное отображение и поднятие событий IMainView.
 
         private void OpenVideoInPlayer(string filePath)
         {

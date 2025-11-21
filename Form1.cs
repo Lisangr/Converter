@@ -31,7 +31,6 @@ namespace Converter
         private readonly Converter.Services.FileService _fileService;
         private readonly Converter.Services.UIServices.IFileOperationsService _fileOperationsService;
         private readonly CancellationTokenSource _lifecycleCts = new();
-        private IHost? _host;
         
         private bool _disposed = false;
         private bool _closingInProgress = false;
@@ -66,11 +65,6 @@ namespace Converter
         public void SetMainPresenter(object presenter)
         {
             _mainPresenter = presenter as Converter.Application.Presenters.MainPresenter;
-        }
-
-        public void SetHost(IHost host)
-        {
-            _host = host;
         }
 
         private string _ffmpegPath = string.Empty;
@@ -435,66 +429,34 @@ namespace Converter
             }
         }
 
-        protected override async void OnFormClosing(FormClosingEventArgs e)
+        protected override void OnFormClosing(FormClosingEventArgs e)
         {
             // Защита от множественных вызовов закрытия
             if (_closingInProgress)
             {
+                base.OnFormClosing(e);
                 return;
             }
-            
-            if (_host != null)
-            {
-                // Помечаем, что процесс закрытия уже запущен, чтобы не вызывать его повторно
-                _closingInProgress = true;
 
-                // Отменяем закрытие формы, пока не завершатся фоновые задачи
-                e.Cancel = true;
-                _ = CloseApplicationAsync();
-            }
-            else
-            {
-                base.OnFormClosing(e);
-            }
-        }
+            _closingInProgress = true;
 
-        private async Task CloseApplicationAsync()
-        {
-            try
-            {
-                // Отменяем все фоновые операции
-                CancelBackgroundOperations();
+            // Отменяем все фоновые операции, связанные с формой
+            CancelBackgroundOperations();
 
-                // При выходе очищаем очередь только через презентер (единая точка входа)
-                if (_mainPresenter != null)
+            // Мягко уведомляем презентер об очистке очереди (без ожидания)
+            if (_mainPresenter != null)
+            {
+                try
                 {
-                    try
-                    {
-                        await _mainPresenter.OnClearAllFilesRequested().ConfigureAwait(false);
-                    }
-                    catch { }
+                    _ = _mainPresenter.OnClearAllFilesRequested();
                 }
-                else
+                catch
                 {
-                    // Fallback для старого кода
-                    try
-                    {
-                        ClearQueue();
-                    }
-                    catch { }
+                    // Игнорируем ошибки при завершении работы
                 }
-                
-                // Ожидаем завершения критических операций
-                await Task.WhenAny(
-                    Task.Delay(TimeSpan.FromSeconds(5)),
-                    Task.Run(() => _host?.StopAsync())
-                );
             }
-            finally
-            {
-                // Принудительно завершаем приложение
-                System.Windows.Forms.Application.Exit();
-            }
+
+            base.OnFormClosing(e);
         }
 
         private void CancelBackgroundOperations()
@@ -634,7 +596,9 @@ namespace Converter
             try
             {
                 // 1. Обновляем грид очереди (если биндинг уже инициализирован)
-                if (_queueBindingSource != null)
+                // Если используется MainPresenter (_mainPresenter != null), он управляет QueueItemsBinding,
+                // поэтому не переинициализируем источник данных здесь, чтобы не рвать биндинг.
+                if (_mainPresenter == null && _queueBindingSource != null)
                 {
                     var viewModels = e.QueueItems
                         .Select(item => QueueItemViewModel.FromModel(item))
@@ -721,28 +685,20 @@ namespace Converter
                 // Делегируем удаление в MainPresenter (основная очередь)
                 if (_mainPresenter != null)
                 {
-                    // Сначала синхронизируем UI-файлы с выбранными элементами очереди
-                    if (_queueItemsBinding != null)
-                    {
-                        var selectedItems = _queueItemsBinding
-                            .Where(item => item.IsSelected)
-                            .ToList();
-
-                        foreach (var vm in selectedItems)
-                        {
-                            if (!string.IsNullOrWhiteSpace(vm.FilePath))
-                            {
-                                RemoveFileByPath(vm.FilePath);
-                            }
-                        }
-                    }
-
                     _mainPresenter.OnRemoveSelectedFilesRequested();
                     return;
                 }
 
-                // Fallback: используем нормализованный метод
-                RemoveSelectedFilesFromQueue();
+                // Fallback: если презентера нет, просто удаляем выбранные элементы только из UI
+                if (_queueItemsBinding != null)
+                {
+                    var selectedItems = _queueItemsBinding.Where(item => item.IsSelected).ToList();
+                    foreach (var item in selectedItems)
+                    {
+                        _queueItemsBinding.Remove(item);
+                    }
+                    AppendLog($"Удалено файлов из очереди (UI-only): {selectedItems.Count}");
+                }
             }
             catch (Exception ex)
             {
@@ -761,8 +717,7 @@ namespace Converter
                     return;
                 }
 
-                // Fallback: используем нормализованный метод
-                ClearQueue();
+                // Fallback: если презентера нет, очищаем только визуальные элементы
                 ClearAllFiles();
             }
             catch (Exception ex)
@@ -901,84 +856,11 @@ namespace Converter
 
         #endregion
 
-        #region Unified Data Source Methods
+        #region Unified Data Source Methods (legacy helpers removed)
 
-        /// <summary>
-        /// Нормализованный метод для добавления файлов - использует единый источник правды
-        /// </summary>
-        public void AddFilesToQueue(IEnumerable<string> filePaths)
-        {
-            if (filePaths == null) return;
-
-            var queueItems = filePaths
-                .Where(filePath => File.Exists(filePath))
-                .Select(filePath => new Converter.Application.ViewModels.QueueItemViewModel
-                {
-                    Id = Guid.NewGuid(),
-                    FileName = Path.GetFileName(filePath),
-                    FilePath = filePath,
-                    FileSizeBytes = new FileInfo(filePath).Length,
-                    Status = Converter.Domain.Models.ConversionStatus.Pending,
-                    Progress = 0
-                })
-                .ToList();
-
-            // Единый источник правды: QueueItemsBinding
-            if (_queueItemsBinding != null)
-            {
-                foreach (var item in queueItems)
-                {
-                    _queueItemsBinding.Add(item);
-                }
-                AppendLog($"Добавлено файлов в очередь: {queueItems.Count}");
-            }
-        }
-
-        /// <summary>
-        /// Нормализованный метод для удаления выбранных файлов
-        /// </summary>
-        public void RemoveSelectedFilesFromQueue()
-        {
-            if (_queueItemsBinding == null) return;
-
-            var selectedItems = _queueItemsBinding.Where(item => item.IsSelected).ToList();
-            foreach (var item in selectedItems)
-            {
-                _queueItemsBinding.Remove(item);
-            }
-            AppendLog($"Удалено файлов из очереди: {selectedItems.Count}");
-        }
-
-        /// <summary>
-        /// Нормализованный метод для очистки всей очереди
-        /// </summary>
-        public void ClearQueue()
-        {
-            if (_queueItemsBinding != null)
-            {
-                var count = _queueItemsBinding.Count;
-                _queueItemsBinding.Clear();
-                AppendLog($"Очищена очередь: {count} файлов");
-            }
-        }
-
-        /// <summary>
-        /// Нормализованный метод для обновления прогресса элемента
-        /// </summary>
-        public void UpdateQueueItemProgress(Guid itemId, int progress, string status = null)
-        {
-            if (_queueItemsBinding == null) return;
-
-            var item = _queueItemsBinding.FirstOrDefault(i => i.Id == itemId);
-            if (item != null)
-            {
-                item.Progress = progress;
-                if (!string.IsNullOrEmpty(status))
-                {
-                    // Можно добавить поле StatusText в QueueItemViewModel если нужно
-                }
-            }
-        }
+        // Ранее здесь находились вспомогательные методы управления очередью напрямую через
+        // QueueItemsBinding. Сейчас все операции с очередью выполняются через MainPresenter
+        // и IQueueRepository/IQueueProcessor; форма отвечает только за отображение.
 
         #endregion
     }

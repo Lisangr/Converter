@@ -27,6 +27,11 @@ namespace Converter.Application.Presenters
         private readonly ILogger<MainPresenter> _logger;
         private bool _disposed;
         private bool _clearingInProgress;
+        private readonly IAddFilesCommand _addFilesCommand;
+        private readonly IStartConversionCommand _startConversionCommand;
+        private readonly ICancelConversionCommand _cancelConversionCommand;
+        private readonly IRemoveSelectedFilesCommand _removeSelectedFilesCommand;
+        private readonly IClearQueueCommand _clearQueueCommand;
         private CancellationTokenSource _cancellationTokenSource;
 
         public MainPresenter(
@@ -38,6 +43,11 @@ namespace Converter.Application.Presenters
             IOutputPathBuilder pathBuilder,
             IProgressReporter progressReporter,
             IFilePicker filePicker,
+            IAddFilesCommand addFilesCommand,
+            IStartConversionCommand startConversionCommand,
+            ICancelConversionCommand cancelConversionCommand,
+            IRemoveSelectedFilesCommand removeSelectedFilesCommand,
+            IClearQueueCommand clearQueueCommand,
             ILogger<MainPresenter> logger)
         {
             _view = view ?? throw new ArgumentNullException(nameof(view));
@@ -48,6 +58,11 @@ namespace Converter.Application.Presenters
             _pathBuilder = pathBuilder ?? throw new ArgumentNullException(nameof(pathBuilder));
             _progressReporter = progressReporter ?? throw new ArgumentNullException(nameof(progressReporter));
             _filePicker = filePicker ?? throw new ArgumentNullException(nameof(filePicker));
+            _addFilesCommand = addFilesCommand ?? throw new ArgumentNullException(nameof(addFilesCommand));
+            _startConversionCommand = startConversionCommand ?? throw new ArgumentNullException(nameof(startConversionCommand));
+            _cancelConversionCommand = cancelConversionCommand ?? throw new ArgumentNullException(nameof(cancelConversionCommand));
+            _removeSelectedFilesCommand = removeSelectedFilesCommand ?? throw new ArgumentNullException(nameof(removeSelectedFilesCommand));
+            _clearQueueCommand = clearQueueCommand ?? throw new ArgumentNullException(nameof(clearQueueCommand));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cancellationTokenSource = new CancellationTokenSource();
 
@@ -184,29 +199,11 @@ namespace Converter.Application.Presenters
                 _logger.LogInformation("Canceling all conversions");
                 _view.IsBusy = true;
 
-                // 1. Cancel the current conversion token
-                if (_cancellationTokenSource != null && !_cancellationTokenSource.IsCancellationRequested)
-                {
-                    _cancellationTokenSource.Cancel();
-                }
+                // Отменяем через команду (останавливает процессор и помечает элементы)
+                await _cancelConversionCommand.ExecuteAsync().ConfigureAwait(false);
 
-                // 2. Stop the queue processor to prevent new items from starting
-                await _queueProcessor.StopProcessingAsync();
-
-                // 3. Mark all pending items as cancelled
-                var pendingItems = await _queueRepository.GetPendingItemsAsync();
-                foreach (var item in pendingItems)
-                {
-                    if (item.Status == ConversionStatus.Processing)
-                    {
-                        item.Status = ConversionStatus.Failed;
-                        item.ErrorMessage = "Конвертация отменена пользователем";
-                        await _queueRepository.UpdateAsync(item);
-                    }
-                }
-
-                // 4. Reset for next conversion (создаем новый токен только после полной остановки)
-                await Task.Delay(1000); // Даем время для завершения текущих операций
+                // Reset for next conversion (создаем новый токен только после полной остановки)
+                await Task.Delay(1000).ConfigureAwait(false); // Даем время для завершения текущих операций
                 ResetProcessingCancellationToken();
 
                 // 5. Reset UI state
@@ -381,32 +378,21 @@ namespace Converter.Application.Presenters
 
         private async Task OnFilesDroppedAsync(object? sender, string[] files)
         {
-            var addedCount = 0;
-            foreach (var file in files)
+            try
             {
-                if (!File.Exists(file)) continue;
-                if (_viewModel.QueueItems.Any(item => item.FilePath == file)) continue;
-                var outputDir = !string.IsNullOrWhiteSpace(_view.OutputFolder)
-                    ? _view.OutputFolder
-                    : Path.GetDirectoryName(file) ?? string.Empty;
-                var item = new QueueItem
-                {
-                    Id = Guid.NewGuid(),
-                    FilePath = file,
-                    FileSizeBytes = new FileInfo(file).Length,
-                    OutputDirectory = outputDir,
-                    Status = ConversionStatus.Pending,
-                    AddedAt = DateTime.UtcNow
-                };
-                
-                await _queueRepository.AddAsync(item);
-                addedCount++;
+                _logger.LogInformation("Files dropped: {Count}", files?.Length ?? 0);
+
+                await _addFilesCommand
+                    .ExecuteAsync(files ?? Array.Empty<string>(), _view.OutputFolder)
+                    .ConfigureAwait(false);
+
+                _view.StatusText = $"Добавлено файлов: {(files?.Length ?? 0)}";
+                await LoadQueueAsync().ConfigureAwait(false);
             }
-            
-            if (addedCount > 0)
+            catch (Exception ex)
             {
-                _view.StatusText = $"Добавлено файлов: {addedCount}";
-                await LoadQueueAsync();
+                _logger.LogError(ex, "Error in OnFilesDroppedAsync");
+                _view.ShowError($"Ошибка при добавлении файлов: {ex.Message}");
             }
         }
 
@@ -428,14 +414,11 @@ namespace Converter.Application.Presenters
                 _view.StatusText = $"Удаление {selectedItems.Count} файла(ов)...";
                 _logger.LogInformation("Removing {Count} selected files from queue", selectedItems.Count);
 
-                // Используем массовое удаление для лучшей производительности
+                // Используем команду удаления выбранных
                 var itemIds = selectedItems.Select(item => item.Id).ToList();
-                await _queueRepository.RemoveRangeAsync(itemIds);
-
-                _logger.LogDebug("Removed {Count} files from queue using batch operation", selectedItems.Count);
-
-                // НЕ перезагружаем очередь - события от QueueRepository сами обновят UI
-                // await LoadQueueAsync(); // УДАЛЕНО - это было причиной дублирования
+                await _removeSelectedFilesCommand
+                    .ExecuteAsync(itemIds)
+                    .ConfigureAwait(false);
 
                 _view.StatusText = $"Удалено файлов: {selectedItems.Count}";
                 _view.ShowInfo($"Удалено файлов: {selectedItems.Count} из очереди");
@@ -476,16 +459,11 @@ namespace Converter.Application.Presenters
                     _view.StatusText = "Очистка очереди...";
                     _logger.LogInformation("Clearing all files from queue");
 
-                    var allItems = _viewModel.QueueItems.ToList();
-                    
-                    // Используем массовое удаление для лучшей производительности
-                    var allItemIds = allItems.Select(item => item.Id).ToList();
-                    await _queueRepository.RemoveRangeAsync(allItemIds);
-
-                    _logger.LogDebug("Cleared {Count} files from queue using batch operation", allItems.Count);
+                    // Используем команду полной очистки
+                    await _clearQueueCommand.ExecuteAsync().ConfigureAwait(false);
 
                     // Перезагружаем очередь для синхронизации
-                    await LoadQueueAsync();
+                    await LoadQueueAsync().ConfigureAwait(false);
 
                     _view.StatusText = "Очередь очищена";
                     _view.ShowInfo("Все файлы удалены из очереди");
@@ -527,10 +505,12 @@ namespace Converter.Application.Presenters
 
                 _view.IsBusy = true;
                 _view.StatusText = "Запуск конвертации...";
-                
-                // QueueProcessor уже запущен как BackgroundService, активируем обработку
-                await _queueProcessor.StartProcessingAsync(_cancellationTokenSource.Token);
-                
+
+                // QueueProcessor уже запущен как HostedService, активируем обработку через команду
+                await _startConversionCommand
+                    .ExecuteAsync(_cancellationTokenSource.Token)
+                    .ConfigureAwait(false);
+
                 _view.StatusText = "Конвертация запущена";
                 _view.ShowInfo("Процесс конвертации начат");
             }

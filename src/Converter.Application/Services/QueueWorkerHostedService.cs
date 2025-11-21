@@ -32,9 +32,11 @@ public sealed class QueueWorkerHostedService : IHostedService
         _logger.LogInformation("Starting QueueWorkerHostedService");
 
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var token = _cts.Token;
+        // Раньше здесь запускался фоновой цикл обработки очереди.
+        // Теперь обработка запускается только по явной команде StartConversionCommand,
+        // поэтому HostedService ограничивается инициализацией токена жизни приложения.
 
-        _workerTask = RunAsync(token);
+        _workerTask = Task.CompletedTask;
 
         return Task.CompletedTask;
     }

@@ -119,6 +119,95 @@ namespace Converter.Application.Services
             await Task.CompletedTask;
         }
 
+        public async Task ProcessItemAsync(QueueItem item, CancellationToken cancellationToken = default)
+        {
+            if (item == null)
+                throw new ArgumentNullException(nameof(item));
+
+            try
+            {
+                // Атомарная операция: пытаемся зарезервировать элемент для обработки
+                if (!await _queueStore.TryReserveAsync(item.Id, cancellationToken).ConfigureAwait(false))
+                {
+                    _logger.LogDebug("Item {ItemId} was already reserved or processed, skipping", item.Id);
+                    return;
+                }
+
+                // Обновляем кэш через IQueueRepository для генерации событий
+                item.Status = ConversionStatus.Processing;
+                item.StartedAt = DateTime.UtcNow;
+                await _queueRepository.UpdateAsync(item).ConfigureAwait(false);
+
+                ItemStarted?.Invoke(this, item);
+                _logger.LogInformation("Started processing item {ItemId}", item.Id);
+
+                var progress = new Progress<int>(p =>
+                {
+                    // Обновляем прогресс в кэше для UI
+                    item.Progress = p;
+                    _ = Task.Run(async () => await _queueRepository.UpdateAsync(item).ConfigureAwait(false));
+
+                    // Уведомляем UI
+                    ProgressChanged?.Invoke(this, new QueueProgressEventArgs(item, p));
+                });
+
+                var result = await _conversionUseCase.ExecuteAsync(item, progress, cancellationToken).ConfigureAwait(false);
+
+                if (result.Success)
+                {
+                    // Атомарно завершаем элемент в IQueueStore
+                    await _queueStore
+                        .CompleteAsync(item.Id, ConversionStatus.Completed, null, result.OutputFileSize, DateTime.UtcNow, cancellationToken)
+                        .ConfigureAwait(false);
+
+                    // Обновляем кэш и генерируем событие
+                    item.Status = ConversionStatus.Completed;
+                    item.CompletedAt = DateTime.UtcNow;
+                    item.OutputFileSizeBytes = result.OutputFileSize;
+                    await _queueRepository.UpdateAsync(item).ConfigureAwait(false);
+
+                    _logger.LogInformation("Successfully processed item {ItemId}", item.Id);
+                    ItemCompleted?.Invoke(this, item);
+                }
+                else
+                {
+                    // Атомарно завершаем элемент с ошибкой
+                    await _queueStore
+                        .CompleteAsync(item.Id, ConversionStatus.Failed, result.ErrorMessage, null, DateTime.UtcNow, cancellationToken)
+                        .ConfigureAwait(false);
+
+                    // Обновляем кэш и генерируем событие
+                    item.Status = ConversionStatus.Failed;
+                    item.ErrorMessage = result.ErrorMessage;
+                    await _queueRepository.UpdateAsync(item).ConfigureAwait(false);
+
+                    _logger.LogError("Failed to process item {ItemId}: {Error}", item.Id, result.ErrorMessage);
+                    ItemFailed?.Invoke(this, item);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogInformation("Processing of item {ItemId} was cancelled", item.Id);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Завершаем элемент с ошибкой в IQueueStore
+                await _queueStore
+                    .CompleteAsync(item.Id, ConversionStatus.Failed, ex.Message, null, DateTime.UtcNow, cancellationToken)
+                    .ConfigureAwait(false);
+
+                // Обновляем кэш
+                item.Status = ConversionStatus.Failed;
+                item.ErrorMessage = ex.Message;
+                await _queueRepository.UpdateAsync(item).ConfigureAwait(false);
+
+                _logger.LogError(ex, "Error processing item {ItemId}", item.Id);
+                ItemFailed?.Invoke(this, item);
+                throw;
+            }
+        }
+
         public async Task EnqueueAsync(QueueItem item, CancellationToken cancellationToken = default)
         {
             if (item == null)

@@ -16,6 +16,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Converter.Application.Services
 {
+    [Obsolete("QueueProcessor is deprecated. Use ChannelQueueProcessor with QueueWorkerHostedService instead.")]
     public class QueueProcessor : BackgroundService, IQueueProcessor
     {
         private readonly IQueueRepository _queueRepository;
@@ -269,6 +270,16 @@ namespace Converter.Application.Services
                 ItemFailed?.Invoke(this, item);
                 throw;
             }
+        }
+
+        public Task EnqueueAsync(QueueItem item, CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException("QueueProcessor does not support channel-based EnqueueAsync. Use ChannelQueueProcessor instead.");
+        }
+
+        public IAsyncEnumerable<QueueItem> GetItemsAsync(CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException("QueueProcessor does not expose channel-based item enumeration. Use ChannelQueueProcessor instead.");
         }
 
         public override void Dispose()

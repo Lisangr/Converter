@@ -64,4 +64,9 @@ public class NotificationIntegrationTests : IDisposable
 
         gateway.Verify(g => g.ShowInfoAsync("Progress: 30%", "Conversion Progress", It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    public void Dispose()
+    {
+        // no-op test cleanup
+    }
 }

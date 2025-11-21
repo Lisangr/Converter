@@ -53,6 +53,13 @@ namespace Converter.Infrastructure
             services.AddSingleton<IOutputPathBuilder, OutputPathBuilder>();
             services.AddSingleton<IProgressReporter, UiProgressReporter>();
 
+            // Queue commands
+            services.AddSingleton<IAddFilesCommand, AddFilesCommand>();
+            services.AddSingleton<IStartConversionCommand, StartConversionCommand>();
+            services.AddSingleton<ICancelConversionCommand, CancelConversionCommand>();
+            services.AddSingleton<IRemoveSelectedFilesCommand, RemoveSelectedFilesCommand>();
+            services.AddSingleton<IClearQueueCommand, ClearQueueCommand>();
+
             // Theme services
             services.AddSingleton<IThemeManager, ThemeManager>();
             // IThemeService is already registered in AddInfrastructureServices()

@@ -92,4 +92,9 @@ public class QueueProcessingIntegrationTests : IDisposable
 
         repo.Verify(r => r.UpdateAsync(It.Is<QueueItem>(q => q.Status == ConversionStatus.Failed && q.ErrorMessage == "boom")), Times.Once);
     }
+
+    public void Dispose()
+    {
+        // no-op test cleanup
+    }
 }

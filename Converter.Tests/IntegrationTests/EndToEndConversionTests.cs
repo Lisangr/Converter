@@ -11,18 +11,9 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
-using Converter.Application.Abstractions;
 using Converter.Application.Builders;
-using Converter.Application.Models;
-using Converter.Application.Services;
-using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
-using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Converter.Tests.IntegrationTests;
 
@@ -134,5 +125,10 @@ public class EndToEndConversionTests : IDisposable
         public Task<bool> IsFfmpegAvailableAsync(CancellationToken ct = default) => Task.FromResult(true);
 
         public Task<string> GetMediaInfoAsync(string inputPath, CancellationToken ct = default) => Task.FromResult("info");
+    }
+
+    public void Dispose()
+    {
+        // no-op test cleanup
     }
 }

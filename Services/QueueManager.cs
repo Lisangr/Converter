@@ -49,7 +49,7 @@ public class QueueManager
         }
     }
 
-    public bool AutoStartNextItem { get; set; } = true;
+    public bool AutoStartNextItem { get; set; } = false;
     public bool StopOnError { get; set; }
 
     public QueueManager(Func<QueueItem, IProgress<int>, CancellationToken, Task<ConversionResult>>? conversionHandler = null)
