@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Converter.Application.Abstractions;
 using Converter.Infrastructure.Ffmpeg;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;

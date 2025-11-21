@@ -9,31 +9,29 @@ namespace Converter.Tests.UnitTests.Extensions;
 
 public class ControlExtensionsTests
 {
-    private class TestControl : Control
+    private class InvokeAwareControl : Control
     {
-        public bool ShouldInvoke { get; set; }
-        public bool WasInvoked { get; private set; }
+        private readonly bool _invokeRequired;
+        public bool Invoked { get; private set; }
 
-        public override bool InvokeRequired => ShouldInvoke;
-
-        // Override CreateHandle to prevent handle creation
-        protected override void CreateHandle()
+        public InvokeAwareControl(bool invokeRequired)
         {
-            // Intentionally empty to prevent handle creation in tests
+            _invokeRequired = invokeRequired;
         }
 
-        // Capture Invoke calls
-        public override void Invoke(Delegate method, params object[] args)
+        public override bool InvokeRequired => _invokeRequired;
+
+        public override IAsyncResult BeginInvoke(Delegate method)
         {
-            WasInvoked = true;
-            method.DynamicInvoke(args);
+            method.DynamicInvoke();
+            Invoked = true;
+            return new ManualResetEvent(true).BeginInvoke(method, Array.Empty<object?>());
         }
 
-        public override IAsyncResult BeginInvoke(Delegate method, params object[] args)
+        public override void Invoke(Delegate method)
         {
-            WasInvoked = true;
-            method.DynamicInvoke(args);
-            return new ManualResetEvent(true).BeginInvoke(method, args);
+            method.DynamicInvoke();
+            Invoked = true;
         }
     }
 
@@ -41,7 +39,7 @@ public class ControlExtensionsTests
     public void InvokeIfRequired_WhenInvokeNotRequired_ExecutesInline()
     {
         // Arrange
-        var control = new TestControl { ShouldInvoke = false };
+        var control = new InvokeAwareControl(false);
         var executed = false;
 
         // Act
@@ -49,14 +47,14 @@ public class ControlExtensionsTests
 
         // Assert
         executed.Should().BeTrue();
-        control.WasInvoked.Should().BeFalse();
+        control.Invoked.Should().BeFalse();
     }
 
     [Fact]
     public void InvokeIfRequired_WhenInvokeRequired_UsesControlInvoke()
     {
         // Arrange
-        var control = new TestControl { ShouldInvoke = true };
+        var control = new InvokeAwareControl(true);
         var executed = false;
 
         // Act
@@ -64,6 +62,6 @@ public class ControlExtensionsTests
 
         // Assert
         executed.Should().BeTrue();
-        control.WasInvoked.Should().BeTrue();
+        control.Invoked.Should().BeTrue();
     }
 }
