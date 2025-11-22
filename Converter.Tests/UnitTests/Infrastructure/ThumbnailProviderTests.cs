@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Converter.Application.Abstractions;
 using Converter.Infrastructure.Ffmpeg;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -18,14 +19,15 @@ public class ThumbnailProviderTests
     {
         // Arrange
         var executorMock = new Mock<IFFmpegExecutor>();
-        executorMock.Setup(e => e.ExecuteAsync(It.IsAny<string>(), It.IsAny<IProgress<double>>(), It.IsAny<CancellationToken>()))
-            .Returns<string, IProgress<double>, CancellationToken>((args, _, _) =>
+        executorMock
+            .Setup(e => e.ExecuteAsync(It.IsAny<string>(), It.IsAny<IProgress<double>>(), It.IsAny<CancellationToken>()))
+            .Callback<string, IProgress<double>, CancellationToken>((args, _, _) =>
             {
                 var match = Regex.Match(args, "\"(?<path>[^\"]+)\"$", RegexOptions.RightToLeft);
                 var outputPath = match.Groups["path"].Value;
                 File.WriteAllBytes(outputPath, new byte[] { 1, 2, 3 });
-                return Task.FromResult(0);
-            });
+            })
+            .ReturnsAsync(0);
 
         var provider = new ThumbnailProvider(executorMock.Object, Mock.Of<ILogger<ThumbnailProvider>>());
 

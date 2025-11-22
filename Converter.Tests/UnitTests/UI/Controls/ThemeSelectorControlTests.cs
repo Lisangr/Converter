@@ -101,6 +101,15 @@ public class ThemeSelectorControlTests
             ?? throw new InvalidOperationException());
     }
 
+    private static void RunSta(Action action)
+    {
+        RunSta(async () =>
+        {
+            action();
+            await Task.CompletedTask;
+        });
+    }
+
     private static void RunSta(Func<Task> action)
     {
         Exception? exception = null;

@@ -55,6 +55,7 @@ namespace Converter.Infrastructure
             services.AddSingleton<IProgressReporter, UiProgressReporter>();
 
             // Preset and Estimation services
+            services.AddSingleton<IPresetService, Application.Services.PresetService>();
             services.AddSingleton<Converter.Services.EstimationService>();
             services.AddSingleton<IConversionEstimationService, ConversionEstimationService>();
 

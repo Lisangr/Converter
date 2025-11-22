@@ -6,9 +6,10 @@ using System.Reflection;
 using System.Threading;
 using System.Windows.Forms;
 using Converter.Application.Models;
-using Converter.Services;
+using Converter.Application.Services;
 using Converter.UI.Controls;
 using FluentAssertions;
+using Moq;
 using Xunit;
 
 namespace Converter.Tests.UnitTests.UI.Controls;
@@ -27,7 +28,8 @@ public class PresetPanelTests
                 new() { Id = "2", Name = "B", Category = "Audio" }
             };
 
-            using var panel = new PresetPanel(new PresetService());
+            var presetServiceMock = new Mock<IPresetService>();
+            using var panel = new PresetPanel(presetServiceMock.Object);
 
             // Act
             panel.LoadPresets(presets);
@@ -49,7 +51,8 @@ public class PresetPanelTests
                 new() { Id = "1", Name = "A", Category = null }
             };
 
-            using var panel = new PresetPanel(new PresetService());
+            var presetServiceMock = new Mock<IPresetService>();
+            using var panel = new PresetPanel(presetServiceMock.Object);
 
             // Act
             panel.LoadPresets(presets);
@@ -67,7 +70,8 @@ public class PresetPanelTests
         {
             // Arrange
             var preset = new PresetProfile { Id = "preset-1", Name = "Test" };
-            using var panel = new PresetPanel(new PresetService());
+            var presetServiceMock = new Mock<IPresetService>();
+            using var panel = new PresetPanel(presetServiceMock.Object);
             panel.LoadPresets(new[] { preset });
             var group = GetField<FlowLayoutPanel>(panel, "_root").Controls.OfType<GroupBox>().Single();
             var button = group.Controls.OfType<FlowLayoutPanel>().Single().Controls.OfType<PresetButton>().Single();

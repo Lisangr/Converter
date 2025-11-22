@@ -9,7 +9,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Converter.Application.Abstractions;
+using Converter.Application.Services;
 using Converter.Application.Models;
 using Converter.Domain.Models;
 using Converter.Services;
@@ -153,6 +155,8 @@ namespace Converter
             Converter.Services.IFileService fileService,
             Converter.Services.UIServices.IFileOperationsService fileOperationsService,
             IOutputPathBuilder outputPathBuilder,
+            IPresetService presetService,
+            IConversionEstimationService estimationService,
             Microsoft.Extensions.Logging.ILogger<Form1> logger)
         {
             _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
@@ -162,6 +166,8 @@ namespace Converter
             _fileService = fileService ?? throw new ArgumentNullException(nameof(fileService));
             _fileOperationsService = fileOperationsService ?? throw new ArgumentNullException(nameof(fileOperationsService));
             _outputPathBuilder = outputPathBuilder ?? throw new ArgumentNullException(nameof(outputPathBuilder));
+            _presetService = presetService ?? throw new ArgumentNullException(nameof(presetService));
+            _estimationService = estimationService ?? throw new ArgumentNullException(nameof(estimationService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             InitializeComponent();
@@ -169,9 +175,6 @@ namespace Converter
             
             // Подписываемся на обновления очереди
             _fileOperationsService.QueueUpdated += OnQueueUpdated;
-            
-            // Инициализируем логгер для UI компонента через DI
-            SetLogger(_logger);
         }
 
         public void UpdatePresetControls(Converter.Application.Models.ConversionProfile preset)

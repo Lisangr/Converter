@@ -34,7 +34,7 @@ public class ChannelQueueProcessorTests
     {
         // Arrange
         var item = new QueueItem { Id = Guid.NewGuid(), Status = ConversionStatus.Pending };
-        var outcome = new ConversionOutcome(true, null, 1234);
+        var outcome = new ConversionResult { Success = true, OutputFileSize = 1234 };
         _queueStore.Setup(s => s.TryReserveAsync(item.Id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _conversionUseCase.Setup(c => c.ExecuteAsync(item, It.IsAny<IProgress<int>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(outcome);
@@ -66,7 +66,7 @@ public class ChannelQueueProcessorTests
     {
         // Arrange
         var item = new QueueItem { Id = Guid.NewGuid(), Status = ConversionStatus.Pending };
-        var outcome = new ConversionOutcome(false, "boom", null);
+        var outcome = new ConversionResult { Success = false, ErrorMessage = "boom" };
         _queueStore.Setup(s => s.TryReserveAsync(item.Id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _conversionUseCase.Setup(c => c.ExecuteAsync(item, It.IsAny<IProgress<int>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(outcome);

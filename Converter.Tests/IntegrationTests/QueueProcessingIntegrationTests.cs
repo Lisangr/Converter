@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Converter.Application.Abstractions;
 using Converter.Application.Services;
+using Converter.Application.Models;
 using Converter.Domain.Models;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -48,8 +49,8 @@ public class QueueProcessingIntegrationTests : IDisposable
             .Returns(Task.CompletedTask);
 
         var repo = new Mock<IQueueRepository>();
-        var first = new QueueItem { Id = Guid.NewGuid(), FileName = "first", Status = ConversionStatus.Pending };
-        var second = new QueueItem { Id = Guid.NewGuid(), FileName = "second", Status = ConversionStatus.Pending };
+        var first = new QueueItem { Id = Guid.NewGuid(), FilePath = "first", Status = ConversionStatus.Pending };
+        var second = new QueueItem { Id = Guid.NewGuid(), FilePath = "second", Status = ConversionStatus.Pending };
         repo.Setup(r => r.GetPendingItemsAsync()).ReturnsAsync(new List<QueueItem> { first, second });
         repo.Setup(r => r.UpdateAsync(It.IsAny<QueueItem>())).Returns(Task.CompletedTask);
 

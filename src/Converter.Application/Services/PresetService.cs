@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.IO;
 using Converter.Application.Abstractions;
 using Converter.Application.Models;
 
@@ -39,4 +41,47 @@ public interface IPresetService
     Task<IReadOnlyList<ConversionProfile>> GetAllPresetsAsync();
     Task SavePresetAsync(ConversionProfile preset);
     Task DeletePresetAsync(string presetName);
+}
+
+/// <summary>
+/// Методы-расширения для IPresetService для работы с файловыми пресетами (JSON).
+/// Используется в WinForms-UI для сохранения/загрузки одиночного пресета.
+/// </summary>
+public static class PresetServiceFileExtensions
+{
+    public static void SavePresetToFile(this IPresetService presetService, PresetProfile preset, string filePath)
+    {
+        if (presetService is null) throw new ArgumentNullException(nameof(presetService));
+        if (preset is null) throw new ArgumentNullException(nameof(preset));
+        if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("File path is required", nameof(filePath));
+
+        var options = new JsonSerializerOptions
+        {
+            WriteIndented = true
+        };
+
+        var json = JsonSerializer.Serialize(preset, options);
+        File.WriteAllText(filePath, json);
+    }
+
+    public static PresetProfile LoadPresetFromFile(this IPresetService presetService, string filePath)
+    {
+        if (presetService is null) throw new ArgumentNullException(nameof(presetService));
+        if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("File path is required", nameof(filePath));
+
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"Preset file not found: {filePath}", filePath);
+        }
+
+        var json = File.ReadAllText(filePath);
+        var preset = JsonSerializer.Deserialize<PresetProfile>(json);
+
+        if (preset == null)
+        {
+            throw new InvalidOperationException("Не удалось загрузить пресет: неверный формат файла");
+        }
+
+        return preset;
+    }
 }

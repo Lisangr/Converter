@@ -25,7 +25,7 @@ public class ConversionOrchestratorTests
     public async Task ConvertAsync_WithSuccessfulExecution_ShouldReturnSuccess()
     {
         var request = new ConversionRequest("input.mkv", "output.mp4", new ConversionProfile("p", "v", "a", "128k", 23));
-        var args = new FFmpegArguments("ffmpeg", "-i input -o output");
+        var args = "-i input -o output";
 
         _builderMock.Setup(b => b.Build(request)).Returns(args);
         _executorMock
@@ -46,13 +46,13 @@ public class ConversionOrchestratorTests
     public async Task ConvertAsync_ShouldPropagateProgressFromExecutor()
     {
         var request = new ConversionRequest("input.mkv", "output.mp4", new ConversionProfile("p", "v", "a", "128k", 23));
-        var args = new FFmpegArguments("ffmpeg", "-i input -o output");
+        var args = "-i input -o output";
         int? reportedProgress = null;
 
         _builderMock.Setup(b => b.Build(request)).Returns(args);
         _executorMock
             .Setup(e => e.ExecuteAsync(args, It.IsAny<IProgress<double>>(), It.IsAny<CancellationToken>()))
-            .Callback<FFmpegArguments, IProgress<double>, CancellationToken>((_, progress, _) =>
+            .Callback<string, IProgress<double>, CancellationToken>((_, progress, _) =>
             {
                 progress.Report(50.4);
             })
@@ -70,7 +70,7 @@ public class ConversionOrchestratorTests
     public async Task ConvertAsync_WhenExecutorFails_ShouldReturnError()
     {
         var request = new ConversionRequest("input.mkv", "output.mp4", new ConversionProfile("p", "v", "a", "128k", 23));
-        var args = new FFmpegArguments("ffmpeg", "-i input -o output");
+        var args = "-i input -o output";
 
         _builderMock.Setup(b => b.Build(request)).Returns(args);
         _executorMock

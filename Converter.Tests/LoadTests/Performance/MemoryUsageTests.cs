@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Converter.Application.Abstractions;
+using Converter.Application.Models;
 using Converter.Application.Services;
 using Converter.Domain.Models;
 using Microsoft.Extensions.Logging;

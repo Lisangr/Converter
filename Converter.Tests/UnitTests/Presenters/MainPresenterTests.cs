@@ -32,8 +32,29 @@ public class MainPresenterTests
         var pathBuilder = new Mock<IOutputPathBuilder>();
         var progressReporter = new Mock<IProgressReporter>();
         var filePicker = new Mock<IFilePicker>();
+        var conversionSettingsService = new Mock<IConversionSettingsService>();
+        var addFilesCommand = new Mock<IAddFilesCommand>();
+        var startConversionCommand = new Mock<IStartConversionCommand>();
+        var cancelConversionCommand = new Mock<ICancelConversionCommand>();
+        var removeSelectedFilesCommand = new Mock<IRemoveSelectedFilesCommand>();
+        var clearQueueCommand = new Mock<IClearQueueCommand>();
 
-        var presenter = new MainPresenter(view.Object, vm, queueRepository.Object, queueProcessor.Object, profileProvider.Object, pathBuilder.Object, progressReporter.Object, filePicker.Object, NullLogger<MainPresenter>.Instance);
+        var presenter = new MainPresenter(
+            view.Object,
+            vm,
+            queueRepository.Object,
+            queueProcessor.Object,
+            profileProvider.Object,
+            pathBuilder.Object,
+            progressReporter.Object,
+            filePicker.Object,
+            conversionSettingsService.Object,
+            addFilesCommand.Object,
+            startConversionCommand.Object,
+            cancelConversionCommand.Object,
+            removeSelectedFilesCommand.Object,
+            clearQueueCommand.Object,
+            NullLogger<MainPresenter>.Instance);
 
         await presenter.InitializeAsync();
 
@@ -52,20 +73,49 @@ public class MainPresenterTests
         vm.QueueItems.Add(new QueueItemViewModel { FilePath = "file.mp4" });
         var queueRepository = new Mock<IQueueRepository>();
         var queueProcessor = new Mock<IQueueProcessor>();
-        queueProcessor.Setup(p => p.StartProcessingAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask).Verifiable();
         var profileProvider = new Mock<IProfileProvider>();
         profileProvider.Setup(p => p.GetAllProfilesAsync()).ReturnsAsync(new List<ConversionProfile>());
         profileProvider.Setup(p => p.GetDefaultProfileAsync()).ReturnsAsync(new ConversionProfile("d", "v", "a", "b", 1));
         var pathBuilder = new Mock<IOutputPathBuilder>();
         var progressReporter = new Mock<IProgressReporter>();
         var filePicker = new Mock<IFilePicker>();
+        var conversionSettingsService = new Mock<IConversionSettingsService>();
+        var addFilesCommand = new Mock<IAddFilesCommand>();
+        var startConversionCommand = new Mock<IStartConversionCommand>();
+        var cancelConversionCommand = new Mock<ICancelConversionCommand>();
+        var removeSelectedFilesCommand = new Mock<IRemoveSelectedFilesCommand>();
+        var clearQueueCommand = new Mock<IClearQueueCommand>();
 
-        var presenter = new MainPresenter(view.Object, vm, queueRepository.Object, queueProcessor.Object, profileProvider.Object, pathBuilder.Object, progressReporter.Object, filePicker.Object, NullLogger<MainPresenter>.Instance);
+        startConversionCommand
+            .Setup(c => c.ExecuteAsync(It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask)
+            .Verifiable();
+
+        var presenter = new MainPresenter(
+            view.Object,
+            vm,
+            queueRepository.Object,
+            queueProcessor.Object,
+            profileProvider.Object,
+            pathBuilder.Object,
+            progressReporter.Object,
+            filePicker.Object,
+            conversionSettingsService.Object,
+            addFilesCommand.Object,
+            startConversionCommand.Object,
+            cancelConversionCommand.Object,
+            removeSelectedFilesCommand.Object,
+            clearQueueCommand.Object,
+            NullLogger<MainPresenter>.Instance);
 
         await presenter.InitializeAsync();
-        await view.Object.StartConversionRequestedAsync.Invoke();
 
-        queueProcessor.Verify(p => p.StartProcessingAsync(It.IsAny<CancellationToken>()), Times.Once);
+        // Напрямую вызываем приватный обработчик, чтобы не зависеть от реализации событий view
+        var method = typeof(MainPresenter)
+            .GetMethod("OnStartConversionRequestedAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        await (Task)method!.Invoke(presenter, Array.Empty<object?>())!;
+
+        startConversionCommand.Verify(c => c.ExecuteAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -84,8 +134,29 @@ public class MainPresenterTests
         var pathBuilder = new Mock<IOutputPathBuilder>();
         var progressReporter = new Mock<IProgressReporter>();
         var filePicker = new Mock<IFilePicker>();
+        var conversionSettingsService = new Mock<IConversionSettingsService>();
+        var addFilesCommand = new Mock<IAddFilesCommand>();
+        var startConversionCommand = new Mock<IStartConversionCommand>();
+        var cancelConversionCommand = new Mock<ICancelConversionCommand>();
+        var removeSelectedFilesCommand = new Mock<IRemoveSelectedFilesCommand>();
+        var clearQueueCommand = new Mock<IClearQueueCommand>();
 
-        var presenter = new MainPresenter(view.Object, vm, queueRepository.Object, queueProcessor.Object, profileProvider.Object, pathBuilder.Object, progressReporter.Object, filePicker.Object, NullLogger<MainPresenter>.Instance);
+        var presenter = new MainPresenter(
+            view.Object,
+            vm,
+            queueRepository.Object,
+            queueProcessor.Object,
+            profileProvider.Object,
+            pathBuilder.Object,
+            progressReporter.Object,
+            filePicker.Object,
+            conversionSettingsService.Object,
+            addFilesCommand.Object,
+            startConversionCommand.Object,
+            cancelConversionCommand.Object,
+            removeSelectedFilesCommand.Object,
+            clearQueueCommand.Object,
+            NullLogger<MainPresenter>.Instance);
 
         await presenter.Invoking(p => p.InitializeAsync()).Should().ThrowAsync<InvalidOperationException>();
         view.Verify(v => v.ShowError(It.Is<string>(s => s.Contains("fail"))), Times.Once);
@@ -111,6 +182,12 @@ public class MainPresenterTests
         var pathBuilder = new Mock<IOutputPathBuilder>();
         var progressReporter = new Mock<IProgressReporter>();
         var filePicker = new Mock<IFilePicker>();
+        var conversionSettingsService = new Mock<IConversionSettingsService>();
+        var addFilesCommand = new Mock<IAddFilesCommand>();
+        var startConversionCommand = new Mock<IStartConversionCommand>();
+        var cancelConversionCommand = new Mock<ICancelConversionCommand>();
+        var removeSelectedFilesCommand = new Mock<IRemoveSelectedFilesCommand>();
+        var clearQueueCommand = new Mock<IClearQueueCommand>();
 
         var presenter = new MainPresenter(
             view.Object,
@@ -121,9 +198,15 @@ public class MainPresenterTests
             pathBuilder.Object,
             progressReporter.Object,
             filePicker.Object,
+            conversionSettingsService.Object,
+            addFilesCommand.Object,
+            startConversionCommand.Object,
+            cancelConversionCommand.Object,
+            removeSelectedFilesCommand.Object,
+            clearQueueCommand.Object,
             NullLogger<MainPresenter>.Instance);
 
-        var item = new QueueItem { Id = Guid.NewGuid(), FileName = "test.mp4", FilePath = "test.mp4" };
+        var item = new QueueItem { Id = Guid.NewGuid(), FilePath = "test.mp4" };
 
         // Act: имитируем событие репозитория
         var onItemAddedMethod = typeof(MainPresenter)

@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging;
 using Xabe.FFmpeg;
 using Xabe.FFmpeg.Downloader;
 using Converter.Application.Abstractions;
+using Converter.Application.Services;
 using Converter.Domain.Models;
 using Converter.Application.Models;
 using NotificationOptions = Converter.Domain.Models.NotificationOptions;
@@ -91,15 +92,6 @@ namespace Converter
 
         private UI.Controls.EstimatePanel? _estimatePanel;
 
-        // Конструктор для получения сервисов через DI
-        public Form1(
-            IPresetService presetService,
-            IConversionEstimationService estimationService)
-        {
-            _presetService = presetService ?? throw new ArgumentNullException(nameof(presetService));
-            _estimationService = estimationService ?? throw new ArgumentNullException(nameof(estimationService));
-        }
-
         // MVVM binding helpers
         private BindingSource? _queueBindingSource;
         private DataGridView? _queueGrid;
@@ -110,15 +102,6 @@ namespace Converter
         // File operations service reference - доступ через partial class (использует существующее поле)
         private Converter.Services.UIServices.IFileOperationsService FileOperationsService => 
             this._fileOperationsService;
-
-        // Logger for UI operations
-        private ILogger? _logger;
-        
-        // Initialize logger - called from main Form1 constructor
-        public void SetLogger(Microsoft.Extensions.Logging.ILogger logger)
-        {
-            _logger = logger;
-        }
 
         protected override void OnLoad(EventArgs e)
         {
@@ -664,17 +647,14 @@ namespace Converter
             // Простейшая реализация: просто набор кнопок пресетов в FlowLayoutPanel
             tabPresets.Controls.Clear();
 
-            var container = new FlowLayoutPanel
+            // Вложенный TabControl с субвкладками по основным категориям
+            var subTabs = new TabControl
             {
                 Dock = DockStyle.Fill,
-                AutoScroll = true,
-                FlowDirection = FlowDirection.TopDown,
-                WrapContents = false,
-                Padding = new Padding(10),
-                BackColor = Color.White
+                Font = new Font("Segoe UI", 9F)
             };
 
-            tabPresets.Controls.Add(container);
+            tabPresets.Controls.Add(subTabs);
 
             // Получаем пресеты через асинхронный интерфейс IPresetService
             var presets = await _presetService.GetAllPresetsAsync();
@@ -682,57 +662,107 @@ namespace Converter
 
             if (presets.Count == 0)
             {
-                container.Controls.Add(new Label
+                var emptyPage = new TabPage("Все")
+                {
+                    BackColor = Color.White
+                };
+
+                emptyPage.Controls.Add(new Label
                 {
                     Text = "Пресеты не найдены",
                     AutoSize = true,
                     ForeColor = Color.Gray,
                     Font = new Font("Segoe UI", 11F, FontStyle.Regular),
-                    Padding = new Padding(5),
-                    Margin = new Padding(5)
+                    Padding = new Padding(10),
+                    Margin = new Padding(10),
+                    Dock = DockStyle.Top
                 });
+
+                subTabs.TabPages.Add(emptyPage);
                 return;
             }
 
-            // Группируем по категории, но внутри просто кнопки
-            foreach (var group in presets
-                         .GroupBy(p => string.IsNullOrWhiteSpace(p.Category) ? "Прочее" : p.Category)
-                         .OrderBy(g => g.Key))
+            // Готовим группы по категориям
+            var groups = presets
+                .GroupBy(p => string.IsNullOrWhiteSpace(p.Category) ? "Прочее" : p.Category)
+                .ToDictionary(g => g.Key, g => g.OrderBy(p => p.Name).ToList());
+
+            // Основные категории, для которых нужны отдельные субвкладки
+            var mainCategories = new[] { "Compression", "Social Media", "Video Platforms" };
+
+            foreach (var cat in mainCategories)
             {
-                var gb = new GroupBox
+                if (groups.TryGetValue(cat, out var catPresets) && catPresets.Count > 0)
                 {
-                    Text = group.Key,
-                    AutoSize = true,
-                    AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                    Padding = new Padding(10),
-                    Margin = new Padding(5),
-                    BackColor = Color.FromArgb(248, 249, 250)
+                    CreatePresetCategoryTab(subTabs, cat, catPresets);
+                }
+            }
+
+            // Остальные категории выводим в отдельной вкладке "Other", если они есть
+            var otherPresets = presets
+                .Where(p =>
+                {
+                    var c = string.IsNullOrWhiteSpace(p.Category) ? "Прочее" : p.Category;
+                    return !mainCategories.Contains(c);
+                })
+                .OrderBy(p => p.Category)
+                .ThenBy(p => p.Name)
+                .ToList();
+
+            if (otherPresets.Count > 0)
+            {
+                CreatePresetCategoryTab(subTabs, "Other", otherPresets);
+            }
+
+            if (subTabs.TabPages.Count == 0)
+            {
+                // На всякий случай, если фильтрация не создала ни одной вкладки
+                CreatePresetCategoryTab(subTabs, "Все", presets.OrderBy(p => p.Name).ToList());
+            }
+
+            // Локальная функция для создания субвкладки категории с адаптивным одноколоночным списком кнопок
+            void CreatePresetCategoryTab(TabControl parent, string title, IList<ConversionProfile> categoryPresets)
+            {
+                var page = new TabPage(title)
+                {
+                    BackColor = Color.White,
+                    Padding = new Padding(10) // Используем отступы на самой вкладке
                 };
 
-                var inner = new FlowLayoutPanel
+                var flow = new FlowLayoutPanel
                 {
                     Dock = DockStyle.Fill,
-                    AutoSize = true,
-                    AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                    FlowDirection = FlowDirection.LeftToRight,
-                    WrapContents = true,
-                    BackColor = Color.Transparent,
-                    Padding = new Padding(5)
+                    AutoScroll = true,
+                    FlowDirection = FlowDirection.TopDown,
+                    WrapContents = false, // Важно для одноколоночного режима
+                    BackColor = Color.White
                 };
 
-                gb.Controls.Add(inner);
+                // Этот обработчик растягивает кнопки на всю ширину FlowLayoutPanel,
+                // что является обходным решением, т.к. Anchor не работает в FlowLayoutPanel.
+                flow.SizeChanged += (_, __) =>
+                {
+                    // Используем ClientSize, чтобы учесть ширину возможного скроллбара
+                    var targetWidth = flow.ClientSize.Width - flow.Padding.Horizontal;
+                    foreach (var ctrl in flow.Controls.OfType<Button>())
+                    {
+                        ctrl.Width = targetWidth;
+                    }
+                };
 
-                foreach (var preset in group)
+                foreach (var preset in categoryPresets)
                 {
                     var btn = new Button
                     {
-                        AutoSize = true,
-                        AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                        Margin = new Padding(5),
+                        AutoSize = false, // Обязательно для ручной установки размеров
+                        Height = 40,
+                        Margin = new Padding(0, 0, 0, 5), // Отступ только снизу
                         Padding = new Padding(10, 5, 10, 5),
+                        TextAlign = ContentAlignment.MiddleLeft,
                         Text = $"{preset.Icon} {preset.Name}",
                         Tag = preset,
                         FlatStyle = FlatStyle.System
+                        // Anchor здесь не работает и был убран для ясности
                     };
 
                     btn.Click += (_, __) =>
@@ -749,10 +779,12 @@ namespace Converter
                         }
                     };
 
-                    inner.Controls.Add(btn);
+                    flow.Controls.Add(btn);
                 }
 
-                container.Controls.Add(gb);
+                // Добавляем FlowLayoutPanel напрямую на вкладку, убрав лишнюю панель-обертку
+                page.Controls.Add(flow);
+                parent.TabPages.Add(page);
             }
         }
 
@@ -1515,7 +1547,79 @@ namespace Converter
             UpdateEditorButtonState();
         }
 
-        private ConversionSettings CreateConversionSettings()
+        private void ClearAllFiles()
+        {
+            try
+            {
+                if (filesPanel != null)
+                {
+                    foreach (var item in filesPanel.Controls.OfType<FileListItem>().ToList())
+                    {
+                        filesPanel.Controls.Remove(item);
+                        item.Dispose();
+                    }
+                }
+
+                _dragDropPanel?.ClearFiles(notify: false);
+
+                UpdateEditorButtonState();
+                UpdateShareButtonState();
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Ошибка при очистке визуального списка файлов: {ex.Message}");
+            }
+        }
+
+        private void RemoveFileFromList(FileListItem item, bool syncDragDropPanel = true)
+        {
+            if (item == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (filesPanel != null)
+                {
+                    filesPanel.Controls.Remove(item);
+                    item.Dispose();
+                }
+
+                if (syncDragDropPanel && _dragDropPanel != null)
+                {
+                    _dragDropPanel.RemoveFile(item.FilePath, notify: false);
+                }
+
+                UpdateEditorButtonState();
+                UpdateShareButtonState();
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Ошибка при удалении файла из списка: {ex.Message}");
+            }
+        }
+
+        private void OpenVideoInPlayer(string filePath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+                {
+                    ShowError("Файл для просмотра не найден.");
+                    return;
+                }
+
+                using var editorForm = new VideoEditorForm(filePath);
+                editorForm.ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                ShowError($"Не удалось открыть видео: {ex.Message}");
+            }
+        }
+
+        private Converter.Domain.Models.ConversionSettings CreateConversionSettings()
         {
             var format = (cbFormat.SelectedItem?.ToString() ?? "MP4").ToLowerInvariant();
             var videoCodec = ExtractCodecName(cbVideoCodec.SelectedItem?.ToString() ?? "libx264");
@@ -1534,7 +1638,7 @@ namespace Converter
             var crf = ExtractCRF(cbQuality.SelectedItem?.ToString() ?? "CRF 23");
             var threads = nudThreads != null && nudThreads.Value > 0 ? (int?)nudThreads.Value : null;
 
-            return new ConversionSettings
+            return new Converter.Domain.Models.ConversionSettings
             {
                 VideoCodec = videoCodec,
                 AudioCodec = audioCodec,
@@ -1547,6 +1651,57 @@ namespace Converter
                 Threads = threads,
                 AudioProcessing = _audioProcessingPanel?.GetOptions().Clone()
             };
+        }
+
+        private async Task LoadThumbnailAsync(FileListItem item, CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(item.FilePath))
+                {
+                    return;
+                }
+
+                var image = await _fileService.GetThumbnailAsync(item.FilePath, 160, 90, cancellationToken).ConfigureAwait(false);
+                RunOnUiThread(() =>
+                {
+                    item.Thumbnail = image;
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                // ignore
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Ошибка загрузки превью для {item.FilePath}: {ex.Message}");
+            }
+        }
+
+        private async Task RefreshThumbnail(FileListItem item, TimeSpan position, CancellationToken cancellationToken)
+        {
+            // Текущая реализация игнорирует позицию и просто перезагружает превью
+            await LoadThumbnailAsync(item, cancellationToken).ConfigureAwait(false);
+        }
+
+        private async Task ProbeFileAsync(FileListItem item, string path, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var info = await _fileService.ProbeFileAsync(path).ConfigureAwait(false);
+                RunOnUiThread(() =>
+                {
+                    item.FileSize = info.Length;
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                // ignore
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Ошибка анализа файла {Path.GetFileName(path)}: {ex.Message}");
+            }
         }
 
         private static int? ParseBitrate(string? value)
@@ -2102,49 +2257,53 @@ namespace Converter
             return "Оригинал";
         }
 
-        private string FormatFileSize(long bytes)
-                Filter = "JSON Preset|*.json|Все файлы|*.*",
-                DefaultExt = "json",
-                FileName = "preset.json"
-            };
+        private void btnSavePreset_Click(object? sender, EventArgs e)
+{
+    using var sfd = new SaveFileDialog
+    {
+        Filter = "JSON Preset|*.json|Все файлы|*.*",
+        Title = "Сохранить пресет",
+        DefaultExt = "json",
+        AddExtension = true
+    };
 
-            if (sfd.ShowDialog() == DialogResult.OK)
-            {
-                try
-                {
-                    var preset = BuildPresetFromUi();
-                    _presetService.SavePresetToFile(preset, sfd.FileName);
-                    AppendLog($"💾 Пресет сохранен: {System.IO.Path.GetFileName(sfd.FileName)}");
-                }
-                catch (Exception ex)
-                {
-                    ShowError($"Ошибка сохранения пресета: {ex.Message}");
-                }
-            }
-        }
-
-        private void btnLoadPreset_Click(object? sender, EventArgs e)
+    if (sfd.ShowDialog() == DialogResult.OK)
+    {
+        try
         {
-            using var ofd = new OpenFileDialog
-            {
-                Filter = "JSON Preset|*.json|Все файлы|*.*"
-            };
-
-            if (ofd.ShowDialog() == DialogResult.OK)
-            {
-                try
-                {
-                    var preset = _presetService.LoadPresetFromFile(ofd.FileName);
-                    ApplyPresetToUi(preset);
-                    _presetPanel?.Highlight(preset.Id);
-                    AppendLog($"📂 Пресет загружен: {System.IO.Path.GetFileName(ofd.FileName)}");
-                }
-                catch (Exception ex)
-                {
-                    ShowError($"Ошибка загрузки пресета: {ex.Message}");
-                }
-            }
+            var preset = BuildPresetFromUi();
+            _presetService.SavePresetToFile(preset, sfd.FileName);
+            AppendLog($"💾 Пресет сохранен: {System.IO.Path.GetFileName(sfd.FileName)}");
         }
+        catch (Exception ex)
+        {
+            ShowError($"Ошибка сохранения пресета: {ex.Message}");
+        }
+    }
+}
+
+private void btnLoadPreset_Click(object? sender, EventArgs e)
+{
+    using var ofd = new OpenFileDialog
+    {
+        Filter = "JSON Preset|*.json|Все файлы|*.*",
+        Title = "Загрузить пресет"
+    };
+
+    if (ofd.ShowDialog() == DialogResult.OK)
+    {
+        try
+        {
+            var preset = _presetService.LoadPresetFromFile(ofd.FileName);
+            ApplyPresetToUi(preset);
+            AppendLog($"📂 Пресет загружен: {System.IO.Path.GetFileName(ofd.FileName)}");
+        }
+        catch (Exception ex)
+        {
+            ShowError($"Ошибка загрузки пресета: {ex.Message}");
+        }
+    }
+}
 
         
 

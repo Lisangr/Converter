@@ -2,7 +2,6 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Converter.Application.Abstractions;
-using Converter.Domain.Models;
 
 namespace Converter.Application.Services;
 

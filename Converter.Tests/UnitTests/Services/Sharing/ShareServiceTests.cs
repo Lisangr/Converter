@@ -16,11 +16,12 @@ public class ShareServiceTests
     [Fact]
     public void GenerateReport_ShouldIncludeConversionStats()
     {
+        var now = DateTime.UtcNow;
         var items = new List<QueueItem>
         {
-            new() { Status = ConversionStatus.Completed, FileSizeBytes = 2000, OutputFileSizeBytes = 1000, ConversionDuration = TimeSpan.FromSeconds(2), Settings = new ConversionSettings { VideoCodec = "h264", PresetName = "1080p" } },
-            new() { Status = ConversionStatus.Completed, FileSizeBytes = 3000, OutputFileSizeBytes = 1500, ConversionDuration = TimeSpan.FromSeconds(3), Settings = new ConversionSettings { VideoCodec = "h264", PresetName = "1080p" } },
-            new() { Status = ConversionStatus.Error }
+            new() { Status = ConversionStatus.Completed, FileSizeBytes = 2000, OutputFileSizeBytes = 1000, StartedAt = now, CompletedAt = now.AddSeconds(2), Settings = new ConversionSettings { VideoCodec = "h264", PresetName = "1080p" } },
+            new() { Status = ConversionStatus.Completed, FileSizeBytes = 3000, OutputFileSizeBytes = 1500, StartedAt = now, CompletedAt = now.AddSeconds(3), Settings = new ConversionSettings { VideoCodec = "h264", PresetName = "1080p" } },
+            new() { Status = ConversionStatus.Failed }
         };
 
         using var service = new ShareService();

@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
+using Converter.Application.Abstractions;
 using Converter.Application.Models;
-using Converter.Services;
+using Converter.Application.Services;
 
 namespace Converter.UI.Controls
 {
@@ -16,14 +17,14 @@ namespace Converter.UI.Controls
     {
         public event Action<PresetProfile>? PresetSelected;
 
-        private readonly PresetService _service;
+        private readonly IPresetService _service;
         private readonly FlowLayoutPanel _root = new FlowLayoutPanel();
         private readonly Dictionary<string, PresetButton> _buttons = new();
         private readonly List<GroupBox> _groupBoxes = new();
 
-        public PresetPanel(PresetService? service = null)
+        public PresetPanel(IPresetService service)
         {
-            _service = service ?? new PresetService();
+            _service = service ?? throw new ArgumentNullException(nameof(service));
 
             Dock = DockStyle.Fill;
             BackColor = Color.White;

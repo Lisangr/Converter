@@ -26,13 +26,14 @@ public class LargeFileProcessingTests
         var orchestrator = new ConversionOrchestrator(executor.Object, builder.Object, logger);
         var outputFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mp4");
         await File.WriteAllBytesAsync(outputFile, new byte[1024 * 1024]);
-        var request = new ConversionRequest("input.mp4", outputFile, Format.Mp4, Bitrate.Preset720p);
+        var profile = new Converter.Application.Models.ConversionProfile("Default", "libx264", "aac", "128k", 23);
+        var request = new ConversionRequest("input.mp4", outputFile, profile);
         var progress = new Progress<int>();
 
         var result = await orchestrator.ConvertAsync(request, progress, CancellationToken.None);
 
         Assert.True(result.Success);
-        Assert.True(result.OutputFileSize >= 1024 * 1024);
+        Assert.True(result.OutputSize >= 1024 * 1024);
         File.Delete(outputFile);
     }
 }

@@ -48,7 +48,7 @@ public class ConversionUseCaseTests
             .Returns(outputPath);
         _orchestratorMock
             .Setup(o => o.ConvertAsync(
-                It.Is<Converter.Application.Models.ConversionRequest>(r => r.InputPath == item.FilePath && r.OutputPath == outputPath),
+                It.Is<Converter.Application.Abstractions.ConversionRequest>(r => r.InputPath == item.FilePath && r.OutputPath == outputPath),
                 It.IsAny<IProgress<int>>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(outcome);
@@ -81,7 +81,7 @@ public class ConversionUseCaseTests
             .Setup(b => b.BuildOutputPath(item, profile))
             .Returns("output.mp4");
         _orchestratorMock
-            .Setup(o => o.ConvertAsync(It.IsAny<Converter.Application.Models.ConversionRequest>(), It.IsAny<IProgress<int>>(), It.IsAny<CancellationToken>()))
+            .Setup(o => o.ConvertAsync(It.IsAny<Converter.Application.Abstractions.ConversionRequest>(), It.IsAny<IProgress<int>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(outcome);
 
         var sut = CreateSut();

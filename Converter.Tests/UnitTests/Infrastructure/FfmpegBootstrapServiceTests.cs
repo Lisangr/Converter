@@ -32,21 +32,21 @@ public class FfmpegBootstrapServiceTests
     public async Task EnsureFfmpegAsync_WhenBinaryExists_ShouldValidateAvailability()
     {
         // Arrange
-        _executorMock.Setup(e => e.IsFfmpegAvailableAsync()).ReturnsAsync(true);
+        _executorMock.Setup(e => e.IsFfmpegAvailableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var service = new FfmpegBootstrapService(_executorMock.Object, _loggerMock.Object);
 
         // Act
         await service.EnsureFfmpegAsync();
 
         // Assert
-        _executorMock.Verify(e => e.IsFfmpegAvailableAsync(), Times.Once);
+        _executorMock.Verify(e => e.IsFfmpegAvailableAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task StartAsync_WhenAvailabilityFails_ShouldThrow()
     {
         // Arrange
-        _executorMock.Setup(e => e.IsFfmpegAvailableAsync()).ReturnsAsync(false);
+        _executorMock.Setup(e => e.IsFfmpegAvailableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
         var service = new FfmpegBootstrapService(_executorMock.Object, _loggerMock.Object);
 
         // Act
@@ -60,7 +60,7 @@ public class FfmpegBootstrapServiceTests
     public async Task StartAndStopAsync_ShouldRequestVersionAndHandleCancellation()
     {
         // Arrange
-        _executorMock.Setup(e => e.IsFfmpegAvailableAsync()).ReturnsAsync(true);
+        _executorMock.Setup(e => e.IsFfmpegAvailableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _executorMock.Setup(e => e.GetVersionAsync(It.IsAny<CancellationToken>())).ReturnsAsync("ffmpeg version test");
         var service = new FfmpegBootstrapService(_executorMock.Object, _loggerMock.Object);
 

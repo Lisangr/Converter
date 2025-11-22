@@ -26,11 +26,12 @@ public class ConcurrentConversionTests
         builder.Setup(b => b.Build(It.IsAny<ConversionRequest>())).Returns("-args");
         var logger = Mock.Of<ILogger<ConversionOrchestrator>>();
         var orchestrator = new ConversionOrchestrator(executor.Object, builder.Object, logger);
+        var profile = new Converter.Application.Models.ConversionProfile("Default", "libx264", "aac", "128k", 23);
         var requests = new List<ConversionRequest>
         {
-            new("a.mp4", "a_out.mp4", Format.Mp4, Bitrate.Preset720p),
-            new("b.mp4", "b_out.mp4", Format.Mp4, Bitrate.Preset720p),
-            new("c.mp4", "c_out.mp4", Format.Mp4, Bitrate.Preset720p)
+            new("a.mp4", "a_out.mp4", profile),
+            new("b.mp4", "b_out.mp4", profile),
+            new("c.mp4", "c_out.mp4", profile)
         };
         var progressValues = new ConcurrentBag<int>();
         var progress = new Progress<int>(progressValues.Add);

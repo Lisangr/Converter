@@ -28,7 +28,7 @@ public class XmlPresetLoaderTests
         await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
 
         // Act
-        var result = await _loader.LoadPresetsAsync(stream);
+        var result = await _loader.LoadPresetsAsync(stream, CancellationToken.None);
 
         // Assert
         result.Should().NotBeNull();
@@ -45,20 +45,8 @@ public class XmlPresetLoaderTests
         await act.Should().ThrowAsync<ArgumentNullException>().WithMessage("*stream*");
     }
 
-    [Fact]
-    public async Task LoadPresetsAsync_WithNullCancellationToken_ShouldNotThrow()
-    {
-        // Arrange
-        var xml = "<?xml version=\"1.0\"?><presets></presets>";
-        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
-
-        // Act
-        var result = await _loader.LoadPresetsAsync(stream, null);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Should().BeEmpty();
-    }
+    // Тест с null CancellationToken больше не актуален: метод принимает CancellationToken по значению
+    // и имеет параметр по умолчанию. Достаточно вызывать перегрузку без токена, что уже покрыто другими тестами.
 
     [Fact]
     public async Task LoadPresetsAsync_WithEmptyStream_ShouldReturnEmptyList()
@@ -158,14 +146,14 @@ public class XmlPresetLoaderTests
     }
 
     [Fact]
-    public async Task SavePresetsAsync_WithNullCancellationToken_ShouldNotThrow()
+    public async Task SavePresetsAsync_WithCancellationToken_ShouldNotThrow()
     {
         // Arrange
         await using var stream = new MemoryStream();
         var presets = new List<PresetProfile>();
 
         // Act
-        var act = async () => await _loader.SavePresetsAsync(stream, presets, null);
+        var act = async () => await _loader.SavePresetsAsync(stream, presets, CancellationToken.None);
 
         // Assert
         await act.Should().NotThrowAsync();

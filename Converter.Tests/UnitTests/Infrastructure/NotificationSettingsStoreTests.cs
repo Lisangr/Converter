@@ -18,9 +18,11 @@ public class NotificationSettingsStoreTests
         var store = new NotificationSettingsStore(path, Mock.Of<ILogger<NotificationSettingsStore>>());
         var options = new NotificationOptions
         {
-            EnableSound = true,
-            ShowToasts = true,
-            SoundVolume = 0.7f
+            DesktopNotificationsEnabled = true,
+            SoundEnabled = true,
+            UseCustomSound = true,
+            CustomSoundPath = "C://sounds/custom.wav",
+            ShowProgressNotifications = false
         };
 
         // Act
@@ -28,9 +30,11 @@ public class NotificationSettingsStoreTests
         var loaded = store.Load();
 
         // Assert
-        loaded.EnableSound.Should().BeTrue();
-        loaded.ShowToasts.Should().BeTrue();
-        loaded.SoundVolume.Should().BeApproximately(0.7f, 0.0001f);
+        loaded.DesktopNotificationsEnabled.Should().BeTrue();
+        loaded.SoundEnabled.Should().BeTrue();
+        loaded.UseCustomSound.Should().BeTrue();
+        loaded.CustomSoundPath.Should().Be("C://sounds/custom.wav");
+        loaded.ShowProgressNotifications.Should().BeFalse();
     }
 
     [Fact]
@@ -45,7 +49,10 @@ public class NotificationSettingsStoreTests
 
         // Assert
         options.Should().NotBeNull();
-        options.EnableSound.Should().BeFalse();
+        // Проверяем, что применены значения по умолчанию из NotificationOptions
+        options.DesktopNotificationsEnabled.Should().BeTrue();
+        options.SoundEnabled.Should().BeTrue();
+        options.ShowProgressNotifications.Should().BeTrue();
     }
 
     [Fact]

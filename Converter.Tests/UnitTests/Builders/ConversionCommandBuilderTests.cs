@@ -1,4 +1,5 @@
 using Converter.Application.Builders;
+using Converter.Application.Abstractions;
 using Converter.Application.Models;
 using Converter.Domain.Models;
 using FluentAssertions;

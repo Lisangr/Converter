@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Converter.Application.Abstractions;
 using Converter.Application.Services.Queue;
 using Converter.Domain.Models;
 using FluentAssertions;
@@ -17,7 +16,7 @@ public class QueueManagerTests
     public async Task AddItem_ShouldRespectPriorities()
     {
         // Arrange
-        var processor = new Mock<IQueueItemProcessor>();
+        var processor = new Mock<Converter.Application.Services.Queue.IQueueItemProcessor>();
         processor.SetupSequence(p => p.ProcessAsync(It.IsAny<QueueItem>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true)
             .ReturnsAsync(true);
@@ -65,13 +64,10 @@ public class QueueManagerTests
     public async Task RemoveItem_ShouldUpdateScheduling()
     {
         // Arrange
-        var processor = new Mock<IQueueItemProcessor>();
-        processor.Setup(p => p.ProcessAsync(It.IsAny<QueueItem>(), It.IsAny<CancellationToken>()))
-            .Returns(async () =>
-            {
-                await Task.Delay(100);
-                return true;
-            });
+        var processor = new Mock<Converter.Application.Services.Queue.IQueueItemProcessor>();
+        processor
+            .Setup(p => p.ProcessAsync(It.IsAny<QueueItem>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
 
         var manager = new QueueManager(processor.Object, maxConcurrent: 1);
         var item = new QueueItem { Id = Guid.NewGuid() };

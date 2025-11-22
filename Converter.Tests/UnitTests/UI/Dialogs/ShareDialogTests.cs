@@ -48,7 +48,7 @@ public class ShareDialogTests
 
             // Assert
             twitterText.Should().Contain(report.Title);
-            redditText.Should().Contain("Reddit", StringComparison.OrdinalIgnoreCase);
+            redditText.IndexOf("Reddit", StringComparison.OrdinalIgnoreCase).Should().BeGreaterThan(-1);
         });
     }
 
@@ -70,7 +70,7 @@ public class ShareDialogTests
 
             // Assert
             tabControl.SelectedTab.Text.Should().Be("Discord");
-            redditText.Should().Contain("Reddit", StringComparison.OrdinalIgnoreCase);
+            redditText.IndexOf("Reddit", StringComparison.OrdinalIgnoreCase).Should().BeGreaterThan(-1);
             discordText.Should().Contain(report.FilesConverted.ToString());
         });
     }
@@ -95,6 +95,15 @@ public class ShareDialogTests
     {
         return (T)(target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(target)
             ?? throw new InvalidOperationException());
+    }
+
+    private static void RunSta(Action action)
+    {
+        RunSta(async () =>
+        {
+            action();
+            await Task.CompletedTask;
+        });
     }
 
     private static void RunSta(Func<Task> action)

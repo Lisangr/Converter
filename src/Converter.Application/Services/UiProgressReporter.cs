@@ -92,7 +92,7 @@ namespace Converter.Application.Services
         {
             try
             {
-                InvokeOnUiThread(() =>
+                _dispatcher.Invoke(() =>
                 {
                     var text = !string.IsNullOrEmpty(status)
                         ? $"{status} ({progress}%)"
@@ -115,7 +115,7 @@ namespace Converter.Application.Services
 
             try
             {
-                InvokeOnUiThread(() =>
+                _dispatcher.Invoke(() =>
                 {
                     item.Status = ConversionStatus.Failed;
                     item.ErrorMessage = error;
@@ -137,7 +137,7 @@ namespace Converter.Application.Services
 
             try
             {
-                InvokeOnUiThread(() =>
+                _dispatcher.Invoke(() =>
                 {
                     _view.ShowInfo($"Warning: {warning}");
                 });
@@ -157,7 +157,7 @@ namespace Converter.Application.Services
 
             try
             {
-                InvokeOnUiThread(() =>
+                _dispatcher.Invoke(() =>
                 {
                     _view.ShowInfo(message);
                 });

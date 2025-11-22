@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using Converter.Application.Abstractions;
 using Converter.Application.Services;
 using Converter.Infrastructure.Ffmpeg;
@@ -24,6 +26,14 @@ namespace Converter.Infrastructure
             // Persistence services
             services.AddSingleton<ISettingsStore, JsonSettingsStore>();
             services.AddSingleton<IQueueStore, JsonQueueStore>();
+            services.AddSingleton<IPresetRepository>(sp =>
+            {
+                var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<JsonPresetRepository>>();
+                // Для текущей реализации JsonPresetRepository путь используется только как заглушка
+                var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                var presetsPath = Path.Combine(appData, "Converter", "presets.json");
+                return new JsonPresetRepository(presetsPath, logger);
+            });
             
             // FFmpeg services - these are infrastructure services
             services.AddSingleton<IFFmpegExecutor, FFmpegExecutor>();

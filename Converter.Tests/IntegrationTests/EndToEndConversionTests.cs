@@ -24,10 +24,13 @@ public class EndToEndConversionTests : IDisposable
     {
         var builder = new Mock<IConversionCommandBuilder>(MockBehavior.Strict);
         builder.Setup(b => b.Build(It.IsAny<ConversionRequest>())).Returns("-i input -o output");
+
         var executor = new StubExecutor(exitCode: 0, createOutput: true);
         var orchestrator = new ConversionOrchestrator(executor, builder.Object, NullLogger<ConversionOrchestrator>.Instance);
 
-        var request = new ConversionRequest("input.mp4", Path.Combine(Path.GetTempPath(), Path.GetRandomFileName()));
+        var profile = new ConversionProfile("Default", "libx264", "aac", "128k", 23);
+        var request = new ConversionRequest("input.mp4", Path.Combine(Path.GetTempPath(), Path.GetRandomFileName()), profile);
+
         var progress = new Progress<int>();
 
         var outcome = await orchestrator.ConvertAsync(request, progress, CancellationToken.None);
@@ -48,7 +51,9 @@ public class EndToEndConversionTests : IDisposable
         var reported = new List<int>();
         var progress = new Progress<int>(p => reported.Add(p));
 
-        var request = new ConversionRequest("input.mp4", Path.GetTempFileName());
+        var profile = new ConversionProfile("Default", "libx264", "aac", "128k", 23);
+        var request = new ConversionRequest("input.mp4", Path.GetTempFileName(), profile);
+
         var outcome = await orchestrator.ConvertAsync(request, progress, CancellationToken.None);
 
         outcome.Success.Should().BeTrue();
@@ -67,7 +72,8 @@ public class EndToEndConversionTests : IDisposable
 
         using var cts = new CancellationTokenSource();
         cts.Cancel();
-        var request = new ConversionRequest("input.mp4", Path.GetTempFileName());
+        var profile = new ConversionProfile("Default", "libx264", "aac", "128k", 23);
+        var request = new ConversionRequest("input.mp4", Path.GetTempFileName(), profile);
 
         var act = () => orchestrator.ConvertAsync(request, new Progress<int>(), cts.Token);
 

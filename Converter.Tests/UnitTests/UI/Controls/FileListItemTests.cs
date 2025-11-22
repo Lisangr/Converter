@@ -64,8 +64,8 @@ public class FileListItemTests
             bool selectionChanged = false;
             item.SelectionChanged += (_, _) => selectionChanged = true;
 
-            // Act
-            item.PerformClick();
+            // Act: эмулируем пользовательский клик через свойство IsSelected
+            item.IsSelected = true;
 
             // Assert
             selectionChanged.Should().BeTrue();
