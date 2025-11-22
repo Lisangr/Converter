@@ -63,44 +63,4 @@ public sealed class QueueWorkerHostedService : IHostedService
             _workerTask = null;
         }
     }
-
-    private async Task RunProcessingLoopAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            // Инициализируем процессор очереди (загрузка существующих элементов)
-            await _queueProcessor.StartProcessingAsync(cancellationToken).ConfigureAwait(false);
-
-            // Основной цикл чтения элементов из Channel и их обработки
-            await foreach (var item in _queueProcessor.GetItemsAsync(cancellationToken))
-            {
-                try
-                {
-                    await _queueProcessor.ProcessItemAsync(item, cancellationToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    _logger.LogInformation("Processing loop cancelled by user");
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error processing item {ItemId}, continuing with next item", item.Id);
-                    // Продолжаем обработку следующих элементов
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            _logger.LogInformation("QueueWorkerHostedService processing was cancelled");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error in queue processing loop");
-        }
-        finally
-        {
-            _logger.LogInformation("QueueWorkerHostedService processing loop completed");
-        }
-    }
 }

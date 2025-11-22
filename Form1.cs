@@ -553,14 +553,13 @@ namespace Converter
 
             _closingInProgress = true;
 
-
-
-            // Мягко уведомляем презентер об очистке очереди (без ожидания)
+            // Мягко уведомляем презентер о запросе завершения работы приложения.
+            // Не блокируем UI-поток ожиданием, чтобы избежать возможных дедлоков.
             if (_mainPresenter != null)
             {
                 try
                 {
-                    _ = _mainPresenter.OnClearAllFilesRequested();
+                    _ = _mainPresenter.RequestShutdownAsync();
                 }
                 catch
                 {
@@ -605,6 +604,13 @@ namespace Converter
             try
             {
                 _lifecycleCts.Dispose();
+            }
+            catch { }
+
+            try
+            {
+                _estimateDebounceTimer?.Stop();
+                _estimateDebounceTimer?.Dispose();
             }
             catch { }
         }
@@ -669,17 +675,8 @@ namespace Converter
                     _mainPresenter.OnRemoveSelectedFilesRequested();
                     return;
                 }
-
-                // Fallback: если презентера нет, просто удаляем выбранные элементы только из UI
-                if (_queueItemsBinding != null)
-                {
-                    var selectedItems = _queueItemsBinding.Where(item => item.IsSelected).ToList();
-                    foreach (var item in selectedItems)
-                    {
-                        _queueItemsBinding.Remove(item);
-                    }
-                    AppendLog($"Удалено файлов из очереди (UI-only): {selectedItems.Count}");
-                }
+                // Fallback: если презентера нет, не трогаем очередь, только логируем ситуацию
+                AppendLog("Попытка удалить выбранные файлы без доступного MainPresenter — операция проигнорирована");
             }
             catch (Exception ex)
             {
@@ -711,128 +708,116 @@ namespace Converter
 
         public async Task RaiseAddFilesRequestedAsync()
         {
-            if (AddFilesRequestedAsync == null)
+            var handler = AddFilesRequestedAsync;
+            if (handler == null)
             {
                 return;
             }
 
-            var handlers = AddFilesRequestedAsync
-                .GetInvocationList()
-                .Cast<Func<Task>>()
-                .Select(h => h())
-                .ToArray();
-
-            if (handlers.Length == 0)
+            try
             {
-                return;
+                await handler().ConfigureAwait(false);
             }
-
-            await Task.WhenAll(handlers).ConfigureAwait(false);
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Ошибка в обработчике AddFilesRequestedAsync");
+                ShowError($"Ошибка при добавлении файлов: {ex.Message}");
+            }
         }
 
         public async Task RaiseStartConversionRequestedAsync()
         {
-            if (StartConversionRequestedAsync == null)
+            var handler = StartConversionRequestedAsync;
+            if (handler == null)
             {
                 return;
             }
 
-            var handlers = StartConversionRequestedAsync
-                .GetInvocationList()
-                .Cast<Func<Task>>()
-                .Select(h => h())
-                .ToArray();
-
-            if (handlers.Length == 0)
+            try
             {
-                return;
+                await handler().ConfigureAwait(false);
             }
-
-            await Task.WhenAll(handlers).ConfigureAwait(false);
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Ошибка в обработчике StartConversionRequestedAsync");
+                ShowError($"Ошибка при запуске конвертации: {ex.Message}");
+            }
         }
 
         public async Task RaiseCancelConversionRequestedAsync()
         {
-            if (CancelConversionRequestedAsync == null)
+            var handler = CancelConversionRequestedAsync;
+            if (handler == null)
             {
                 return;
             }
 
-            var handlers = CancelConversionRequestedAsync
-                .GetInvocationList()
-                .Cast<Func<Task>>()
-                .Select(h => h())
-                .ToArray();
-
-            if (handlers.Length == 0)
+            try
             {
-                return;
+                await handler().ConfigureAwait(false);
             }
-
-            await Task.WhenAll(handlers).ConfigureAwait(false);
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Ошибка в обработчике CancelConversionRequestedAsync");
+                ShowError($"Ошибка при отмене конвертации: {ex.Message}");
+            }
         }
 
         public async Task RaiseFilesDroppedAsync(string[] files)
         {
-            if (FilesDroppedAsync == null)
+            var handler = FilesDroppedAsync;
+            if (handler == null)
             {
                 return;
             }
 
-            var handlers = FilesDroppedAsync
-                .GetInvocationList()
-                .Cast<Func<string[], Task>>()
-                .Select(h => h(files))
-                .ToArray();
-
-            if (handlers.Length == 0)
+            try
             {
-                return;
+                await handler(files).ConfigureAwait(false);
             }
-
-            await Task.WhenAll(handlers).ConfigureAwait(false);
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Ошибка в обработчике FilesDroppedAsync");
+                ShowError($"Ошибка при добавлении файлов: {ex.Message}");
+            }
         }
 
         public async Task RaiseRemoveSelectedFilesRequestedAsync()
         {
-            if (RemoveSelectedFilesRequestedAsync == null)
+            var handler = RemoveSelectedFilesRequestedAsync;
+            if (handler == null)
             {
                 return;
             }
 
-            var handlers = RemoveSelectedFilesRequestedAsync
-                .GetInvocationList()
-                .Cast<Func<Task>>()
-                .Select(h => h())
-                .ToArray();
-
-            if (handlers.Length == 0)
+            try
             {
-                return;
+                await handler().ConfigureAwait(false);
             }
-
-            await Task.WhenAll(handlers).ConfigureAwait(false);
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Ошибка в обработчике RemoveSelectedFilesRequestedAsync");
+                ShowError($"Ошибка при удалении файлов: {ex.Message}");
+            }
         }
 
         public async Task RaiseClearAllFilesRequestedAsync()
         {
-            if (ClearAllFilesRequestedAsync == null)
+            var handler = ClearAllFilesRequestedAsync;
+            if (handler == null)
             {
                 return;
             }
 
-            var handlers = ClearAllFilesRequestedAsync
-                .GetInvocationList()
-                .Cast<Func<Task>>()
-                .Select(h => h())
-                .ToArray();
-
-            if (handlers.Length == 0)
+            try
             {
-                return;
+                await handler().ConfigureAwait(false);
             }
-
-            await Task.WhenAll(handlers).ConfigureAwait(false);
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Ошибка в обработчике ClearAllFilesRequestedAsync");
+                ShowError($"Ошибка при очистке очереди: {ex.Message}");
+            }
         }
 
         #endregion

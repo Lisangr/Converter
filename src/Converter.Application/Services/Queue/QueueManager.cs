@@ -8,7 +8,8 @@ using Converter.Domain.Models;
 
 namespace Converter.Application.Services.Queue;
 
-public class QueueManager
+[Obsolete("Queue.QueueManager is legacy helper; use IQueueProcessor/ChannelQueueProcessor for new code.")]
+internal class QueueManager
 {
     private readonly IQueueItemProcessor _processor;
     private readonly SemaphoreSlim _semaphore;

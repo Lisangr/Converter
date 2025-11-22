@@ -988,10 +988,7 @@ namespace Converter
             {
                 try
                 {
-                    if (RaiseStartConversionRequestedAsync != null)
-                    {
-                        await RaiseStartConversionRequestedAsync();
-                    }
+                    await RaiseStartConversionRequestedAsync().ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -1012,9 +1009,13 @@ namespace Converter
             // IMainView: отмена/остановка
             btnStop.Click += async (s, e) =>
             {
-                if (CancelConversionRequestedAsync != null)
+                try
                 {
                     await RaiseCancelConversionRequestedAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    ShowError($"Ошибка при остановке конвертации: {ex.Message}");
                 }
             };
 

@@ -64,6 +64,9 @@ namespace Converter.Infrastructure
             
             // UI services
             services.AddSingleton<Converter.Services.UIServices.IFileOperationsService, Converter.Services.UIServices.FileOperationsService>();
+
+            // Application shutdown
+            services.AddSingleton<IApplicationShutdownService, ApplicationShutdownService>();
             
             return services;
         }

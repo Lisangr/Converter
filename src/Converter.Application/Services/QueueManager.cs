@@ -7,11 +7,8 @@ using Converter.Application.Abstractions;
 
 namespace Converter.Application.Services;
 
-/// <summary>
-/// Менеджер очереди конвертации с поддержкой параллельной обработки.
-/// Управляет выполнением элементов очереди с ограничением по количеству одновременных операций.
-/// </summary>
-public class QueueManager : IDisposable
+[Obsolete("QueueManager is legacy and replaced by ChannelQueueProcessor/IQueueProcessor. Use channel-based pipeline instead.")]
+internal class QueueManager : IDisposable
 {
     private readonly IQueueItemProcessor _processor;
     private readonly int _maxConcurrent;

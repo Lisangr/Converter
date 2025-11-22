@@ -33,6 +33,7 @@ namespace Converter.Application.Presenters
         private readonly ICancelConversionCommand _cancelConversionCommand;
         private readonly IRemoveSelectedFilesCommand _removeSelectedFilesCommand;
         private readonly IClearQueueCommand _clearQueueCommand;
+        private readonly IApplicationShutdownService _shutdownService;
         private CancellationTokenSource _cancellationTokenSource;
 
         public MainPresenter(
@@ -51,6 +52,7 @@ namespace Converter.Application.Presenters
             ICancelConversionCommand cancelConversionCommand,
             IRemoveSelectedFilesCommand removeSelectedFilesCommand,
             IClearQueueCommand clearQueueCommand,
+            IApplicationShutdownService shutdownService,
             ILogger<MainPresenter> logger)
         {
             _view = view ?? throw new ArgumentNullException(nameof(view));
@@ -68,6 +70,7 @@ namespace Converter.Application.Presenters
             _cancelConversionCommand = cancelConversionCommand ?? throw new ArgumentNullException(nameof(cancelConversionCommand));
             _removeSelectedFilesCommand = removeSelectedFilesCommand ?? throw new ArgumentNullException(nameof(removeSelectedFilesCommand));
             _clearQueueCommand = clearQueueCommand ?? throw new ArgumentNullException(nameof(clearQueueCommand));
+            _shutdownService = shutdownService ?? throw new ArgumentNullException(nameof(shutdownService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cancellationTokenSource = new CancellationTokenSource();
 
@@ -720,6 +723,43 @@ namespace Converter.Application.Presenters
         public async Task OnClearAllFilesRequested()
         {
             await OnClearAllFilesRequestedAsync(this, EventArgs.Empty);
+        }
+
+        /// <summary>
+        /// Запрашивает мягкое завершение работы приложения:
+        /// останавливает конвертацию/очередь и затем инициирует shutdown хоста.
+
+        public async Task RequestShutdownAsync()
+        {
+            try
+            {
+                _logger.LogInformation("UI requested application shutdown");
+
+                // 1. Попытаться отменить текущую конвертацию
+                try
+                {
+                    await OnCancelConversionRequestedAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error while canceling conversions during shutdown request");
+                }
+
+                // 2. Попробовать очистить очередь (не критично, если не получится)
+                try
+                {
+                    await OnClearAllFilesRequestedAsync(this, EventArgs.Empty).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error while clearing queue during shutdown request");
+                }
+            }
+            finally
+            {
+                // 3. В любом случае сигнализируем хосту о завершении работы
+                _shutdownService.RequestShutdown();
+            }
         }
     }
 }
