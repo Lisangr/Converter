@@ -90,4 +90,47 @@ public class MainPresenterTests
         await presenter.Invoking(p => p.InitializeAsync()).Should().ThrowAsync<InvalidOperationException>();
         view.Verify(v => v.ShowError(It.Is<string>(s => s.Contains("fail"))), Times.Once);
     }
+
+    [Fact]
+    public void OnItemAdded_ShouldUpdateViewModel_UsingRunOnUiThread()
+    {
+        // Arrange
+        var view = new Mock<IMainView>();
+        view.SetupAllProperties();
+        // RunOnUiThread в тесте просто выполняет действие синхронно, без WinForms
+        view
+            .Setup(v => v.RunOnUiThread(It.IsAny<Action>()))
+            .Callback<Action>(a => a());
+
+        var vm = new MainViewModel();
+        var queueRepository = new Mock<IQueueRepository>();
+        var queueProcessor = new Mock<IQueueProcessor>();
+        var profileProvider = new Mock<IProfileProvider>();
+        profileProvider.Setup(p => p.GetAllProfilesAsync()).ReturnsAsync(new List<ConversionProfile>());
+        profileProvider.Setup(p => p.GetDefaultProfileAsync()).ReturnsAsync(new ConversionProfile("d", "v", "a", "b", 1));
+        var pathBuilder = new Mock<IOutputPathBuilder>();
+        var progressReporter = new Mock<IProgressReporter>();
+        var filePicker = new Mock<IFilePicker>();
+
+        var presenter = new MainPresenter(
+            view.Object,
+            vm,
+            queueRepository.Object,
+            queueProcessor.Object,
+            profileProvider.Object,
+            pathBuilder.Object,
+            progressReporter.Object,
+            filePicker.Object,
+            NullLogger<MainPresenter>.Instance);
+
+        var item = new QueueItem { Id = Guid.NewGuid(), FileName = "test.mp4", FilePath = "test.mp4" };
+
+        // Act: имитируем событие репозитория
+        var onItemAddedMethod = typeof(MainPresenter)
+            .GetMethod("OnItemAdded", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        onItemAddedMethod!.Invoke(presenter, new object?[] { null, item });
+
+        // Assert
+        vm.QueueItems.Should().ContainSingle(q => q.FilePath == "test.mp4");
+    }
 }

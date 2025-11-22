@@ -28,9 +28,11 @@ namespace Converter
         private readonly INotificationService _notificationService;
         private readonly IThumbnailProvider _thumbnailProvider;
         private readonly IShareService _shareService;
-        private readonly Converter.Services.FileService _fileService;
+        private readonly Converter.Services.IFileService _fileService;
         private readonly Converter.Services.UIServices.IFileOperationsService _fileOperationsService;
+        private readonly IOutputPathBuilder _outputPathBuilder;
         private readonly CancellationTokenSource _lifecycleCts = new();
+        private readonly ILogger<Form1> _logger;
         
         private bool _disposed = false;
         private bool _closingInProgress = false;
@@ -131,13 +133,27 @@ namespace Converter
             set => SetStatusText(value);
         }
 
+        public void RunOnUiThread(Action action)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(action);
+            }
+            else
+            {
+                action();
+            }
+        }
+
         public Form1(
             IThemeService themeService,
             INotificationService notificationService,
             IThumbnailProvider thumbnailProvider,
             IShareService shareService,
-            Converter.Services.FileService fileService,
-            Converter.Services.UIServices.IFileOperationsService fileOperationsService)
+            Converter.Services.IFileService fileService,
+            Converter.Services.UIServices.IFileOperationsService fileOperationsService,
+            IOutputPathBuilder outputPathBuilder,
+            Microsoft.Extensions.Logging.ILogger<Form1> logger)
         {
             _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
@@ -145,6 +161,8 @@ namespace Converter
             _shareService = shareService ?? throw new ArgumentNullException(nameof(shareService));
             _fileService = fileService ?? throw new ArgumentNullException(nameof(fileService));
             _fileOperationsService = fileOperationsService ?? throw new ArgumentNullException(nameof(fileOperationsService));
+            _outputPathBuilder = outputPathBuilder ?? throw new ArgumentNullException(nameof(outputPathBuilder));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             InitializeComponent();
             InitializeAdvancedTheming();
@@ -152,10 +170,8 @@ namespace Converter
             // Подписываемся на обновления очереди
             _fileOperationsService.QueueUpdated += OnQueueUpdated;
             
-            // Инициализируем логгер для UI компонента
-            // Логгер будет настроен через DI в Program.cs
-            var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
-            SetLogger(logger);
+            // Инициализируем логгер для UI компонента через DI
+            SetLogger(_logger);
         }
 
         public void UpdatePresetControls(Converter.Application.Models.ConversionProfile preset)
@@ -172,43 +188,30 @@ namespace Converter
             try
             {
                 Cursor = isBusy ? Cursors.WaitCursor : Cursors.Default;
-                
+
                 // Update UI controls if they exist
                 UpdateControlsState(isBusy);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Ошибка при обновлении состояния занятости UI");
+            }
         }
 
         private void UpdateControlsState(bool isBusy)
         {
-            try
-            {
-                // Try to find controls by name in the form
-                TryUpdateButton("btnStart", !isBusy);
-                TryUpdateButton("btnStop", isBusy);
-                TryUpdateButton("btnAddFiles", !isBusy);
-                TryUpdateButton("btnRemoveSelected", !isBusy);
-                TryUpdateButton("btnClearAll", !isBusy);
-                TryUpdateButton("_btnShare", !isBusy);
-                TryUpdateButton("_btnOpenEditor", !isBusy);
-                TryUpdateButton("_btnNotificationSettings", !isBusy);
-                TryUpdateButton("btnSavePreset", !isBusy);
-                TryUpdateButton("btnLoadPreset", !isBusy);
-            }
-            catch { }
-        }
+            // Основные управляющие кнопки формы. Их поля объявлены в Form1.UI.cs.
+            if (btnStart != null) btnStart.Enabled = !isBusy;
+            if (btnStop != null) btnStop.Enabled = isBusy;
+            if (btnAddFiles != null) btnAddFiles.Enabled = !isBusy;
+            if (btnRemoveSelected != null) btnRemoveSelected.Enabled = !isBusy;
+            if (btnClearAll != null) btnClearAll.Enabled = !isBusy;
+            if (btnSavePreset != null) btnSavePreset.Enabled = !isBusy;
+            if (btnLoadPreset != null) btnLoadPreset.Enabled = !isBusy;
 
-        private void TryUpdateButton(string buttonName, bool enabled)
-        {
-            try
-            {
-                var button = this.Controls.Find(buttonName, true).FirstOrDefault() as Button;
-                if (button != null)
-                {
-                    button.Enabled = enabled;
-                }
-            }
-            catch { }
+            // Кнопки _btnShare / _btnOpenEditor / _btnNotificationSettings управляются отдельной логикой
+            // (например, UpdateShareButtonState / UpdateEditorButtonState), поэтому здесь их состояние
+            // не переопределяем, чтобы не ломать UX.
         }
 
         public void SetStatusText(string status)
@@ -217,11 +220,10 @@ namespace Converter
 
             // Минимально: показываем статус в логах и при наличии статус-лейбла внизу
             AppendLog(status);
-            try
+            if (lblStatusTotal != null)
             {
-                if (lblStatusTotal != null) lblStatusTotal.Text = status;
+                lblStatusTotal.Text = status;
             }
-            catch { }
         }
 
         // IMainView: notifications
@@ -229,12 +231,56 @@ namespace Converter
         {
             if (InvokeRequired) { BeginInvoke(new Action(() => ShowError(message))); return; }
             AppendLog($"❌ {message}");
+            _logger?.LogError("UI error: {Message}", message);
+
+            try
+            {
+                if (_notificationService != null)
+                {
+                    var summary = new Converter.Application.Abstractions.NotificationSummary
+                    {
+                        SuccessCount = 0,
+                        FailedCount = 1,
+                        TotalSpaceSaved = 0,
+                        TotalProcessingTime = TimeSpan.Zero,
+                        Message = message
+                    };
+
+                    _notificationService.NotifyConversionComplete(summary);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Ошибка при отправке уведомления ShowError");
+            }
         }
 
         public void ShowInfo(string message)
         {
             if (InvokeRequired) { BeginInvoke(new Action(() => ShowInfo(message))); return; }
             AppendLog($"ℹ {message}");
+            _logger?.LogInformation("UI info: {Message}", message);
+
+            try
+            {
+                if (_notificationService != null)
+                {
+                    var summary = new Converter.Application.Abstractions.NotificationSummary
+                    {
+                        SuccessCount = 1,
+                        FailedCount = 0,
+                        TotalSpaceSaved = 0,
+                        TotalProcessingTime = TimeSpan.Zero,
+                        Message = message
+                    };
+
+                    _notificationService.NotifyConversionComplete(summary);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Ошибка при отправке уведомления ShowInfo");
+            }
         }
 
 		public void UpdateCurrentProgress(int percent)
@@ -483,7 +529,24 @@ namespace Converter
 
         private void DisposeManagedResources()
         {
-            _themeService.ThemeChanged -= OnThemeChanged;
+            try
+            {
+                _themeService.ThemeChanged -= OnThemeChanged;
+            }
+            catch { }
+
+            try
+            {
+                _fileOperationsService.QueueUpdated -= OnQueueUpdated;
+            }
+            catch { }
+
+            try
+            {
+                Resize -= OnThemeControlsResize;
+            }
+            catch { }
+
             CancelBackgroundOperations();
 
             try
@@ -503,60 +566,6 @@ namespace Converter
             try
             {
                 _lifecycleCts.Dispose();
-            }
-            catch { }
-
-            // Safely dispose notification service
-            try
-            {
-                if (_notificationService is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
-            }
-            catch { }
-
-            // Safely dispose share service
-            try
-            {
-                if (_shareService is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
-            }
-            catch { }
-
-            // Safely dispose theme service
-            try
-            {
-                if (_themeService is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
-            }
-            catch { }
-
-            // Safely dispose thumbnail provider
-            try
-            {
-                if (_thumbnailProvider is IAsyncDisposable asyncDisposable)
-                {
-                    asyncDisposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
-                }
-                else if (_thumbnailProvider is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
-            }
-            catch { }
-
-            // Safely dispose file service
-            try
-            {
-                if (_fileService is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
             }
             catch { }
         }

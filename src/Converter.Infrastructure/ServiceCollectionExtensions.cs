@@ -40,12 +40,15 @@ namespace Converter.Infrastructure
             services.AddSingleton<IThemeService, ThemeService>();
             services.AddHostedService<ThemeBootstrapHostedService>();
             
+            // Conversion settings
+            services.AddSingleton<IConversionSettingsService, ConversionSettingsService>();
+            
             // Share service
             services.AddSingleton<IShareService, ShareService>();
             
             // File services
             services.AddSingleton<IFileService, FileService>(); // application-level file service
-            services.AddSingleton<Converter.Services.FileService>(); // UI-level file service for thumbnails
+            services.AddSingleton<Converter.Services.IFileService, Converter.Services.FileService>(); // UI-level file service for thumbnails
             
             // UI services
             services.AddSingleton<Converter.Services.UIServices.IFileOperationsService, Converter.Services.UIServices.FileOperationsService>();

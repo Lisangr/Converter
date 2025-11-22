@@ -131,5 +131,13 @@ namespace Converter.Application.Abstractions
         
         /// <summary>Асинхронно вызывает событие ClearAllFilesRequested</summary>
         Task RaiseClearAllFilesRequestedAsync();
+
+        /// <summary>
+        /// Выполняет указанное действие в контексте UI-потока представления.
+        /// Реализация обязана обеспечить корректную маршализацию вызова
+        /// в UI-поток, если это необходимо.
+        /// </summary>
+        /// <param name="action">Действие, которое необходимо выполнить в UI-потоке.</param>
+        void RunOnUiThread(Action action);
     }
 }

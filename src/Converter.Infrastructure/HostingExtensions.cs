@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Converter.Application.Abstractions;
 using Converter.Application.Presenters;
 using Converter.Application.Services;
+using Converter.Application.Abstractions;
 using Converter.Application.ViewModels;
 using Converter.Application.Builders;
 using Converter.Infrastructure.Ffmpeg;
@@ -53,6 +54,10 @@ namespace Converter.Infrastructure
             services.AddSingleton<IOutputPathBuilder, OutputPathBuilder>();
             services.AddSingleton<IProgressReporter, UiProgressReporter>();
 
+            // Preset and Estimation services
+            services.AddSingleton<Converter.Services.EstimationService>();
+            services.AddSingleton<IConversionEstimationService, ConversionEstimationService>();
+
             // Queue commands
             services.AddSingleton<IAddFilesCommand, AddFilesCommand>();
             services.AddSingleton<IStartConversionCommand, StartConversionCommand>();
@@ -70,6 +75,9 @@ namespace Converter.Infrastructure
             services.AddSingleton<IQueueProcessor, ChannelQueueProcessor>();
             services.AddHostedService<QueueWorkerHostedService>();
 
+            // UI dispatcher for marshaling calls to the UI thread
+            services.AddSingleton<IUiDispatcher, WinFormsUiDispatcher>();
+
             // File system services
             services.AddScoped<IFileOperationsService, FileOperationsService>();
             services.AddSingleton<IFilePicker, WinFormsFilePicker>();
@@ -83,6 +91,8 @@ namespace Converter.Infrastructure
             // Register FFmpeg bootstrap as hosted service
             services.AddSingleton<FfmpegBootstrapService>();
             services.AddHostedService(provider => provider.GetRequiredService<FfmpegBootstrapService>());
+            
+            // QueueWorkerHostedService уже зарегистрирован в ConfigureApplicationServices()
             
             return services;
         }

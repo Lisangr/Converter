@@ -12,9 +12,17 @@ namespace Converter.Tests.UnitTests.Application;
 public class UiProgressReporterTests
 {
     private readonly Mock<IMainView> _viewMock = new(MockBehavior.Strict);
+    private readonly Mock<IUiDispatcher> _dispatcherMock = new();
     private readonly Mock<ILogger<UiProgressReporter>> _loggerMock = new();
 
-    private UiProgressReporter CreateSut() => new(_viewMock.Object, _loggerMock.Object);
+    private UiProgressReporter CreateSut()
+    {
+        _dispatcherMock
+            .Setup(d => d.Invoke(It.IsAny<Action>()))
+            .Callback<Action>(a => a());
+
+        return new UiProgressReporter(_viewMock.Object, _dispatcherMock.Object, _loggerMock.Object);
+    }
 
     [Fact]
     public void Report_ShouldUpdateTotalProgress()

@@ -83,14 +83,22 @@ namespace Converter
         private GroupBox groupLog = null!;
         private TextBox txtLog = null!;
 
-        // Presets
-        private PresetService _presetService = new PresetService();
+        // Services - получаем через DI
+        private readonly IPresetService _presetService;
+        private readonly IConversionEstimationService _estimationService;
         private PresetPanel? _presetPanel;
         private bool _presetsLoaded = false;
 
-        // Estimation
-        private Services.EstimationService _estimationService = new Services.EstimationService();
         private UI.Controls.EstimatePanel? _estimatePanel;
+
+        // Конструктор для получения сервисов через DI
+        public Form1(
+            IPresetService presetService,
+            IConversionEstimationService estimationService)
+        {
+            _presetService = presetService ?? throw new ArgumentNullException(nameof(presetService));
+            _estimationService = estimationService ?? throw new ArgumentNullException(nameof(estimationService));
+        }
 
         // MVVM binding helpers
         private BindingSource? _queueBindingSource;
@@ -119,14 +127,6 @@ namespace Converter
             SetDefaults();
             InitializeAdvancedTheming();
         }
-
-        
-
-        
-
-        
-
-        
 
         private void SyncQueueSelectionWithFileItem(FileListItem item)
         {
@@ -249,8 +249,7 @@ namespace Converter
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Ошибка при очистке файлов: {ex.Message}", "Ошибка", 
-                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    ShowError($"Ошибка при очистке файлов: {ex.Message}");
                 }
             };
 
@@ -319,7 +318,12 @@ namespace Converter
             splitContainerMain.Panel1.Controls.Add(panelLeftTop);
         }
 
-        private async void OnDragDropPanelFilesAdded(object? sender, string[] files)
+        private void OnDragDropPanelFilesAdded(object? sender, string[] files)
+        {
+            _ = OnDragDropPanelFilesAddedAsync(files);
+        }
+
+        private async Task OnDragDropPanelFilesAddedAsync(string[] files)
         {
             try
             {
@@ -337,8 +341,7 @@ namespace Converter
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка при добавлении файлов: {ex.Message}", "Ошибка", 
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ShowError($"Ошибка при добавлении файлов: {ex.Message}");
             }
         }
 
@@ -396,7 +399,7 @@ namespace Converter
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Не удалось открыть редактор: {ex.Message}", "Ошибка");
+                ShowError($"Не удалось открыть редактор: {ex.Message}");
             }
         }
 
@@ -560,7 +563,6 @@ namespace Converter
             host.Controls.Add(_queueGrid);
         }
 
-
         private async Task<Converter.Application.Models.ConversionResult> ConvertQueueItemAsync(QueueItem item, IProgress<int> progress, CancellationToken cancellationToken)
         {
             try
@@ -571,8 +573,46 @@ namespace Converter
                 var audioCodec = settings.AudioCodec ?? ExtractCodecName(cbAudioCodec.SelectedItem?.ToString() ?? "aac");
                 var audioBitrate = settings.AudioBitrate.HasValue ? $"{settings.AudioBitrate}k" : (cbAudioBitrate.SelectedItem?.ToString() ?? "192k");
                 var crf = settings.Crf ?? ExtractCRF(cbQuality.SelectedItem?.ToString() ?? "Хорошее (CRF 23)");
-                var output = item.OutputPath ?? GenerateOutputPath(item.FilePath, format);
+
+                // Настраиваем директорию вывода и шаблон для OutputPathBuilder
+                if (string.IsNullOrWhiteSpace(item.OutputDirectory))
+                {
+                    var outputFolder = txtOutputFolder.Text.Trim();
+                    if (string.IsNullOrEmpty(outputFolder))
+                    {
+                        outputFolder = System.IO.Path.GetDirectoryName(item.FilePath) ?? string.Empty;
+                    }
+
+                    if (chkCreateConvertedFolder.Checked)
+                    {
+                        outputFolder = System.IO.Path.Combine(outputFolder, "Converted");
+                    }
+
+                    item.OutputDirectory = outputFolder;
+                }
+
+                if (string.IsNullOrWhiteSpace(item.NamingPattern))
+                {
+                    item.NamingPattern = NamingPattern ?? cbNamingPattern.SelectedItem?.ToString() ?? "{original}_converted";
+                }
+
+                // Собираем профиль для построения пути (минимально необходимые поля)
+                var profile = new Converter.Application.Models.ConversionProfile
+                {
+                    Format = format,
+                    VideoCodec = videoCodec,
+                    AudioCodec = audioCodec
+                };
+
+                var output = item.OutputPath ?? _outputPathBuilder.BuildOutputPath(item, profile);
                 item.OutputPath = output;
+
+                // Гарантируем существование директории вывода
+                var dir = System.IO.Path.GetDirectoryName(output);
+                if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
+                {
+                    System.IO.Directory.CreateDirectory(dir);
+                }
 
                 var adapter = new Progress<double>(value =>
                 {
@@ -619,7 +659,7 @@ namespace Converter
             }
         }
 
-        private void BuildPresetsTab()
+        private async void BuildPresetsTab()
         {
             // Простейшая реализация: просто набор кнопок пресетов в FlowLayoutPanel
             tabPresets.Controls.Clear();
@@ -636,7 +676,8 @@ namespace Converter
 
             tabPresets.Controls.Add(container);
 
-            var presets = _presetService?.GetAllPresets() ?? new List<Converter.Application.Models.PresetProfile>();
+            // Получаем пресеты через асинхронный интерфейс IPresetService
+            var presets = await _presetService.GetAllPresetsAsync();
             AppendLog($"Загружено пресетов из сервиса: {presets.Count}");
 
             if (presets.Count == 0)
@@ -1019,14 +1060,14 @@ namespace Converter
             {
                 try
                 {
-                    await RaiseStartConversionRequestedAsync();
+                    if (RaiseStartConversionRequestedAsync != null)
+                    {
+                        await RaiseStartConversionRequestedAsync();
+                    }
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Ошибка при запуске конвертации: {ex.Message}", 
-                        "Ошибка", 
-                        MessageBoxButtons.OK, 
-                        MessageBoxIcon.Error);
+                    ShowError($"Ошибка при запуске конвертации: {ex.Message}");
                 }
             };
 
@@ -1294,26 +1335,14 @@ namespace Converter
             {
                 var s = cbAudioBitrate.SelectedItem.ToString() ?? "";
                 if (s.EndsWith("k", StringComparison.OrdinalIgnoreCase)) s = s[..^1];
-                if (int.TryParse(s, out var kb)) abitrate = kb;
+                if (int.TryParse(s, out var parsed))
+                {
+                    abitrate = parsed;
+                }
             }
 
-            int? crf = null;
-            if (cbQuality.SelectedItem is string qs)
-            {
-                var m = System.Text.RegularExpressions.Regex.Match(qs, @"\d+");
-                if (m.Success && int.TryParse(m.Value, out var val)) crf = val;
-            }
-
-            int? width = null;
-            int? height = null;
-            if (rbUsePreset.Checked && cbPreset.SelectedItem is string pres)
-            {
-                height = PresetToHeight(pres);
-            }
-            else if (rbUsePercent.Checked)
-            {
-                // Use percentage scaling; keep Width/Height null to indicate dynamic scaling
-            }
+            var crf = ExtractCRF(cbQuality.SelectedItem?.ToString() ?? "CRF 23");
+            var threads = nudThreads != null && nudThreads.Value > 0 ? (int?)nudThreads.Value : null;
 
             return new PresetProfile
             {
@@ -1322,8 +1351,8 @@ namespace Converter
                 Category = "Custom",
                 Icon = "⭐",
                 Description = "Пользовательский пресет",
-                Width = width,
-                Height = height,
+                Width = null,
+                Height = null,
                 VideoCodec = vcodec,
                 Bitrate = null, // use CRF primarily; bitrate could be derived later
                 CRF = crf,
@@ -1341,12 +1370,17 @@ namespace Converter
                 e.Effect = DragDropEffects.Copy;
         }
 
-        private async void Form1_DragDrop(object? sender, DragEventArgs e)
+        private void Form1_DragDrop(object? sender, DragEventArgs e)
+        {
+            _ = HandleDragDropAsync(e);
+        }
+
+        private async Task HandleDragDropAsync(DragEventArgs e)
         {
             if (e.Data?.GetData(DataFormats.FileDrop) is string[] files)
             {
                 AddFilesToList(files);
-                await RaiseFilesDroppedAsync(files);
+                await RaiseFilesDroppedAsync(files).ConfigureAwait(false);
                 DebounceEstimate();
             }
         }
@@ -1357,12 +1391,17 @@ namespace Converter
                 e.Effect = DragDropEffects.Copy;
         }
 
-        private async void ListView_DragDrop(object? sender, DragEventArgs e)
+        private void ListView_DragDrop(object? sender, DragEventArgs e)
+        {
+            _ = HandleListViewDragDropAsync(e);
+        }
+
+        private async Task HandleListViewDragDropAsync(DragEventArgs e)
         {
             if (e.Data?.GetData(DataFormats.FileDrop) is string[] files)
             {
                 AddFilesToList(files);
-                await RaiseFilesDroppedAsync(files);
+                await RaiseFilesDroppedAsync(files).ConfigureAwait(false);
                 DebounceEstimate();
             }
         }
@@ -1373,17 +1412,27 @@ namespace Converter
                 e.Effect = DragDropEffects.Copy;
         }
 
-        private async void Panel_DragDrop(object? sender, DragEventArgs e)
+        private void Panel_DragDrop(object? sender, DragEventArgs e)
+        {
+            _ = HandlePanelDragDropAsync(e);
+        }
+
+        private async Task HandlePanelDragDropAsync(DragEventArgs e)
         {
             if (e.Data?.GetData(DataFormats.FileDrop) is string[] files)
             {
                 AddFilesToList(files);
-                await RaiseFilesDroppedAsync(files);
+                await RaiseFilesDroppedAsync(files).ConfigureAwait(false);
                 DebounceEstimate();
             }
         }
 
-        private async void btnAddFiles_Click(object? sender, EventArgs e)
+        private void btnAddFiles_Click(object? sender, EventArgs e)
+        {
+            _ = HandleAddFilesClickAsync();
+        }
+
+        private async Task HandleAddFilesClickAsync()
         {
             try
             {
@@ -1407,7 +1456,7 @@ namespace Converter
                             AddFilesToList(filePaths);
 
                             // 2) Сообщаем презентеру через FilesDroppedAsync, чтобы добавить в очередь
-                            await RaiseFilesDroppedAsync(filePaths);
+                            await RaiseFilesDroppedAsync(filePaths).ConfigureAwait(false);
 
                             // 3) Обновляем оценку
                             DebounceEstimate();
@@ -1421,13 +1470,12 @@ namespace Converter
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка при добавлении файлов: {ex.Message}",
-                    "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ShowError($"Ошибка при добавлении файлов: {ex.Message}");
                 _logger?.LogError(ex, "Ошибка в обработчике btnAddFiles_Click");
             }
         }
 
-        private async void AddFilesToList(string[] paths, bool syncDragDropPanel = true)
+        private async Task AddFilesToList(string[] paths, bool syncDragDropPanel = true)
         {
             foreach (var path in paths)
             {
@@ -1473,18 +1521,13 @@ namespace Converter
             var videoCodec = ExtractCodecName(cbVideoCodec.SelectedItem?.ToString() ?? "libx264");
             var audioCodec = ExtractCodecName(cbAudioCodec.SelectedItem?.ToString() ?? "aac");
             int? audioBitrate = null;
-            if (chkEnableAudio.Checked)
+            if (chkEnableAudio.Checked && cbAudioBitrate.SelectedItem != null)
             {
-                var bitrateText = cbAudioBitrate.SelectedItem?.ToString();
-                if (!string.IsNullOrWhiteSpace(bitrateText))
+                var bitrateText = cbAudioBitrate.SelectedItem.ToString() ?? "";
+                if (bitrateText.EndsWith("k", StringComparison.OrdinalIgnoreCase)) bitrateText = bitrateText[..^1];
+                if (int.TryParse(bitrateText, out var parsed))
                 {
-                    var sanitized = bitrateText.EndsWith("k", StringComparison.OrdinalIgnoreCase)
-                        ? bitrateText[..^1]
-                        : bitrateText;
-                    if (int.TryParse(sanitized, out var parsed))
-                    {
-                        audioBitrate = parsed;
-                    }
+                    audioBitrate = parsed;
                 }
             }
 
@@ -1515,226 +1558,6 @@ namespace Converter
 
             var sanitized = value.EndsWith("k", StringComparison.OrdinalIgnoreCase) ? value[..^1] : value;
             return int.TryParse(sanitized, out var parsed) ? parsed : null;
-        }
-
-        
-
-        private async Task LoadThumbnailAsync(FileListItem item, CancellationToken ct)
-        {
-            if (item == null || string.IsNullOrEmpty(item.FilePath) || item.IsDisposed)
-            {
-                return;
-            }
-
-            try
-            {
-                if (ct.IsCancellationRequested || IsDisposed)
-                {
-                    return;
-                }
-
-                item.Thumbnail = _fileService.CreatePlaceholderThumbnail(120, 90, "⏳");
-
-                var thumbnail = await _fileService.GetThumbnailAsync(item.FilePath, 120, 90, ct);
-                
-                if (ct.IsCancellationRequested || item.IsDisposed || IsDisposed)
-                {
-                    return;
-                }
-                
-                item.Thumbnail = thumbnail;
-            }
-            catch (OperationCanceledException)
-            {
-                // Ignore cancellation during shutdown
-            }
-            catch (ObjectDisposedException)
-            {
-                // Control disposed while awaiting thumbnail
-            }
-            catch (Exception ex)
-            {
-                if (!ct.IsCancellationRequested && !item.IsDisposed)
-                {
-                    item.Thumbnail = _fileService.CreatePlaceholderThumbnail(120, 90, "❌");
-                    AppendLog($"Ошибка загрузки превью: {ex.Message}");
-                }
-            }
-        }
-
-        private async Task RefreshThumbnail(FileListItem item, TimeSpan position, CancellationToken ct)
-        {
-            if (item == null || item.IsDisposed)
-            {
-                return;
-            }
-
-            try
-            {
-                if (ct.IsCancellationRequested || IsDisposed)
-                {
-                    return;
-                }
-
-                item.Thumbnail = _fileService.CreatePlaceholderThumbnail(120, 90, "⏳");
-
-                var thumbnail = await _fileService.GetThumbnailAsync(item.FilePath, 120, 90, ct);
-                
-                if (ct.IsCancellationRequested || item.IsDisposed || IsDisposed)
-                {
-                    return;
-                }
-                
-                item.Thumbnail = thumbnail;
-            }
-            catch (OperationCanceledException)
-            {
-                // Ignore cancellation
-            }
-            catch (ObjectDisposedException)
-            {
-                // Control disposed
-            }
-            catch (Exception ex)
-            {
-                if (!ct.IsCancellationRequested && !item.IsDisposed)
-                {
-                    item.Thumbnail = _fileService.CreatePlaceholderThumbnail(120, 90, "❌");
-                    AppendLog($"Ошибка обновления превью: {ex.Message}");
-                }
-            }
-        }
-
-        private void RemoveFileFromList(FileListItem item, bool syncDragDropPanel = true)
-        {
-            filesPanel.Controls.Remove(item);
-            item.Dispose();
-            DebounceEstimate();
-
-            if (syncDragDropPanel && _dragDropPanel != null)
-            {
-                // Удаляем файл из DragDropPanel И вызываем событие для обновления UI
-                _dragDropPanel.RemoveFile(item.FilePath, notify: true);
-            }
-            UpdateEditorButtonState();
-
-            // Дополнительно синхронизируем очередь: помечаем соответствующие элементы как выбранные
-            // и инициируем стандартный сценарий удаления выбранных через IMainView async-событие.
-            if (_queueItemsBinding != null)
-            {
-                foreach (var vm in _queueItemsBinding)
-                {
-                    vm.IsSelected = string.Equals(vm.FilePath, item.FilePath, StringComparison.OrdinalIgnoreCase);
-                }
-
-                // Запускаем общий механизм удаления выбранных файлов (Form1 → MainPresenter → QueueRepository)
-                _ = RaiseRemoveSelectedFilesRequestedAsync();
-            }
-        }
-
-        // Ранее RemoveFileByPath напрямую работал с FileOperationsService и очередью.
-        // Сейчас вся логика удаления делегируется через IMainView/Presenter, а этот
-        // метод больше не используется.
-        private void ClearAllFiles()
-        {
-            filesPanel.Controls.Clear();
-            
-            // Очищаем DragDropPanel с уведомлением об изменении
-            if (_dragDropPanel != null)
-            {
-                _dragDropPanel.ClearFiles(notify: true);
-            }
-            
-            DebounceEstimate();
-            UpdateEditorButtonState();
-            UpdateShareButtonState();
-        }
-
-        // Ранее здесь были вспомогательные методы обновления очереди через FileOperationsService
-        // (RemoveSelectedItems, AddFilesToQueue, UpdateQueueGrid/Status/Item*). Сейчас все
-        // изменения очереди выполняются через QueueRepository/IQueueProcessor и MainPresenter,
-        // а форма отвечает только за визуальное отображение и поднятие событий IMainView.
-
-        private void OpenVideoInPlayer(string filePath)
-        {
-            try
-            {
-                // Open with default video player
-                var psi = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = filePath,
-                    UseShellExecute = true
-                };
-                System.Diagnostics.Process.Start(psi);
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"Ошибка открытия видео: {ex.Message}");
-            }
-        }
-
-        private async Task ProbeFileAsync(FileListItem item, string path, CancellationToken ct)
-        {
-            try
-            {
-                if (ct.IsCancellationRequested || item.IsDisposed || IsDisposed)
-                {
-                    return;
-                }
-
-                // FFmpeg уже инициализирован через Host service, не нужно вызывать EnsureFfmpegAsync
-                if (ct.IsCancellationRequested || item.IsDisposed || IsDisposed)
-                {
-                    return;
-                }
-
-                var info = await FFmpeg.GetMediaInfo(path);
-                if (ct.IsCancellationRequested || item.IsDisposed || IsDisposed)
-                {
-                    return;
-                }
-                var v = info.VideoStreams?.FirstOrDefault();
-
-                if (!IsHandleCreated)
-                {
-                    return;
-                }
-
-                this.BeginInvoke(new Action(() =>
-                {
-                    if (ct.IsCancellationRequested || item.IsDisposed || IsDisposed)
-                    {
-                        return;
-                    }
-
-                    if (v != null)
-                    {
-                        item.SetVideoDuration(info.Duration);
-                    }
-                    
-                    // Update codecs if needed
-                    if (cbVideoCodec.Items.Count == 0)
-                        PopulateCodecsForFormat(cbFormat.SelectedItem?.ToString() ?? "MP4");
-                    if (cbAudioCodec.Items.Count == 0)
-                    {
-                        cbAudioCodec.Items.AddRange(new object[] { "aac", "libmp3lame", "libopus", "ac3" });
-                        cbAudioCodec.SelectedIndex = 0;
-                    }
-
-                    DebounceEstimate();
-                }));
-            }
-            catch (OperationCanceledException)
-            {
-                // Ignore cancellation when shutting down
-            }
-            catch (Exception ex)
-            {
-                if (!ct.IsCancellationRequested)
-                {
-                    AppendLog($"Ошибка анализа {System.IO.Path.GetFileName(path)}: {ex.Message}");
-                }
-            }
         }
 
         
@@ -2279,48 +2102,7 @@ namespace Converter
             return "Оригинал";
         }
 
-        private string GenerateOutputPath(string inputPath, string format)
-        {
-            var outputFolder = txtOutputFolder.Text.Trim();
-
-            // If output folder is not set, use the input file's directory
-            if (string.IsNullOrEmpty(outputFolder))
-            {
-                outputFolder = System.IO.Path.GetDirectoryName(inputPath) ?? string.Empty;
-            }
-
-            if (chkCreateConvertedFolder.Checked)
-            {
-                outputFolder = System.IO.Path.Combine(outputFolder, "Converted");
-                System.IO.Directory.CreateDirectory(outputFolder);
-            }
-
-            var originalName = System.IO.Path.GetFileNameWithoutExtension(inputPath);
-            var pattern = NamingPattern ?? cbNamingPattern.SelectedItem?.ToString() ?? "{original}_converted";
-            
-            var outputName = pattern
-                .Replace("{original}", originalName)
-                .Replace("{format}", format.ToUpperInvariant())
-                .Replace("{codec}", ExtractCodecName(cbVideoCodec.SelectedItem?.ToString() ?? ""))
-                .Replace("{resolution}", cbPreset.SelectedItem?.ToString() ?? "");
-
-            var outputFile = $"{outputName}.{format}";
-            var fullPath = System.IO.Path.Combine(outputFolder, outputFile);
-
-            // Ensure the directory exists
-            var dir = System.IO.Path.GetDirectoryName(fullPath);
-            if (!string.IsNullOrEmpty(dir))
-            {
-                System.IO.Directory.CreateDirectory(dir);
-            }
-
-            return fullPath;
-        }
-
-        private void btnSavePreset_Click(object? sender, EventArgs e)
-        {
-            using var sfd = new SaveFileDialog
-            {
+        private string FormatFileSize(long bytes)
                 Filter = "JSON Preset|*.json|Все файлы|*.*",
                 DefaultExt = "json",
                 FileName = "preset.json"
@@ -2333,11 +2115,10 @@ namespace Converter
                     var preset = BuildPresetFromUi();
                     _presetService.SavePresetToFile(preset, sfd.FileName);
                     AppendLog($"💾 Пресет сохранен: {System.IO.Path.GetFileName(sfd.FileName)}");
-                    MessageBox.Show(this, "Пресет успешно сохранен!", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show(this, $"Ошибка сохранения: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    ShowError($"Ошибка сохранения пресета: {ex.Message}");
                 }
             }
         }
@@ -2357,11 +2138,10 @@ namespace Converter
                     ApplyPresetToUi(preset);
                     _presetPanel?.Highlight(preset.Id);
                     AppendLog($"📂 Пресет загружен: {System.IO.Path.GetFileName(ofd.FileName)}");
-                    MessageBox.Show(this, "Пресет успешно загружен!", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show(this, $"Ошибка загрузки: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    ShowError($"Ошибка загрузки пресета: {ex.Message}");
                 }
             }
         }

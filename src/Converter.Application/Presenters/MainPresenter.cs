@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Forms;
 using Converter.Application.Abstractions;
 using Converter.Application.ViewModels;
 using Converter.Domain.Models;
@@ -24,6 +23,7 @@ namespace Converter.Application.Presenters
         private readonly IOutputPathBuilder _pathBuilder;
         private readonly IProgressReporter _progressReporter;
         private readonly IFilePicker _filePicker;
+        private readonly IConversionSettingsService _conversionSettingsService;
         private readonly ILogger<MainPresenter> _logger;
         private bool _disposed;
         private bool _clearingInProgress;
@@ -43,6 +43,7 @@ namespace Converter.Application.Presenters
             IOutputPathBuilder pathBuilder,
             IProgressReporter progressReporter,
             IFilePicker filePicker,
+            IConversionSettingsService conversionSettingsService,
             IAddFilesCommand addFilesCommand,
             IStartConversionCommand startConversionCommand,
             ICancelConversionCommand cancelConversionCommand,
@@ -58,6 +59,7 @@ namespace Converter.Application.Presenters
             _pathBuilder = pathBuilder ?? throw new ArgumentNullException(nameof(pathBuilder));
             _progressReporter = progressReporter ?? throw new ArgumentNullException(nameof(progressReporter));
             _filePicker = filePicker ?? throw new ArgumentNullException(nameof(filePicker));
+            _conversionSettingsService = conversionSettingsService ?? throw new ArgumentNullException(nameof(conversionSettingsService));
             _addFilesCommand = addFilesCommand ?? throw new ArgumentNullException(nameof(addFilesCommand));
             _startConversionCommand = startConversionCommand ?? throw new ArgumentNullException(nameof(startConversionCommand));
             _cancelConversionCommand = cancelConversionCommand ?? throw new ArgumentNullException(nameof(cancelConversionCommand));
@@ -132,8 +134,17 @@ namespace Converter.Application.Presenters
 
         private async Task LoadSettingsAsync()
         {
-            // Placeholder for settings loading
-            await Task.CompletedTask;
+            // Загружаем настройки конвертации через application-сервис
+            await _conversionSettingsService.LoadAsync().ConfigureAwait(false);
+            var settings = _conversionSettingsService.Current;
+
+            // Синхронизируем ViewModel и View
+            _viewModel.FfmpegPath = settings.FfmpegPath ?? string.Empty;
+            _viewModel.OutputFolder = settings.OutputFolder ?? string.Empty;
+
+            _view.FfmpegPath = settings.FfmpegPath ?? string.Empty;
+            _view.OutputFolder = settings.OutputFolder ?? string.Empty;
+            _view.NamingPattern = settings.NamingPattern;
         }
 
         private async Task LoadPresetsAsync()
@@ -163,7 +174,27 @@ namespace Converter.Application.Presenters
 
         private void OnSettingsChanged(object? sender, EventArgs e)
         {
-            _logger.LogInformation("Settings changed");
+            _ = SaveSettingsAsync();
+        }
+
+        private async Task SaveSettingsAsync()
+        {
+            try
+            {
+                _logger.LogInformation("Settings changed");
+
+                var current = _conversionSettingsService.Current;
+                current.FfmpegPath = _view.FfmpegPath;
+                current.OutputFolder = _view.OutputFolder;
+                current.NamingPattern = _view.NamingPattern;
+
+                await _conversionSettingsService.SaveAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error saving conversion settings");
+                _view.ShowError($"Failed to save settings: {ex.Message}");
+            }
         }
 
         private async Task LoadQueueAsync()
@@ -229,14 +260,7 @@ namespace Converter.Application.Presenters
 
         private void InvokeOnUiThread(Action action)
         {
-            if (_view is Control control)
-            {
-                control.InvokeIfRequired(action);
-            }
-            else
-            {
-                action();
-            }
+            _view.RunOnUiThread(action);
         }
 
         private void OnItemAdded(object? sender, QueueItem item)
@@ -489,8 +513,8 @@ namespace Converter.Application.Presenters
         // Async event handlers (нормализованный подход)
         private void OnStartConversionRequested(object? sender, EventArgs e)
         {
-            // Delegate to async version to ensure proper async handling
-            _ = Task.Run(async () => await OnStartConversionRequestedAsync());
+            // Delegate to async version to ensure proper async handling without extra Task.Run
+            _ = OnStartConversionRequestedAsync();
         }
 
         private async Task OnStartConversionRequestedAsync()

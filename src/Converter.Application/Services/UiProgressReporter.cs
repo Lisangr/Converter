@@ -1,17 +1,15 @@
 /// <summary>
 /// Реализация <see cref="IProgressReporter"/> для отображения прогресса в UI.
 /// Особенности:
-/// - Безопасная работа с UI-потоком через <see cref="ControlExtensions.InvokeIfRequired"/>
+/// - Безопасная работа с UI-потоком через <see cref="IUiDispatcher"/>
 /// - Поддержка отображения общего прогресса и прогресса по отдельным элементам
 /// - Логирование событий прогресса
 /// - Обработка и отображение ошибок
 /// </summary>
 using System;
 using System.Threading.Tasks;
-using System.Windows.Forms;
 using Converter.Application.Abstractions;
 using Converter.Domain.Models;
-using Converter.Extensions;
 using Microsoft.Extensions.Logging;
 
 namespace Converter.Application.Services
@@ -19,33 +17,24 @@ namespace Converter.Application.Services
     public class UiProgressReporter : IProgressReporter
     {
         private readonly IMainView _view;
+        private readonly IUiDispatcher _dispatcher;
         private readonly ILogger<UiProgressReporter> _logger;
 
         public UiProgressReporter(
             IMainView view,
+            IUiDispatcher dispatcher,
             ILogger<UiProgressReporter> logger)
         {
             _view = view ?? throw new ArgumentNullException(nameof(view));
+            _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        }
-
-        private void InvokeOnUiThread(Action action)
-        {
-            if (_view is Control control)
-            {
-                control.InvokeIfRequired(action);
-            }
-            else
-            {
-                action();
-            }
         }
 
         public void Report(int progress)
         {
             try
             {
-                InvokeOnUiThread(() =>
+                _dispatcher.Invoke(() =>
                 {
                     _view.UpdateTotalProgress(progress);
                 });
@@ -63,7 +52,7 @@ namespace Converter.Application.Services
             try
             {
                 var percentage = (int)(progress * 100);
-                InvokeOnUiThread(() =>
+                _dispatcher.Invoke(() =>
                 {
                     _view.UpdateTotalProgress(percentage);
                 });
@@ -80,7 +69,7 @@ namespace Converter.Application.Services
         {
             try
             {
-                InvokeOnUiThread(() =>
+                _dispatcher.Invoke(() =>
                 {
                     item.Progress = progress;
                     // Queue item visual updates are now driven by MainPresenter via ViewModel.

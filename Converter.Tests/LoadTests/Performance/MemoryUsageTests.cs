@@ -29,8 +29,8 @@ public class MemoryUsageTests
             .Callback<QueueItem, IProgress<int>, CancellationToken>((item, progress, _) => progress.Report(75))
             .ReturnsAsync(new ConversionResult { Success = true, OutputFileSize = 2048 });
 
-        var logger = Mock.Of<ILogger<QueueProcessor>>();
-        var processor = new QueueProcessor(repository.Object, queueStore.Object, conversion.Object, logger);
+        var logger = Mock.Of<ILogger<ChannelQueueProcessor>>();
+        var processor = new ChannelQueueProcessor(repository.Object, queueStore.Object, conversion.Object, logger);
         var items = new List<QueueItem>();
         for (var i = 0; i < 10; i++)
         {
