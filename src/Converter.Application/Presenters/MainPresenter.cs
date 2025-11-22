@@ -284,6 +284,8 @@ namespace Converter.Application.Presenters
                     vm.Status = item.Status;
                     vm.Progress = 0; // Reset progress when starting
                 }
+                // Сбрасываем нижний прогрессбар для текущего файла, чтобы он снова шел 0→100
+                _view.UpdateCurrentProgress(0);
                 _view.StatusText = $"Processing {item.FileName}...";
             });
         }
@@ -383,7 +385,7 @@ namespace Converter.Application.Presenters
                 _logger.LogInformation("Files dropped: {Count}", files?.Length ?? 0);
 
                 await _addFilesCommand
-                    .ExecuteAsync(files ?? Array.Empty<string>(), _view.OutputFolder)
+                    .ExecuteAsync(files ?? Array.Empty<string>(), _view.OutputFolder, _view.NamingPattern)
                     .ConfigureAwait(false);
 
                 _view.StatusText = $"Добавлено файлов: {(files?.Length ?? 0)}";

@@ -15,7 +15,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Converter.Tests.IntegrationTests;
 
-public class PresetLoadingIntegrationTests : IDisposable
+public class PresetLoadingIntegrationTests
 {
     [Fact]
     public async Task PresetLoading_ShouldLoadFromEmbeddedResources()

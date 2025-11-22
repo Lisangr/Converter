@@ -127,4 +127,10 @@ public class QueueItem
     /// Приоритет элемента в очереди.
     /// </summary>
     public int Priority { get; set; }
+    
+    /// <summary>
+    /// Шаблон именования выходного файла.
+    /// Поддерживает замены: {original}, {format}, {codec}, {resolution}
+    /// </summary>
+    public string? NamingPattern { get; set; }
 }

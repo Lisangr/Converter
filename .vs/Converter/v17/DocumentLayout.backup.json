@@ -125,7 +125,7 @@
               "RelativeDocumentMoniker": "..\\..\\..\\AppData\\Local\\SourceServer\\27a25dbda6ec44c5f71dd342c2410351d6217ddecfd7f13e7609b48a177e5fdc\\src\\System.Windows.Forms\\src\\System\\Windows\\Forms\\Control.cs",
               "ToolTip": "C:\\Users\\User\\AppData\\Local\\SourceServer\\27a25dbda6ec44c5f71dd342c2410351d6217ddecfd7f13e7609b48a177e5fdc\\src\\System.Windows.Forms\\src\\System\\Windows\\Forms\\Control.cs [\u0422\u043E\u043B\u044C\u043A\u043E \u0447\u0442\u0435\u043D\u0438\u0435]",
               "RelativeToolTip": "..\\..\\..\\AppData\\Local\\SourceServer\\27a25dbda6ec44c5f71dd342c2410351d6217ddecfd7f13e7609b48a177e5fdc\\src\\System.Windows.Forms\\src\\System\\Windows\\Forms\\Control.cs [\u0422\u043E\u043B\u044C\u043A\u043E \u0447\u0442\u0435\u043D\u0438\u0435]",
-              "ViewState": "AgIAAAsbAAAAAAAAAAD4vxsbAAAQAAAAAQAAAA==",
+              "ViewState": "AgIAAAIbAAAAAAAAAAAIwCIbAAAXAAAAAQAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-21T18:25:52.393Z",
               "EditorCaption": " [\u0422\u043E\u043B\u044C\u043A\u043E \u0447\u0442\u0435\u043D\u0438\u0435]"
@@ -140,8 +140,7 @@
               "RelativeToolTip": "UI\\Dialogs\\QueueDemoForm.cs",
               "ViewState": "AgIAAF4AAAAAAAAAAAAIwGgAAAAXAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-21T18:14:46.475Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-21T18:14:46.475Z"
             },
             {
               "$type": "Document",
@@ -153,8 +152,7 @@
               "RelativeToolTip": "UI\\Controls\\QueueItemControl.cs",
               "ViewState": "AgIAABIAAAAAAAAAAAAMwCsAAAA2AAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-21T18:13:48.105Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-21T18:13:48.105Z"
             },
             {
               "$type": "Document",
@@ -166,8 +164,7 @@
               "RelativeToolTip": "src\\Converter.Application\\Services\\QueueCommands.cs",
               "ViewState": "AgIAABoAAAAAAAAAAAAnwCsAAAAhAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-21T18:05:36.744Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-21T18:05:36.744Z"
             },
             {
               "$type": "Document",
@@ -336,8 +333,7 @@
               "RelativeToolTip": "Form1.cs",
               "ViewState": "AgIAAKcCAAAAAAAAAAAnwK8CAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-19T19:11:33.624Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-19T19:11:33.624Z"
             },
             {
               "$type": "Document",
@@ -349,8 +345,7 @@
               "RelativeToolTip": "Program.cs",
               "ViewState": "AgIAAAIAAAAAAAAAAAAAACEAAAAaAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-16T09:17:41.383Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-16T09:17:41.383Z"
             },
             {
               "$type": "Document",

@@ -67,6 +67,9 @@ namespace Converter.Application.Abstractions
         /// <summary>Папка для сохранения результатов конвертации</summary>
         string OutputFolder { get; set; }
         
+        /// <summary>Выбранный шаблон именования выходных файлов</summary>
+        string? NamingPattern { get; set; }
+        
         /// <summary>Коллекция доступных пресетов конвертации</summary>
         ObservableCollection<Converter.Application.Models.ConversionProfile> AvailablePresets { get; set; }
         

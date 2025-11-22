@@ -9,6 +9,7 @@ namespace Converter.Application.Abstractions
     public interface IAddFilesCommand
     {
         Task ExecuteAsync(IEnumerable<string> filePaths, string? outputFolder, CancellationToken cancellationToken = default);
+        Task ExecuteAsync(IEnumerable<string> filePaths, string? outputFolder, string? namingPattern, CancellationToken cancellationToken = default);
     }
 
     public interface IStartConversionCommand

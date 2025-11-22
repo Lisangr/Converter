@@ -799,6 +799,11 @@ namespace Converter
                 "{original}_{codec}_{resolution}"
             });
             if (cbNamingPattern.Items.Count > 1) cbNamingPattern.SelectedIndex = 1;
+            cbNamingPattern.SelectedIndexChanged += (s, e) => 
+            {
+                NamingPattern = cbNamingPattern.SelectedItem?.ToString();
+                DebounceEstimate();
+            };
             panel.Controls.Add(cbNamingPattern);
 
             tabVideo.Controls.Add(panel);
@@ -2291,7 +2296,7 @@ namespace Converter
             }
 
             var originalName = System.IO.Path.GetFileNameWithoutExtension(inputPath);
-            var pattern = cbNamingPattern.SelectedItem?.ToString() ?? "{original}_converted";
+            var pattern = NamingPattern ?? cbNamingPattern.SelectedItem?.ToString() ?? "{original}_converted";
             
             var outputName = pattern
                 .Replace("{original}", originalName)

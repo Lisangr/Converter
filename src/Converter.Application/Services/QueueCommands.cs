@@ -24,6 +24,11 @@ namespace Converter.Application.Services
 
         public async Task ExecuteAsync(IEnumerable<string> filePaths, string? outputFolder, CancellationToken cancellationToken = default)
         {
+            await ExecuteAsync(filePaths, outputFolder, null, cancellationToken);
+        }
+
+        public async Task ExecuteAsync(IEnumerable<string> filePaths, string? outputFolder, string? namingPattern, CancellationToken cancellationToken = default)
+        {
             if (filePaths == null) return;
 
             var items = new List<QueueItem>();
@@ -45,7 +50,8 @@ namespace Converter.Application.Services
                     OutputDirectory = directory,
                     Status = ConversionStatus.Pending,
                     Progress = 0,
-                    AddedAt = DateTime.UtcNow
+                    AddedAt = DateTime.UtcNow,
+                    NamingPattern = namingPattern
                 });
             }
 
@@ -53,7 +59,7 @@ namespace Converter.Application.Services
                 return;
 
             await _queueRepository.AddRangeAsync(items).ConfigureAwait(false);
-            _logger.LogInformation("Added {Count} files to queue", items.Count);
+            _logger.LogInformation("Added {Count} files to queue with naming pattern: {Pattern}", items.Count, namingPattern ?? "default");
         }
     }
 

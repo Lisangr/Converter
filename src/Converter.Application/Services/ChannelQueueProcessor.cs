@@ -284,6 +284,14 @@ namespace Converter.Application.Services
 
         private void OnItemAdded(object? sender, QueueItem item)
         {
+            // В канал добавляем только тогда, когда процессор действительно запущен.
+            // Это исключает ситуацию, когда элементы попадают в канал ещё до старта обработки,
+            // а затем повторно загружаются через StartProcessingAsync (двойная конвертация).
+            if (!_isProcessing)
+            {
+                return;
+            }
+
             if (item?.Status == ConversionStatus.Pending)
             {
                 _ = WriteItemToChannelAsync(item, _processingCts?.Token ?? CancellationToken.None);

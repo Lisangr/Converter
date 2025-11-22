@@ -85,11 +85,10 @@ namespace Converter.Application.Services
             var originalName = Path.GetFileNameWithoutExtension(item.FilePath);
             var safeOriginalName = SanitizeFileName(originalName);
             
-            // Паттерн по умолчанию
-            var pattern = "{original}_converted";
-            
-            // TODO: В будущем можно добавить поддержку кастомных паттернов из настроек
-            // Сейчас используем стандартный паттерн с поддержкой базовых замен
+            // Используем паттерн из QueueItem или паттерн по умолчанию
+            var pattern = string.IsNullOrWhiteSpace(item.NamingPattern)
+                ? "{original}_converted"
+                : item.NamingPattern;
             
             var outputName = pattern
                 .Replace("{original}", safeOriginalName)

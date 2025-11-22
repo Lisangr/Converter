@@ -70,6 +70,13 @@ namespace Converter.Application.ViewModels
             set => SetProperty(ref _priority, value);
         }
 
+        private string? _namingPattern;
+        public string? NamingPattern
+        {
+            get => _namingPattern;
+            set => SetProperty(ref _namingPattern, value);
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
 
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
@@ -106,7 +113,8 @@ namespace Converter.Application.ViewModels
                 OutputPath = item.OutputPath,
                 OutputFileSizeBytes = item.OutputFileSizeBytes,
                 IsStarred = item.IsStarred,
-                Priority = item.Priority
+                Priority = item.Priority,
+                NamingPattern = item.NamingPattern
             };
         }
 
@@ -121,6 +129,7 @@ namespace Converter.Application.ViewModels
             OutputFileSizeBytes = item.OutputFileSizeBytes;
             IsStarred = item.IsStarred;
             Priority = item.Priority;
+            NamingPattern = item.NamingPattern;
         }
     }
 }

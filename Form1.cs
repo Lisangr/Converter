@@ -81,6 +81,13 @@ namespace Converter
             set { _outputFolder = value ?? string.Empty; }
         }
 
+        private string? _namingPattern;
+        public string? NamingPattern
+        {
+            get => _namingPattern;
+            set { _namingPattern = value; }
+        }
+
         public ObservableCollection<Converter.Application.Models.ConversionProfile> AvailablePresets { get; set; } = new();
 
         private Converter.Application.Models.ConversionProfile? _selectedPreset;
