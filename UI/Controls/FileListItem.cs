@@ -85,8 +85,14 @@ namespace Converter.UI.Controls
             get => _isSelected;
             set
             {
+                if (_isSelected == value)
+                {
+                    return;
+                }
+
                 _isSelected = value;
                 UpdateSelectionVisual();
+                SelectionChanged?.Invoke(this, EventArgs.Empty);
             }
         }
         

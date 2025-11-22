@@ -116,7 +116,7 @@ public class ThemeSettingsDialogTests
         mock.SetupProperty(s => s.AnimationDuration, animationDuration);
         mock.SetupProperty(s => s.AutoSwitchEnabled, false);
         mock.SetupProperty(s => s.EnableAnimations, true);
-        mock.SetupProperty(s => s.CurrentTheme, Theme.Dark);
+        mock.SetupGet(s => s.CurrentTheme).Returns(Theme.Dark);
         return mock;
     }
 

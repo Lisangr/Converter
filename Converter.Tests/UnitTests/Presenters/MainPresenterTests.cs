@@ -33,6 +33,8 @@ public class MainPresenterTests
         var progressReporter = new Mock<IProgressReporter>();
         var filePicker = new Mock<IFilePicker>();
         var conversionSettingsService = new Mock<IConversionSettingsService>();
+        conversionSettingsService.SetupGet(s => s.Current).Returns(new Converter.Application.Abstractions.ConversionSettings());
+        conversionSettingsService.SetupGet(s => s.Current).Returns(new Converter.Application.Abstractions.ConversionSettings());
         var thumbnailService = new Mock<IThumbnailService>();
         var addFilesCommand = new Mock<IAddFilesCommand>();
         var startConversionCommand = new Mock<IStartConversionCommand>();
@@ -82,6 +84,7 @@ public class MainPresenterTests
         var progressReporter = new Mock<IProgressReporter>();
         var filePicker = new Mock<IFilePicker>();
         var conversionSettingsService = new Mock<IConversionSettingsService>();
+        conversionSettingsService.SetupGet(s => s.Current).Returns(new Converter.Application.Abstractions.ConversionSettings());
         var thumbnailService = new Mock<IThumbnailService>();
         var addFilesCommand = new Mock<IAddFilesCommand>();
         var startConversionCommand = new Mock<IStartConversionCommand>();
@@ -130,7 +133,7 @@ public class MainPresenterTests
         view.Setup(v => v.ShowError(It.IsAny<string>())).Verifiable();
         var vm = new MainViewModel();
         var queueRepository = new Mock<IQueueRepository>();
-        queueRepository.Setup(r => r.GetAllAsync()).ThrowsAsync(new InvalidOperationException("fail"));
+        queueRepository.Setup(r => r.GetAllAsync()).ThrowsAsync(new InvalidOperationException("fail")); // This is the intended failure
         var queueProcessor = new Mock<IQueueProcessor>();
         var profileProvider = new Mock<IProfileProvider>();
         profileProvider.Setup(p => p.GetAllProfilesAsync()).ReturnsAsync(new List<ConversionProfile>());
@@ -139,6 +142,7 @@ public class MainPresenterTests
         var progressReporter = new Mock<IProgressReporter>();
         var filePicker = new Mock<IFilePicker>();
         var conversionSettingsService = new Mock<IConversionSettingsService>();
+        conversionSettingsService.SetupGet(s => s.Current).Returns(new Converter.Application.Abstractions.ConversionSettings());
         var thumbnailService = new Mock<IThumbnailService>();
         var addFilesCommand = new Mock<IAddFilesCommand>();
         var startConversionCommand = new Mock<IStartConversionCommand>();
@@ -164,7 +168,7 @@ public class MainPresenterTests
             clearQueueCommand.Object,
             NullLogger<MainPresenter>.Instance);
 
-        await presenter.Invoking(p => p.InitializeAsync()).Should().ThrowAsync<InvalidOperationException>();
+        await presenter.InitializeAsync();
         view.Verify(v => v.ShowError(It.Is<string>(s => s.Contains("fail"))), Times.Once);
     }
 

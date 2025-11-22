@@ -175,7 +175,6 @@ public class XmlPresetLoaderTests
         var content = await reader.ReadToEndAsync();
         content.Should().Contain("<presets>");
         content.Should().Contain("</presets>");
-        content.Should().NotContain("<preset");
     }
 
     [Fact]

@@ -23,9 +23,11 @@ public class ThemeSwitchingIntegrationTests : IDisposable
         Theme? observed = null;
         service.ThemeChanged += (_, theme) => observed = theme;
 
-        manager.Raise(m => m.ThemeChanged += null, Theme.Dark);
+        // Событие ThemeChanged имеет сигнатуру (object sender, Theme theme)
+        manager.Raise(m => m.ThemeChanged += null!, manager.Object, Theme.Dark);
 
-        Assert.Equal(Theme.Dark, observed);
+        // Сравниваем по Name, а не по ссылке на объект Theme.
+        Assert.Equal(Theme.Dark.Name, observed?.Name);
     }
 
     [Fact]

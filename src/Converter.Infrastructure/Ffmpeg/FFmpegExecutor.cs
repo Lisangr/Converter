@@ -455,7 +455,8 @@ namespace Converter.Infrastructure.Ffmpeg
         private string? ResolveFfmpegExecutable()
         {
             // 1) Explicit path provided via constructor (can be file or directory)
-            if (!string.IsNullOrWhiteSpace(_ffmpegPath))
+            var hasExplicitPath = !string.IsNullOrWhiteSpace(_ffmpegPath);
+            if (hasExplicitPath)
             {
                 try
                 {
@@ -475,8 +476,12 @@ namespace Converter.Infrastructure.Ffmpeg
                 }
                 catch
                 {
-                    // Fallback to other strategies
+                    // Ignore and fall back to the explicit-path check below
                 }
+
+                // Если был явно задан путь, но ни файл, ни каталог не существуют,
+                // считаем, что бинарник недоступен и НЕ пытаемся искать его в PATH.
+                return null;
             }
 
             // 2) Per-user location used by FfmpegBootstrapService

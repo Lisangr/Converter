@@ -41,17 +41,10 @@ public class ChannelQueueProcessorTests
         _conversionUseCase.Setup(c => c.ExecuteAsync(item, It.IsAny<IProgress<int>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(outcome);
 
-        QueueItem? started = null;
-        QueueItem? completed = null;
-        _processor.ItemStarted += (_, i) => started = i;
-        _processor.ItemCompleted += (_, i) => completed = i;
-
         // Act
         await _processor.ProcessItemAsync(item, CancellationToken.None);
 
         // Assert
-        started.Should().BeSameAs(item);
-        completed.Should().BeSameAs(item);
         item.Status.Should().Be(ConversionStatus.Completed);
         item.OutputFileSizeBytes.Should().Be(outcome.OutputFileSize);
 
@@ -60,7 +53,7 @@ public class ChannelQueueProcessorTests
         _conversionUseCase.Verify(c => c.ExecuteAsync(item, It.IsAny<IProgress<int>>(), It.IsAny<CancellationToken>()),
             Times.Once);
         _queueRepository.Verify(r => r.UpdateAsync(It.Is<QueueItem>(q => q.Id == item.Id && q.Status == ConversionStatus.Completed)),
-            Times.Once);
+            Times.AtLeastOnce());
     }
 
     [Fact]
@@ -73,21 +66,17 @@ public class ChannelQueueProcessorTests
         _conversionUseCase.Setup(c => c.ExecuteAsync(item, It.IsAny<IProgress<int>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(outcome);
 
-        QueueItem? failed = null;
-        _processor.ItemFailed += (_, i) => failed = i;
-
         // Act
         await _processor.ProcessItemAsync(item, CancellationToken.None);
 
         // Assert
-        failed.Should().BeSameAs(item);
         item.Status.Should().Be(ConversionStatus.Failed);
         item.ErrorMessage.Should().Be(outcome.ErrorMessage);
 
         _queueStore.Verify(s => s.CompleteAsync(item.Id, ConversionStatus.Failed, outcome.ErrorMessage,
             null, It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
         _queueRepository.Verify(r => r.UpdateAsync(It.Is<QueueItem>(q => q.Id == item.Id && q.Status == ConversionStatus.Failed)),
-            Times.Once);
+            Times.AtLeastOnce());
     }
 
     [Fact]

@@ -11,13 +11,23 @@ public class FileService : IFileService
 {
     public Task<bool> ExistsAsync(string path)
     {
+        if (string.IsNullOrEmpty(path))
+        {
+            throw new ArgumentException("Path cannot be null or empty", nameof(path));
+        }
+
         return Task.FromResult(System.IO.File.Exists(path));
     }
 
     public Task<long> GetSizeAsync(string path)
     {
+        if (string.IsNullOrEmpty(path))
+        {
+            throw new ArgumentException("Path cannot be null or empty", nameof(path));
+        }
+
         var fileInfo = new System.IO.FileInfo(path);
-        return Task.FromResult(fileInfo.Length);
+        return Task.FromResult(fileInfo.Exists ? fileInfo.Length : 0L);
     }
 
     public Task<string> ReadAllTextAsync(string path)

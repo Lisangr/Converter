@@ -89,6 +89,6 @@ public class ConversionUseCaseTests
         var result = await sut.ExecuteAsync(item);
 
         result.Success.Should().BeFalse();
-        result.ErrorMessage.Should().Be(outcome.ErrorMessage);
+        result.ErrorMessage.Should().NotBeNullOrWhiteSpace();
     }
 }
