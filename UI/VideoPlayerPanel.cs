@@ -105,7 +105,7 @@ namespace Converter.UI
             playbackTimer.Tick += PlaybackTimer_Tick;
         }
 
-        public async void LoadVideo(string videoPath, IMediaInfo mediaInfo)
+        public async Task LoadVideoAsync(string videoPath, IMediaInfo mediaInfo)
         {
             currentMedia = mediaInfo;
             lblDuration.Text = FormatTime(mediaInfo.Duration);

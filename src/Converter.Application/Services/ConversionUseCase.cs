@@ -45,6 +45,11 @@ namespace Converter.Application.Services
 
             try
             {
+                // Check if cancellation was requested before starting
+                cancellationToken.ThrowIfCancellationRequested();
+
+                // Update item status to processing
+                item.Status = ConversionStatus.Processing;
                 _logger.LogInformation("Starting conversion for item {ItemId}", item.Id);
                 
                 // Get the appropriate profile
@@ -78,50 +83,69 @@ namespace Converter.Application.Services
                 var safeProgress = progress ?? new Progress<int>(_ => { });
                 var outcome = await _orchestrator.ConvertAsync(request, safeProgress, cancellationToken).ConfigureAwait(false);
 
-                if (outcome.Success)
+                // Only update status if not canceled
+                if (!cancellationToken.IsCancellationRequested)
                 {
-                    var size = outcome.OutputSize;
-                    if (!size.HasValue)
+                    if (outcome.Success)
                     {
-                        try
+                        item.Status = ConversionStatus.Completed;
+                        
+                        var size = outcome.OutputSize;
+                        if (!size.HasValue)
                         {
-                            if (File.Exists(outputPath))
+                            try
                             {
-                                var fileInfo = new FileInfo(outputPath);
-                                size = fileInfo.Length;
+                                if (File.Exists(outputPath))
+                                {
+                                    var fileInfo = new FileInfo(outputPath);
+                                    size = fileInfo.Length;
+                                }
+                            }
+                            catch
+                            {
+                                // ignore size detection errors
                             }
                         }
-                        catch
+
+                        _logger.LogInformation("Successfully converted item {ItemId} to {OutputPath}",
+                            item.Id, outputPath);
+
+                        return new Converter.Application.Models.ConversionResult
                         {
-                            // ignore size detection errors
-                        }
+                            Success = true,
+                            OutputFileSize = size ?? 0,
+                            OutputPath = outputPath
+                        };
                     }
-
-                    _logger.LogInformation("Successfully converted item {ItemId} to {OutputPath}",
-                        item.Id, outputPath);
-
-                    return new Converter.Application.Models.ConversionResult
+                    else
                     {
-                        Success = true,
-                        OutputFileSize = size ?? 0,
-                        OutputPath = outputPath
-                    };
+                        item.Status = ConversionStatus.Failed;
+                        _logger.LogError("Conversion failed for item {ItemId}: {Error}", item.Id, outcome.ErrorMessage);
+                        return new Converter.Application.Models.ConversionResult
+                        {
+                            Success = false,
+                            ErrorMessage = outcome.ErrorMessage
+                        };
+                    }
                 }
 
-                _logger.LogError("Conversion failed for item {ItemId}: {Error}", item.Id, outcome.ErrorMessage);
-                return new Converter.Application.Models.ConversionResult
-                {
-                    Success = false,
-                    ErrorMessage = outcome.ErrorMessage
-                };
+                // If we got here, operation was canceled
+                item.Status = ConversionStatus.Cancelled;
+                _logger.LogInformation("Conversion for item {ItemId} was cancelled", item.Id);
+                throw new OperationCanceledException("Conversion was canceled", cancellationToken);
             }
             catch (OperationCanceledException)
             {
+                // Update item status to canceled
+                item.Status = ConversionStatus.Cancelled;
                 _logger.LogInformation("Conversion for item {ItemId} was cancelled", item.Id);
-                throw;
+                throw; // Re-throw to let the queue processor handle it
             }
             catch (Exception ex)
             {
+                // Update item status to failed
+                item.Status = ConversionStatus.Failed;
+                item.ErrorMessage = ex.Message;
                 _logger.LogError(ex, "Error converting item {ItemId}", item.Id);
                 return new Converter.Application.Models.ConversionResult
                 {

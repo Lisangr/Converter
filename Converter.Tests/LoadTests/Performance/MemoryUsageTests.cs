@@ -31,7 +31,8 @@ public class MemoryUsageTests
             .ReturnsAsync(new ConversionResult { Success = true, OutputFileSize = 2048 });
 
         var logger = Mock.Of<ILogger<ChannelQueueProcessor>>();
-        var processor = new ChannelQueueProcessor(repository.Object, queueStore.Object, conversion.Object, logger);
+        var uiDispatcher = Mock.Of<IUiDispatcher>();
+        var processor = new ChannelQueueProcessor(repository.Object, queueStore.Object, conversion.Object, logger, uiDispatcher);
         var items = new List<QueueItem>();
         for (var i = 0; i < 10; i++)
         {

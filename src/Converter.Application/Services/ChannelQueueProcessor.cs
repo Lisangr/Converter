@@ -17,7 +17,9 @@ namespace Converter.Application.Services
         private readonly Channel<QueueItem> _itemChannel;
         private readonly AsyncAutoResetEvent _pauseEvent = new();
         private readonly IQueueRepository _queueRepository;
+        private readonly IUiDispatcher _uiDispatcher;
         private CancellationTokenSource? _processingCts;
+        private Task? _processingTask;
         private bool _isProcessing;
         private bool _disposed;
 
@@ -26,6 +28,7 @@ namespace Converter.Application.Services
         public event EventHandler<QueueItem> ItemFailed;
         public event EventHandler<QueueProgressEventArgs> ProgressChanged;
         public event EventHandler QueueCompleted;
+        public event EventHandler<QueueItemEventArgs> ItemUpdated;
 
         public bool IsRunning => _isProcessing && !_itemChannel.Reader.Completion.IsCompleted;
         public bool IsPaused => _pauseEvent.IsPaused;
@@ -34,12 +37,14 @@ namespace Converter.Application.Services
             IQueueRepository queueRepository,
             IQueueStore queueStore,
             IConversionUseCase conversionUseCase,
-            ILogger<ChannelQueueProcessor> logger)
+            ILogger<ChannelQueueProcessor> logger,
+            IUiDispatcher uiDispatcher)
         {
             _queueRepository = queueRepository ?? throw new ArgumentNullException(nameof(queueRepository));
             _queueStore = queueStore ?? throw new ArgumentNullException(nameof(queueStore));
             _conversionUseCase = conversionUseCase ?? throw new ArgumentNullException(nameof(conversionUseCase));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
 
             _itemChannel = Channel.CreateBounded<QueueItem>(new BoundedChannelOptions(1000)
             {
@@ -62,7 +67,6 @@ namespace Converter.Application.Services
 
             try
             {
-                // Load existing items from the queue
                 _processingCts?.Dispose();
                 _processingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 var token = _processingCts.Token;
@@ -73,6 +77,21 @@ namespace Converter.Application.Services
                     token.ThrowIfCancellationRequested();
                     await WriteItemToChannelAsync(item, token).ConfigureAwait(false);
                 }
+
+                _processingTask = Task.Run(async () =>
+                {
+                    await foreach (var item in _itemChannel.Reader.ReadAllAsync(token).ConfigureAwait(false))
+                    {
+                        if (token.IsCancellationRequested) break;
+                        // Учитываем паузу
+                        await _pauseEvent.WaitAsync(token).ConfigureAwait(false);
+                        if (token.IsCancellationRequested) break;
+
+                        await ProcessItemAsync(item, token).ConfigureAwait(false);
+                    }
+                    _logger.LogInformation("Queue processing loop finished.");
+                    QueueCompleted?.Invoke(this, EventArgs.Empty);
+                }, CancellationToken.None);
 
                 _logger.LogInformation("Queue processor started");
             }
@@ -85,17 +104,56 @@ namespace Converter.Application.Services
 
         public async Task StopProcessingAsync()
         {
-            if (!_isProcessing)
-                return;
+            if (_disposed) return;
 
-            _logger.LogInformation("Stopping queue processor");
+            try
+            {
+                _logger.LogInformation("Stopping queue processor...");
 
-            // Cancel the current processing и закрыть канал
-            _processingCts?.Cancel();
-            _itemChannel.Writer.TryComplete();
+                _processingCts?.Cancel();
 
-            _isProcessing = false;
-            _logger.LogInformation("Queue processor stopped");
+                if (_processingTask != null && !_processingTask.IsCompleted)
+                {
+                    try
+                    {
+                        await _processingTask.ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Expected when cancellation is requested
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error during queue processing task completion");
+                    }
+                }
+
+                // Clear the channel from any remaining items
+                while (_itemChannel.Reader.TryRead(out var item))
+                {
+                    try
+                    {
+                        if (item.Status != ConversionStatus.Completed && item.Status != ConversionStatus.Failed)
+                        {
+                            item.Status = ConversionStatus.Cancelled;
+                            _ = _uiDispatcher.InvokeAsync(async () => ItemUpdated?.Invoke(this, new QueueItemEventArgs(item)));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error cleaning up queue item from channel");
+                    }
+                }
+
+                _isProcessing = false; // Reset the flag
+                _logger.LogInformation("Queue processor stopped");
+                QueueCompleted?.Invoke(this, EventArgs.Empty); // Ensure QueueCompleted is invoked
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error stopping queue processor");
+                throw;
+            }
         }
 
         public async Task PauseProcessingAsync()
@@ -138,17 +196,20 @@ namespace Converter.Application.Services
                 item.StartedAt = DateTime.UtcNow;
                 await _queueRepository.UpdateAsync(item).ConfigureAwait(false);
 
-                ItemStarted?.Invoke(this, item);
+                _ = _uiDispatcher.InvokeAsync(async () => ItemStarted?.Invoke(this, item));
                 _logger.LogInformation("Started processing item {ItemId}", item.Id);
 
                 var progress = new Progress<int>(p =>
                 {
                     // Обновляем прогресс в кэше для UI
                     item.Progress = p;
-                    _ = Task.Run(async () => await _queueRepository.UpdateAsync(item).ConfigureAwait(false));
+                    _ = _queueRepository.UpdateAsync(item).ContinueWith(t =>
+                    {
+                        if (t.IsFaulted) _logger.LogError(t.Exception, "Error updating queue item progress in repository");
+                    }, TaskScheduler.Default); // Выполняем продолжение в пуле потоков, чтобы не блокировать UI
 
                     // Уведомляем UI
-                    ProgressChanged?.Invoke(this, new QueueProgressEventArgs(item, p));
+                    _ = _uiDispatcher.InvokeAsync(async () => ProgressChanged?.Invoke(this, new QueueProgressEventArgs(item, p)));
                 });
 
                 var result = await _conversionUseCase.ExecuteAsync(item, progress, cancellationToken).ConfigureAwait(false);
@@ -167,7 +228,7 @@ namespace Converter.Application.Services
                     await _queueRepository.UpdateAsync(item).ConfigureAwait(false);
 
                     _logger.LogInformation("Successfully processed item {ItemId}", item.Id);
-                    ItemCompleted?.Invoke(this, item);
+                    _ = _uiDispatcher.InvokeAsync(async () => ItemCompleted?.Invoke(this, item));
                 }
                 else
                 {
@@ -182,7 +243,7 @@ namespace Converter.Application.Services
                     await _queueRepository.UpdateAsync(item).ConfigureAwait(false);
 
                     _logger.LogError("Failed to process item {ItemId}: {Error}", item.Id, result.ErrorMessage);
-                    ItemFailed?.Invoke(this, item);
+                    _ = _uiDispatcher.InvokeAsync(async () => ItemFailed?.Invoke(this, item));
                 }
             }
             catch (OperationCanceledException)
@@ -203,7 +264,7 @@ namespace Converter.Application.Services
                 await _queueRepository.UpdateAsync(item).ConfigureAwait(false);
 
                 _logger.LogError(ex, "Error processing item {ItemId}", item.Id);
-                ItemFailed?.Invoke(this, item);
+                _ = _uiDispatcher.InvokeAsync(async () => ItemFailed?.Invoke(this, item));
                 throw;
             }
         }
@@ -216,26 +277,12 @@ namespace Converter.Application.Services
             await WriteItemToChannelAsync(item, cancellationToken).ConfigureAwait(false);
         }
 
-        public async IAsyncEnumerable<QueueItem> GetItemsAsync(CancellationToken cancellationToken = default)
+        public System.Collections.Generic.IAsyncEnumerable<QueueItem> GetItemsAsync(CancellationToken cancellationToken = default)
         {
-            try
-            {
-                await foreach (var item in _itemChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
-                {
-                    // Учитываем паузу на стороне процессора
-                    while (IsPaused)
-                    {
-                        await Task.Delay(100, cancellationToken).ConfigureAwait(false);
-                    }
-
-                    yield return item;
-                }
-            }
-            finally
-            {
-                QueueCompleted?.Invoke(this, EventArgs.Empty);
-            }
+            return _itemChannel.Reader.ReadAllAsync(cancellationToken);
         }
+
+
 
         private async Task WriteItemToChannelAsync(QueueItem item, CancellationToken cancellationToken = default)
         {
@@ -284,15 +331,13 @@ namespace Converter.Application.Services
 
         private void OnItemAdded(object? sender, QueueItem item)
         {
-            // В канал добавляем только тогда, когда процессор действительно запущен.
-            // Это исключает ситуацию, когда элементы попадают в канал ещё до старта обработки,
-            // а затем повторно загружаются через StartProcessingAsync (двойная конвертация).
-            if (!_isProcessing)
-            {
-                return;
-            }
+            if (item == null || _disposed) return;
+            
+            // Ранее здесь автоматически запускалась обработка очереди при добавлении первого элемента.
+            // Теперь старт обработки производится явно через IStartConversionCommand / MainPresenter,
+            // поэтому здесь только добавляем элемент в канал, если обработка уже запущена.
 
-            if (item?.Status == ConversionStatus.Pending)
+            if (_isProcessing && item.Status == ConversionStatus.Pending)
             {
                 _ = WriteItemToChannelAsync(item, _processingCts?.Token ?? CancellationToken.None);
             }
@@ -309,10 +354,10 @@ namespace Converter.Application.Services
 
             _queueRepository.ItemAdded -= OnItemAdded;
 
-            _processingCts?.Cancel();
-            _processingCts?.Dispose();
+            // Stop processing and clean up before disposing
+            await StopProcessingAsync().ConfigureAwait(false);
 
-            _itemChannel.Writer.TryComplete();
+            _processingCts?.Dispose();
             _pauseEvent?.Dispose();
         }
 
@@ -320,6 +365,16 @@ namespace Converter.Application.Services
         {
             DisposeAsync().AsTask().GetAwaiter().GetResult();
             GC.SuppressFinalize(this);
+        }
+    }
+
+    public class QueueItemEventArgs : EventArgs
+    {
+        public QueueItem Item { get; }
+
+        public QueueItemEventArgs(QueueItem item)
+        {
+            Item = item ?? throw new ArgumentNullException(nameof(item));
         }
     }
 }

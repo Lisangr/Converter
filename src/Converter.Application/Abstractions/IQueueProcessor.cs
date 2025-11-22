@@ -82,12 +82,11 @@ namespace Converter.Application.Abstractions
         Task EnqueueAsync(QueueItem item, CancellationToken cancellationToken = default);
         
         /// <summary>
-        /// Возвращает асинхронную последовательность элементов очереди для фонового обработчика.
-        /// Используется hosted-сервисом для последовательного чтения из Channel.
+        /// Возвращает все элементы очереди как асинхронный поток.
         /// </summary>
-        /// <param name="cancellationToken">Токен отмены операции</param>
-        /// <returns>Асинхронный поток элементов очереди</returns>
-        IAsyncEnumerable<QueueItem> GetItemsAsync(CancellationToken cancellationToken = default);
+        System.Collections.Generic.IAsyncEnumerable<QueueItem> GetItemsAsync(CancellationToken cancellationToken = default);
+        
+
     }
 
     /// <summary>

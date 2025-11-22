@@ -17,6 +17,7 @@ public class FfmpegBootstrapServiceTests
     private readonly string _ffmpegExe;
     private readonly Mock<IFFmpegExecutor> _executorMock = new();
     private readonly Mock<ILogger<FfmpegBootstrapService>> _loggerMock = new();
+    private readonly Mock<IMainView> _mainViewMock = new();
 
     public FfmpegBootstrapServiceTests()
     {
@@ -29,14 +30,14 @@ public class FfmpegBootstrapServiceTests
     }
 
     [Fact]
-    public async Task EnsureFfmpegAsync_WhenBinaryExists_ShouldValidateAvailability()
+    public async Task StartAsync_WhenBinaryExists_ShouldValidateAvailability()
     {
         // Arrange
         _executorMock.Setup(e => e.IsFfmpegAvailableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
-        var service = new FfmpegBootstrapService(_executorMock.Object, _loggerMock.Object);
+        var service = new FfmpegBootstrapService(_executorMock.Object, _loggerMock.Object, _mainViewMock.Object);
 
         // Act
-        await service.EnsureFfmpegAsync();
+        await service.StartAsync(CancellationToken.None);
 
         // Assert
         _executorMock.Verify(e => e.IsFfmpegAvailableAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -47,7 +48,7 @@ public class FfmpegBootstrapServiceTests
     {
         // Arrange
         _executorMock.Setup(e => e.IsFfmpegAvailableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
-        var service = new FfmpegBootstrapService(_executorMock.Object, _loggerMock.Object);
+        var service = new FfmpegBootstrapService(_executorMock.Object, _loggerMock.Object, _mainViewMock.Object);
 
         // Act
         Func<Task> act = async () => await service.StartAsync(CancellationToken.None);
@@ -62,7 +63,7 @@ public class FfmpegBootstrapServiceTests
         // Arrange
         _executorMock.Setup(e => e.IsFfmpegAvailableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _executorMock.Setup(e => e.GetVersionAsync(It.IsAny<CancellationToken>())).ReturnsAsync("ffmpeg version test");
-        var service = new FfmpegBootstrapService(_executorMock.Object, _loggerMock.Object);
+        var service = new FfmpegBootstrapService(_executorMock.Object, _loggerMock.Object, _mainViewMock.Object);
 
         // Act
         await service.StartAsync(CancellationToken.None);

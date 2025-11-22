@@ -142,7 +142,7 @@ namespace Converter.UI
             // Click event for selection
             this.Click += (s, e) => ToggleSelection();
 
-            LoadVideoInfo();
+            _ = LoadVideoInfoAsync();
         }
 
         private string FormatFileSize()
@@ -165,10 +165,29 @@ namespace Converter.UI
             return $"Размер: {len:0.##} {sizes[order]}";
         }
 
-        private async void LoadVideoInfo()
+        private async Task LoadVideoInfoAsync()
         {
             try
             {
+                // Гарантируем, что Xabe.FFmpeg знает, где искать бинарники FFmpeg/ffprobe.
+                // Используем ту же пользовательскую папку, что и FfmpegBootstrapService:
+                // %LocalAppData%/Converter/ffmpeg
+                try
+                {
+                    var baseDir = System.IO.Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "Converter",
+                        "ffmpeg");
+                    if (System.IO.Directory.Exists(baseDir))
+                    {
+                        FFmpeg.SetExecutablesPath(baseDir);
+                    }
+                }
+                catch
+                {
+                    // Если не удалось выставить путь, полагаемся на уже сконфигурированный FFmpeg
+                }
+
                 var mediaInfo = await FFmpeg.GetMediaInfo(FilePath);
 
                 var duration = mediaInfo.Duration;

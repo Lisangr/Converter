@@ -18,6 +18,7 @@ public class ChannelQueueProcessorTests
     private readonly Mock<IQueueStore> _queueStore = new();
     private readonly Mock<IConversionUseCase> _conversionUseCase = new();
     private readonly Mock<ILogger<ChannelQueueProcessor>> _logger = new();
+    private readonly Mock<IUiDispatcher> _uiDispatcher = new();
     private readonly ChannelQueueProcessor _processor;
 
     public ChannelQueueProcessorTests()
@@ -26,7 +27,8 @@ public class ChannelQueueProcessorTests
             _queueRepository.Object,
             _queueStore.Object,
             _conversionUseCase.Object,
-            _logger.Object);
+            _logger.Object,
+            _uiDispatcher.Object);
     }
 
     [Fact]

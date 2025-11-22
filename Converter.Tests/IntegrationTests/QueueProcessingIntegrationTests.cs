@@ -31,7 +31,8 @@ public class QueueProcessingIntegrationTests : IDisposable
             .ReturnsAsync(new ConversionResult { Success = true, OutputFileSize = 10 });
 
         var logger = Mock.Of<ILogger<ChannelQueueProcessor>>();
-        var processor = new ChannelQueueProcessor(repo.Object, queueStore.Object, useCase.Object, logger);
+        var uiDispatcher = Mock.Of<IUiDispatcher>();
+        var processor = new ChannelQueueProcessor(repo.Object, queueStore.Object, useCase.Object, logger, uiDispatcher);
         var item = new QueueItem { Id = Guid.NewGuid(), FilePath = "file.mp4", Status = ConversionStatus.Pending };
 
         await processor.ProcessItemAsync(item, CancellationToken.None);
@@ -56,11 +57,10 @@ public class QueueProcessingIntegrationTests : IDisposable
 
         var useCase = new Mock<IConversionUseCase>();
         useCase.SetupSequence(u => u.ExecuteAsync(It.IsAny<QueueItem>(), It.IsAny<IProgress<int>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ConversionResult { Success = true })
             .ReturnsAsync(new ConversionResult { Success = true });
-
         var logger = Mock.Of<ILogger<ChannelQueueProcessor>>();
-        var processor = new ChannelQueueProcessor(repo.Object, queueStore.Object, useCase.Object, logger);
+        var uiDispatcher = Mock.Of<IUiDispatcher>();
+        var processor = new ChannelQueueProcessor(repo.Object, queueStore.Object, useCase.Object, logger, uiDispatcher);
 
         await processor.StartProcessingAsync();
         await processor.ProcessItemAsync(first, CancellationToken.None);
@@ -86,7 +86,8 @@ public class QueueProcessingIntegrationTests : IDisposable
             .ThrowsAsync(new InvalidOperationException("boom"));
 
         var logger = Mock.Of<ILogger<ChannelQueueProcessor>>();
-        var processor = new ChannelQueueProcessor(repo.Object, queueStore.Object, useCase.Object, logger);
+        var uiDispatcher = Mock.Of<IUiDispatcher>();
+        var processor = new ChannelQueueProcessor(repo.Object, queueStore.Object, useCase.Object, logger, uiDispatcher);
         var item = new QueueItem { Id = Guid.NewGuid(), FilePath = "bad.mp4" };
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => processor.ProcessItemAsync(item, CancellationToken.None));

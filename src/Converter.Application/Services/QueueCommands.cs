@@ -99,7 +99,7 @@ namespace Converter.Application.Services
                 await _queueProcessor.StartProcessingAsync(cancellationToken).ConfigureAwait(false);
 
                 // Основной цикл обработки: читаем элементы из канала и обрабатываем их
-                await foreach (var item in _queueProcessor.GetItemsAsync(cancellationToken).ConfigureAwait(false))
+                await foreach (var item in _queueProcessor.GetItemsAsync(cancellationToken))
                 {
                     await _queueProcessor.ProcessItemAsync(item, cancellationToken).ConfigureAwait(false);
                 }

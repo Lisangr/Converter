@@ -161,7 +161,12 @@ namespace Converter.UI.Controls
             UpdatePreview();
         }
 
-        private async void OnThemeChanged(object? sender, EventArgs e)
+        private void OnThemeChanged(object? sender, EventArgs e)
+        {
+            _ = OnThemeChangedAsync(sender, e);
+        }
+
+        private async Task OnThemeChangedAsync(object? sender, EventArgs e)
         {
             if (_themeCombo.SelectedIndex < 0 || _themeCombo.SelectedIndex >= _themes.Count)
             {

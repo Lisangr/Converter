@@ -38,7 +38,7 @@ public class ShareDialog : Form
         _report = report;
         _shareService = new ShareService();
         InitializeComponents();
-        LoadPreview();
+        _ = LoadPreviewAsync();
     }
 
     private void InitializeComponents()
@@ -229,7 +229,7 @@ public class ShareDialog : Form
         };
     }
 
-    private async void LoadPreview()
+    private async Task LoadPreviewAsync()
     {
         try
         {

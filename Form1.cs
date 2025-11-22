@@ -30,8 +30,6 @@ namespace Converter
         private readonly INotificationService _notificationService;
         private readonly IThumbnailProvider _thumbnailProvider;
         private readonly IShareService _shareService;
-        private readonly Converter.Services.IFileService _fileService;
-        private readonly Converter.Services.UIServices.IFileOperationsService _fileOperationsService;
         private readonly IOutputPathBuilder _outputPathBuilder;
         private readonly CancellationTokenSource _lifecycleCts = new();
         private readonly ILogger<Form1> _logger;
@@ -39,12 +37,8 @@ namespace Converter
         private bool _disposed = false;
         private bool _closingInProgress = false;
         
-        // Fields for estimation and background operations
-        private System.Timers.Timer? _estimateDebounce;
-        private CancellationTokenSource? _estimateCts;
         
         
-
         // IMainView events
         public event EventHandler? AddFilesRequested;
         public event EventHandler? StartConversionRequested;
@@ -135,6 +129,22 @@ namespace Converter
             set => SetStatusText(value);
         }
 
+        private int _totalProgress;
+        public int TotalProgress
+        {
+            get => _totalProgress;
+            set
+            {
+                _totalProgress = value;
+                UpdateTotalProgress(value);
+            }
+        }
+
+        public void UpdateFfmpegStatus(string message)
+        {
+            RunOnUiThread(() => SetStatusText(message));
+        }
+
         public void RunOnUiThread(Action action)
         {
             if (InvokeRequired)
@@ -152,8 +162,6 @@ namespace Converter
             INotificationService notificationService,
             IThumbnailProvider thumbnailProvider,
             IShareService shareService,
-            Converter.Services.IFileService fileService,
-            Converter.Services.UIServices.IFileOperationsService fileOperationsService,
             IOutputPathBuilder outputPathBuilder,
             IPresetService presetService,
             IConversionEstimationService estimationService,
@@ -163,8 +171,6 @@ namespace Converter
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _thumbnailProvider = thumbnailProvider ?? throw new ArgumentNullException(nameof(thumbnailProvider));
             _shareService = shareService ?? throw new ArgumentNullException(nameof(shareService));
-            _fileService = fileService ?? throw new ArgumentNullException(nameof(fileService));
-            _fileOperationsService = fileOperationsService ?? throw new ArgumentNullException(nameof(fileOperationsService));
             _outputPathBuilder = outputPathBuilder ?? throw new ArgumentNullException(nameof(outputPathBuilder));
             _presetService = presetService ?? throw new ArgumentNullException(nameof(presetService));
             _estimationService = estimationService ?? throw new ArgumentNullException(nameof(estimationService));
@@ -172,9 +178,6 @@ namespace Converter
             
             InitializeComponent();
             InitializeAdvancedTheming();
-            
-            // Подписываемся на обновления очереди
-            _fileOperationsService.QueueUpdated += OnQueueUpdated;
         }
 
         public void UpdatePresetControls(Converter.Application.Models.ConversionProfile preset)
@@ -388,6 +391,60 @@ namespace Converter
             return dlg.ShowDialog(this) == DialogResult.OK ? dlg.SelectedPath : null;
         }
 
+        private async Task LoadThumbnailForFileItemAsync(FileListItem item, string filePath)
+        {
+            try
+            {
+                if (item == null || string.IsNullOrWhiteSpace(filePath))
+                {
+                    return;
+                }
+
+                // Используем общий токен жизни формы, чтобы не держать фоновые операции после закрытия
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_lifecycleCts.Token);
+
+                using var thumbnailStream = await _thumbnailProvider
+                    .GetThumbnailAsync(filePath, 160, 90, linkedCts.Token)
+                    .ConfigureAwait(false);
+
+                if (thumbnailStream == null || thumbnailStream.Length == 0)
+                {
+                    return;
+                }
+
+                // Создаем копию изображения, чтобы поток можно было освободить
+                using (var img = Image.FromStream(thumbnailStream))
+                {
+                    var thumbnail = new Bitmap(img);
+
+                    // Применяем миниатюру на UI-потоке
+                    RunOnUiThread(() =>
+                    {
+                        try
+                        {
+                            // Освобождаем старую миниатюру, если она была
+                            item.Thumbnail?.Dispose();
+                            item.Thumbnail = thumbnail;
+                        }
+                        catch
+                        {
+                            // Освобождаем ресурсы в случае ошибки
+                            thumbnail.Dispose();
+                            throw;
+                        }
+                    });
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Нормальная отмена при закрытии формы или отмене операций
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Failed to load thumbnail for file list item: {FilePath}", filePath);
+            }
+        }
+
         private void InitializeAdvancedTheming()
         {
             if (_themeInitialized)
@@ -540,31 +597,11 @@ namespace Converter
 
             try
             {
-                _fileOperationsService.QueueUpdated -= OnQueueUpdated;
-            }
-            catch { }
-
-            try
-            {
                 Resize -= OnThemeControlsResize;
             }
             catch { }
 
             CancelBackgroundOperations();
-
-            try
-            {
-                _estimateDebounce?.Stop();
-                _estimateDebounce?.Dispose();
-            }
-            catch { }
-
-            try
-            {
-                _estimateCts?.Cancel();
-                _estimateCts?.Dispose();
-            }
-            catch { }
 
             try
             {
@@ -598,80 +635,6 @@ namespace Converter
         ~Form1()
         {
             Dispose(disposing: false);
-        }
-
-        #endregion
-
-        #region Event Handlers
-
-        private void OnQueueUpdated(object? sender, Converter.Services.UIServices.QueueUpdatedEventArgs e)
-        {
-            if (InvokeRequired)
-            {
-                BeginInvoke(new Action(() => OnQueueUpdated(sender, e)));
-                return;
-            }
-
-            try
-            {
-                // 1. Обновляем грид очереди (если биндинг уже инициализирован)
-                // Если используется MainPresenter (_mainPresenter != null), он управляет QueueItemsBinding,
-                // поэтому не переинициализируем источник данных здесь, чтобы не рвать биндинг.
-                if (_mainPresenter == null && _queueBindingSource != null)
-                {
-                    var viewModels = e.QueueItems
-                        .Select(item => QueueItemViewModel.FromModel(item))
-                        .ToList();
-
-                    _queueBindingSource.DataSource = null;
-                    _queueBindingSource.DataSource = viewModels;
-                }
-
-                // 2. Синхронизируем панель файлов с очередью
-                var currentFiles = filesPanel.Controls.OfType<FileListItem>()
-                    .Select(f => f.FilePath)
-                    .ToList();
-
-                var queueFiles = e.QueueItems
-                    .Select(q => q.FilePath)
-                    .Where(path => !string.IsNullOrWhiteSpace(path))
-                    .ToList();
-
-                var newFiles = queueFiles
-                    .Except(currentFiles, StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-
-                var removedFiles = currentFiles
-                    .Except(queueFiles, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-
-                // Удаляем файлы, которых больше нет в очереди
-                foreach (var filePath in removedFiles)
-                {
-                    var fileItem = filesPanel.Controls.OfType<FileListItem>()
-                        .FirstOrDefault(f => string.Equals(f.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
-
-                    if (fileItem != null)
-                    {
-                        filesPanel.Controls.Remove(fileItem);
-                        fileItem.Dispose();
-                    }
-                }
-
-                // Добавляем новые файлы через существующую логику (с превью и обработчиками)
-                if (newFiles.Length > 0)
-                {
-                    AddFilesToList(newFiles, syncDragDropPanel: false);
-                }
-
-                // 3. Обновляем состояние UI
-                UpdateEditorButtonState();
-                UpdateShareButtonState();
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"Ошибка при обновлении интерфейса очереди: {ex.Message}");
-            }
         }
 
         #endregion

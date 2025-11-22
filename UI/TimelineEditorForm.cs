@@ -277,7 +277,7 @@ private void UpdateMarkerLabels()
     {
         _mediaInfo = await FFmpeg.GetMediaInfo(_inputPath).ConfigureAwait(true);
         _duration = _mediaInfo.Duration;
-        videoPlayer.LoadVideo(_inputPath, _mediaInfo);
+        await videoPlayer.LoadVideoAsync(_inputPath, _mediaInfo).ConfigureAwait(true);
         UpdateSummary();
         panelTimelineBar.Invalidate();
     }
@@ -483,7 +483,7 @@ private void UpdateMarkerLabels()
             if (File.Exists(output))
             {
                 var info = await FFmpeg.GetMediaInfo(output).ConfigureAwait(true);
-                videoPlayer.LoadVideo(output, info);
+                await videoPlayer.LoadVideoAsync(output, info).ConfigureAwait(true);
             }
         }
         catch (Exception ex)

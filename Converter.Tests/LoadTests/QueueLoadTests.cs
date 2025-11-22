@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Converter.Application.Abstractions;
 using Converter.Domain.Models;
+using Converter.Tests.TestBase;
 
 namespace Converter.Tests.LoadTests
 {
@@ -17,7 +18,7 @@ namespace Converter.Tests.LoadTests
     {
         private const int TestFileCount = 100;
         private const int ConcurrentThreads = 10;
-        private readonly Mock<IQueueRepository> _mockQueueRepository;
+        private readonly MockQueueRepository _queueRepository;
         private readonly Mock<IQueueProcessor> _mockQueueProcessor;
         private readonly Mock<ILogger<FileOperationsService>> _mockLogger;
         private readonly FileOperationsService _fileService;
@@ -25,12 +26,12 @@ namespace Converter.Tests.LoadTests
 
         public QueueLoadTests()
         {
-            _mockQueueRepository = new Mock<IQueueRepository>();
+            _queueRepository = new MockQueueRepository();
             _mockQueueProcessor = new Mock<IQueueProcessor>();
             _mockLogger = new Mock<ILogger<FileOperationsService>>();
             
             _fileService = new FileOperationsService(
-                _mockQueueRepository.Object,
+                _queueRepository,
                 _mockQueueProcessor.Object,
                 _mockLogger.Object);
 
@@ -48,9 +49,6 @@ namespace Converter.Tests.LoadTests
                 files.Add(CreateTestFile($"test_{i}.txt", $"Test content {i}"));
             }
 
-            _mockQueueRepository.Setup(x => x.AddAsync(It.IsAny<QueueItem>()))
-                .Returns(Task.CompletedTask);
-
             // Act
             var tasks = new List<Task>();
             var batchSize = TestFileCount / ConcurrentThreads;
@@ -64,7 +62,8 @@ namespace Converter.Tests.LoadTests
             await Task.WhenAll(tasks);
 
             // Assert
-            _mockQueueRepository.Verify(x => x.AddAsync(It.IsAny<QueueItem>()), Times.Exactly(TestFileCount));
+            var actualItems = await _queueRepository.GetAllAsync();
+            actualItems.Should().HaveCount(TestFileCount);
         }
 
         [Fact]
@@ -77,14 +76,12 @@ namespace Converter.Tests.LoadTests
                 files.Add(CreateTestFile($"large_test_{i}.txt", $"Large test content {i}"));
             }
 
-            _mockQueueRepository.Setup(x => x.AddAsync(It.IsAny<QueueItem>()))
-                .Returns(Task.CompletedTask);
-
             // Act
             await _fileService.AddFilesAsync(files);
 
             // Assert
-            _mockQueueRepository.Verify(x => x.AddAsync(It.IsAny<QueueItem>()), Times.Exactly(500));
+            var actualItems = await _queueRepository.GetAllAsync();
+            actualItems.Should().HaveCount(500);
         }
 
         [Fact]
@@ -99,17 +96,16 @@ namespace Converter.Tests.LoadTests
 
             var initialItems = new List<QueueItem>
             {
-                new QueueItem { Id = Guid.NewGuid(), FilePath = "existing1.txt" },
-                new QueueItem { Id = Guid.NewGuid(), FilePath = "existing2.txt" },
-                new QueueItem { Id = Guid.NewGuid(), FilePath = "existing3.txt" }
+                new QueueItem { Id = Guid.NewGuid(), FilePath = "existing1.txt", Status = ConversionStatus.Pending },
+                new QueueItem { Id = Guid.NewGuid(), FilePath = "existing2.txt", Status = ConversionStatus.Pending },
+                new QueueItem { Id = Guid.NewGuid(), FilePath = "existing3.txt", Status = ConversionStatus.Pending }
             };
 
-            _mockQueueRepository.Setup(x => x.AddAsync(It.IsAny<QueueItem>()))
-                .Returns(Task.CompletedTask);
-            _mockQueueRepository.Setup(x => x.GetAllAsync())
-                .ReturnsAsync(initialItems);
-            _mockQueueRepository.Setup(x => x.RemoveAsync(It.IsAny<Guid>()))
-                .Returns(Task.CompletedTask);
+            // Добавляем начальные элементы
+            foreach (var item in initialItems)
+            {
+                await _queueRepository.AddAsync(item);
+            }
 
             // Act
             var addTask = _fileService.AddFilesAsync(addFiles);
@@ -119,8 +115,8 @@ namespace Converter.Tests.LoadTests
             await Task.WhenAll(addTask, getTask, clearTask);
 
             // Assert
-            _mockQueueRepository.Verify(x => x.AddAsync(It.IsAny<QueueItem>()), Times.Exactly(addFiles.Count));
-            _mockQueueRepository.Verify(x => x.RemoveAsync(It.IsAny<Guid>()), Times.Exactly(initialItems.Count));
+            var finalItems = await _queueRepository.GetAllAsync();
+            finalItems.Should().HaveCount(0); // После ClearAllFilesAsync очередь должна быть пустой
         }
 
         [Fact]
@@ -140,9 +136,6 @@ namespace Converter.Tests.LoadTests
                 }
             }
 
-            _mockQueueRepository.Setup(x => x.AddAsync(It.IsAny<QueueItem>()))
-                .Returns(Task.CompletedTask);
-
             // Act
             var startMemory = GC.GetTotalMemory(true);
             await _fileService.AddFilesAsync(files);
@@ -151,25 +144,17 @@ namespace Converter.Tests.LoadTests
             // Assert
             var memoryIncrease = endMemory - startMemory;
             memoryIncrease.Should().BeLessThan(50 * 1024 * 1024); // Менее 50MB увеличения
-            _mockQueueRepository.Verify(x => x.AddAsync(It.IsAny<QueueItem>()), Times.Exactly(files.Count));
+            
+            var actualItems = await _queueRepository.GetAllAsync();
+            actualItems.Should().HaveCount(files.Count);
         }
 
         [Fact]
         public async Task StressTest_RepeatedOperations_ShouldRemainStable()
         {
             // Arrange
-            var addedItems = new List<QueueItem>();
-            
-            _mockQueueRepository.Setup(x => x.AddAsync(It.IsAny<QueueItem>()))
-                .Returns(Task.CompletedTask)
-                .Callback<QueueItem>(item => addedItems.Add(item));
-                
-            _mockQueueRepository.Setup(x => x.GetAllAsync())
-                .ReturnsAsync(() => new List<QueueItem>(addedItems));
-                
-            _mockQueueRepository.Setup(x => x.RemoveAsync(It.IsAny<Guid>()))
-                .Returns(Task.CompletedTask)
-                .Callback<Guid>(id => addedItems.RemoveAll(item => item.Id == id));
+            // Очищаем репозиторий перед тестом
+            _queueRepository.Clear();
 
             // Act & Assert - повторяем операции 10 раз
             for (int cycle = 0; cycle < 10; cycle++)
@@ -192,7 +177,9 @@ namespace Converter.Tests.LoadTests
                 // Очищаем
                 await _fileService.ClearAllFilesAsync();
 
-                _mockQueueRepository.Verify(x => x.AddAsync(It.IsAny<QueueItem>()), Times.Exactly(20 * (cycle + 1)));
+                // После очистки очередь должна быть пустой
+                var finalItems = await _queueRepository.GetAllAsync();
+                finalItems.Should().HaveCount(0);
             }
         }
 
@@ -210,6 +197,7 @@ namespace Converter.Tests.LoadTests
                 Directory.Delete(_testDirectory, true);
             }
             _fileService?.Dispose();
+            _queueRepository?.Clear();
             GC.Collect();
         }
     }

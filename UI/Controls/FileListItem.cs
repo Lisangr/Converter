@@ -236,11 +236,13 @@ namespace Converter.UI.Controls
                     var fileInfo = new FileInfo(_filePath);
                     var fileSize = FormatFileSize(fileInfo.Length);
                     _fileSize.Text = $"Размер: {fileSize}";
-                    
-                    // Try to get video duration (this would require FFmpeg analysis)
-                    // For now, just show file extension
+
+                    // Базовая информация по расширению, пока не загрузили медиаданные
                     var extension = Path.GetExtension(_filePath).ToUpper();
                     _duration.Text = $"Тип: {extension}";
+
+                    // Асинхронно подгружаем реальную длительность и кодек через FFmpeg
+                    _ = LoadMediaInfoAsync(_filePath);
                 }
                 else
                 {
@@ -252,6 +254,69 @@ namespace Converter.UI.Controls
             {
                 _fileSize.Text = "Ошибка чтения файла";
                 _duration.Text = "";
+            }
+        }
+
+        private async Task LoadMediaInfoAsync(string path)
+        {
+            try
+            {
+                // Настраиваем Xabe.FFmpeg на использование той же папки, что и FfmpegBootstrapService
+                try
+                {
+                    var baseDir = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "Converter",
+                        "ffmpeg");
+                    if (Directory.Exists(baseDir))
+                    {
+                        Xabe.FFmpeg.FFmpeg.SetExecutablesPath(baseDir);
+                    }
+                }
+                catch
+                {
+                    // Если не удалось, полагаемся на уже сконфигурированный путь
+                }
+
+                var media = await Xabe.FFmpeg.FFmpeg.GetMediaInfo(path).ConfigureAwait(false);
+                var duration = media.Duration;
+                var videoStream = media.VideoStreams?.FirstOrDefault();
+
+                // Обновляем UI только на UI-потоке
+                if (_duration.InvokeRequired)
+                {
+                    _duration.BeginInvoke(new Action(() => ApplyMediaInfoToLabels(duration, videoStream)));
+                }
+                else
+                {
+                    ApplyMediaInfoToLabels(duration, videoStream);
+                }
+            }
+            catch
+            {
+                // Тихо игнорируем ошибки медиапарсинга, оставляя базовую информацию по расширению
+            }
+        }
+
+        private void ApplyMediaInfoToLabels(TimeSpan duration, Xabe.FFmpeg.IVideoStream? videoStream)
+        {
+            try
+            {
+                if (duration.TotalSeconds > 0)
+                {
+                    _duration.Text = $"Длительность: {FormatDuration(duration)}";
+                }
+
+                if (videoStream != null)
+                {
+                    // Добавляем кодек и разрешение во вторую строку размера
+                    var codecInfo = $"{videoStream.Codec} {videoStream.Width}x{videoStream.Height}";
+                    _fileSize.Text = $"{_fileSize.Text} · {codecInfo}";
+                }
+            }
+            catch
+            {
+                // Не даём UI упасть даже при неожиданных данных
             }
         }
         

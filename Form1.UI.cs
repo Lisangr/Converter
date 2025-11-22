@@ -99,10 +99,6 @@ namespace Converter
         // Presets binding (for future use)
         private BindingSource? _presetsBindingSource;
 
-        // File operations service reference - доступ через partial class (использует существующее поле)
-        private Converter.Services.UIServices.IFileOperationsService FileOperationsService => 
-            this._fileOperationsService;
-
         protected override void OnLoad(EventArgs e)
         {
             base.OnLoad(e);
@@ -406,7 +402,7 @@ namespace Converter
             tabAudio = new TabPage("🔊 Аудио");
             tabQueue = new TabPage("📋 Очередь");
 
-            BuildPresetsTab();
+            _ = BuildPresetsTabAsync();
             BuildVideoTab();
             BuildAudioTab();
             BuildQueueTab();
@@ -438,15 +434,11 @@ namespace Converter
             _queueBindingSource ??= new BindingSource();
 
             // Если QueueItemsBinding уже установлен через IMainView/MainPresenter,
-            // используем его как единый источник правды. Иначе создаём список из FileOperationsService
-            // и сохраняем его в _queueItemsBinding, чтобы последующие обновления шли по одному списку.
+            // используем его как единый источник правды. Иначе создаём пустой список,
+            // который впоследствии будет заполнен презентером.
             if (_queueItemsBinding == null)
             {
-                var queueItems = FileOperationsService?.GetQueueItems() ?? new List<QueueItem>();
-                var viewModels = queueItems
-                    .Select(item => Converter.Application.ViewModels.QueueItemViewModel.FromModel(item))
-                    .ToList();
-                _queueItemsBinding = new System.ComponentModel.BindingList<Converter.Application.ViewModels.QueueItemViewModel>(viewModels);
+                _queueItemsBinding = new System.ComponentModel.BindingList<Converter.Application.ViewModels.QueueItemViewModel>();
             }
 
             var bindingList = _queueItemsBinding;
@@ -546,103 +538,7 @@ namespace Converter
             host.Controls.Add(_queueGrid);
         }
 
-        private async Task<Converter.Application.Models.ConversionResult> ConvertQueueItemAsync(QueueItem item, IProgress<int> progress, CancellationToken cancellationToken)
-        {
-            try
-            {
-                var settings = item.Settings ?? CreateConversionSettings();
-                var format = (settings.ContainerFormat ?? (cbFormat.SelectedItem?.ToString() ?? "mp4")).ToLowerInvariant();
-                var videoCodec = settings.VideoCodec ?? ExtractCodecName(cbVideoCodec.SelectedItem?.ToString() ?? "libx264");
-                var audioCodec = settings.AudioCodec ?? ExtractCodecName(cbAudioCodec.SelectedItem?.ToString() ?? "aac");
-                var audioBitrate = settings.AudioBitrate.HasValue ? $"{settings.AudioBitrate}k" : (cbAudioBitrate.SelectedItem?.ToString() ?? "192k");
-                var crf = settings.Crf ?? ExtractCRF(cbQuality.SelectedItem?.ToString() ?? "Хорошее (CRF 23)");
-
-                // Настраиваем директорию вывода и шаблон для OutputPathBuilder
-                if (string.IsNullOrWhiteSpace(item.OutputDirectory))
-                {
-                    var outputFolder = txtOutputFolder.Text.Trim();
-                    if (string.IsNullOrEmpty(outputFolder))
-                    {
-                        outputFolder = System.IO.Path.GetDirectoryName(item.FilePath) ?? string.Empty;
-                    }
-
-                    if (chkCreateConvertedFolder.Checked)
-                    {
-                        outputFolder = System.IO.Path.Combine(outputFolder, "Converted");
-                    }
-
-                    item.OutputDirectory = outputFolder;
-                }
-
-                if (string.IsNullOrWhiteSpace(item.NamingPattern))
-                {
-                    item.NamingPattern = NamingPattern ?? cbNamingPattern.SelectedItem?.ToString() ?? "{original}_converted";
-                }
-
-                // Собираем профиль для построения пути (минимально необходимые поля)
-                var profile = new Converter.Application.Models.ConversionProfile
-                {
-                    Format = format,
-                    VideoCodec = videoCodec,
-                    AudioCodec = audioCodec
-                };
-
-                var output = item.OutputPath ?? _outputPathBuilder.BuildOutputPath(item, profile);
-                item.OutputPath = output;
-
-                // Гарантируем существование директории вывода
-                var dir = System.IO.Path.GetDirectoryName(output);
-                if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
-                {
-                    System.IO.Directory.CreateDirectory(dir);
-                }
-
-                var adapter = new Progress<double>(value =>
-                {
-                    var percent = (int)Math.Round(value);
-                    percent = Math.Clamp(percent, 0, 100);
-                    progress.Report(percent);
-                });
-
-                await ConvertFileAsync(
-                    item.FilePath,
-                    output,
-                    format,
-                    videoCodec,
-                    audioCodec,
-                    audioBitrate,
-                    crf,
-                    cancellationToken,
-                    adapter);
-
-                long? outputSize = null;
-                if (System.IO.File.Exists(output))
-                {
-                    outputSize = new System.IO.FileInfo(output).Length;
-                }
-
-                return new Converter.Application.Models.ConversionResult
-                {
-                    Success = true,
-                    OutputFileSize = outputSize ?? 0,
-                    OutputPath = output
-                };
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                return new Converter.Application.Models.ConversionResult
-                {
-                    Success = false,
-                    ErrorMessage = ex.Message
-                };
-            }
-        }
-
-        private async void BuildPresetsTab()
+        private async Task BuildPresetsTabAsync()
         {
             // Простейшая реализация: просто набор кнопок пресетов в FlowLayoutPanel
             tabPresets.Controls.Clear();
@@ -1520,26 +1416,19 @@ namespace Converter
                 var fileItem = new FileListItem(path, _themeService);
                 fileItem.RemoveClicked += (s, e) => RemoveFileFromList(fileItem);
                 fileItem.DoubleClicked += (s, e) => OpenVideoInPlayer(fileItem.FilePath);
-                fileItem.RefreshThumbnailRequested += (s, e) =>
-                {
-                    _ = RefreshThumbnail(fileItem, e.Position, _lifecycleCts.Token);
-                };
 
                 // Синхронизируем выделение элемента файловой панели с очередью
                 fileItem.SelectionChanged += (s, e) => SyncQueueSelectionWithFileItem(fileItem);
 
                 filesPanel.Controls.Add(fileItem);
 
+                // Асинхронно загружаем миниатюру для элемента списка файлов
+                _ = LoadThumbnailForFileItemAsync(fileItem, path);
+
                 if (syncDragDropPanel)
                 {
                     _dragDropPanel?.AddFiles(new[] { path }, notify: false);
                 }
-
-                // Асинхронно загружаем превью
-                _ = LoadThumbnailAsync(fileItem, _lifecycleCts.Token);
-
-                // Асинхронно пробуем файл
-                _ = ProbeFileAsync(fileItem, path, _lifecycleCts.Token);
             }
 
             AppendLog($"Добавлено файлов: {paths.Length}");
@@ -1651,57 +1540,6 @@ namespace Converter
                 Threads = threads,
                 AudioProcessing = _audioProcessingPanel?.GetOptions().Clone()
             };
-        }
-
-        private async Task LoadThumbnailAsync(FileListItem item, CancellationToken cancellationToken)
-        {
-            try
-            {
-                if (string.IsNullOrWhiteSpace(item.FilePath))
-                {
-                    return;
-                }
-
-                var image = await _fileService.GetThumbnailAsync(item.FilePath, 160, 90, cancellationToken).ConfigureAwait(false);
-                RunOnUiThread(() =>
-                {
-                    item.Thumbnail = image;
-                });
-            }
-            catch (OperationCanceledException)
-            {
-                // ignore
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"Ошибка загрузки превью для {item.FilePath}: {ex.Message}");
-            }
-        }
-
-        private async Task RefreshThumbnail(FileListItem item, TimeSpan position, CancellationToken cancellationToken)
-        {
-            // Текущая реализация игнорирует позицию и просто перезагружает превью
-            await LoadThumbnailAsync(item, cancellationToken).ConfigureAwait(false);
-        }
-
-        private async Task ProbeFileAsync(FileListItem item, string path, CancellationToken cancellationToken)
-        {
-            try
-            {
-                var info = await _fileService.ProbeFileAsync(path).ConfigureAwait(false);
-                RunOnUiThread(() =>
-                {
-                    item.FileSize = info.Length;
-                });
-            }
-            catch (OperationCanceledException)
-            {
-                // ignore
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"Ошибка анализа файла {Path.GetFileName(path)}: {ex.Message}");
-            }
         }
 
         private static int? ParseBitrate(string? value)
@@ -2399,6 +2237,21 @@ private void btnLoadPreset_Click(object? sender, EventArgs e)
 
         private void DebounceEstimate()
         {
+            // Всегда выполняем логику дебаунса на UI-потоке, чтобы избежать
+            // кросс-поточных обращений к WinForms Timer и контролам.
+            if (this.InvokeRequired)
+            {
+                try
+                {
+                    this.BeginInvoke(new Action(DebounceEstimate));
+                }
+                catch
+                {
+                    // Если форма уже уничтожена - просто игнорируем
+                }
+                return;
+            }
+
             if (_estimatePending)
             {
                 _estimateDebounceTimer.Stop();

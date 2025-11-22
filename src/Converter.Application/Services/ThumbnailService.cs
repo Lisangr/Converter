@@ -18,10 +18,13 @@ public class ThumbnailService : IThumbnailService
         _thumbnailGenerator = thumbnailGenerator ?? throw new ArgumentNullException(nameof(thumbnailGenerator));
     }
 
-    public async Task<Stream> GetThumbnailAsync(string videoPath, int width, int height)
+    public async Task<byte[]> GetThumbnailAsync(string videoPath, int width, int height, CancellationToken ct = default)
     {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken.None);
-        return await _thumbnailGenerator.GenerateThumbnailAsync(videoPath, width, height, cts.Token);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        await using var stream = await _thumbnailGenerator.GenerateThumbnailAsync(videoPath, width, height, linkedCts.Token);
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms, linkedCts.Token).ConfigureAwait(false);
+        return ms.ToArray();
     }
 }
 

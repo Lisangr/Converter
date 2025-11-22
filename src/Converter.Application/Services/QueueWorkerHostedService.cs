@@ -72,7 +72,7 @@ public sealed class QueueWorkerHostedService : IHostedService
             await _queueProcessor.StartProcessingAsync(cancellationToken).ConfigureAwait(false);
 
             // Основной цикл чтения элементов из Channel и их обработки
-            await foreach (var item in _queueProcessor.GetItemsAsync(cancellationToken).ConfigureAwait(false))
+            await foreach (var item in _queueProcessor.GetItemsAsync(cancellationToken))
             {
                 try
                 {

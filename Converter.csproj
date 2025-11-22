@@ -42,9 +42,9 @@
     
     <!-- Media Processing -->
     <PackageReference Include="Xabe.FFmpeg" Version="6.0.2" />
-    <PackageReference Include="Xabe.FFmpeg.Downloader" Version="5.1.0" />
-    
-    <!-- JSON Handling -->
+    <PackageReference Include="Xabe.FFmpeg.Downloader" Version="6.0.2" />
+
+ <!-- JSON Handling -->
     <PackageReference Include="System.Text.Json" Version="9.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     

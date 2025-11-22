@@ -24,6 +24,7 @@ namespace Converter.Application.Presenters
         private readonly IProgressReporter _progressReporter;
         private readonly IFilePicker _filePicker;
         private readonly IConversionSettingsService _conversionSettingsService;
+        private readonly IThumbnailService _thumbnailService;
         private readonly ILogger<MainPresenter> _logger;
         private bool _disposed;
         private bool _clearingInProgress;
@@ -44,6 +45,7 @@ namespace Converter.Application.Presenters
             IProgressReporter progressReporter,
             IFilePicker filePicker,
             IConversionSettingsService conversionSettingsService,
+            IThumbnailService thumbnailService,
             IAddFilesCommand addFilesCommand,
             IStartConversionCommand startConversionCommand,
             ICancelConversionCommand cancelConversionCommand,
@@ -60,6 +62,7 @@ namespace Converter.Application.Presenters
             _progressReporter = progressReporter ?? throw new ArgumentNullException(nameof(progressReporter));
             _filePicker = filePicker ?? throw new ArgumentNullException(nameof(filePicker));
             _conversionSettingsService = conversionSettingsService ?? throw new ArgumentNullException(nameof(conversionSettingsService));
+            _thumbnailService = thumbnailService ?? throw new ArgumentNullException(nameof(thumbnailService));
             _addFilesCommand = addFilesCommand ?? throw new ArgumentNullException(nameof(addFilesCommand));
             _startConversionCommand = startConversionCommand ?? throw new ArgumentNullException(nameof(startConversionCommand));
             _cancelConversionCommand = cancelConversionCommand ?? throw new ArgumentNullException(nameof(cancelConversionCommand));
@@ -86,6 +89,7 @@ namespace Converter.Application.Presenters
             // Subscribe to async view events (нормализованный подход)
             _view.PresetSelected += OnPresetSelected;
             _view.SettingsChanged += OnSettingsChanged;
+            _view.AddFilesRequestedAsync += OnAddFilesRequestedAsync;
             _view.StartConversionRequestedAsync += OnStartConversionRequestedAsync;
             _view.CancelConversionRequestedAsync += OnCancelConversionRequestedAsync;
             _view.FilesDroppedAsync += OnFilesDroppedAsync;
@@ -211,7 +215,9 @@ namespace Converter.Application.Presenters
                 // Добавляем элементы в ViewModel
                 foreach (var item in list)
                 {
-                    _viewModel.QueueItems.Add(QueueItemViewModel.FromModel(item));
+                    var vm = QueueItemViewModel.FromModel(item);
+                    _viewModel.QueueItems.Add(vm);
+                    _ = LoadThumbnailForItemAsync(item, vm, _cancellationTokenSource.Token);
                 }
 
                 _logger.LogInformation("Loaded {Count} items into the queue", items.Count);
@@ -268,9 +274,28 @@ namespace Converter.Application.Presenters
             InvokeOnUiThread(() =>
             {
                 // ViewModel
-                _viewModel.QueueItems.Add(QueueItemViewModel.FromModel(item));
+                var vm = QueueItemViewModel.FromModel(item);
+                _viewModel.QueueItems.Add(vm);
+                _ = LoadThumbnailForItemAsync(item, vm, _cancellationTokenSource.Token);
                 _view.StatusText = $"Added {item.FileName} to queue";
             });
+        }
+
+        private async Task LoadThumbnailForItemAsync(QueueItem item, QueueItemViewModel vm, CancellationToken ct)
+        {
+            try
+            {
+                var bytes = await _thumbnailService.GetThumbnailAsync(item.FilePath, 160, 90, ct).ConfigureAwait(false);
+                vm.ThumbnailBytes = bytes;
+            }
+            catch (OperationCanceledException)
+            {
+                // ignore cancellation
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to generate thumbnail for {FilePath}", item.FilePath);
+            }
         }
 
         private void OnItemUpdated(object? sender, QueueItem item)
@@ -371,12 +396,16 @@ namespace Converter.Application.Presenters
                 // Обновляем прогресс текущего элемента
                 _view.UpdateCurrentProgress(e.Progress);
 
-                // Считаем суммарный прогресс по очереди
+                // Считаем суммарный прогресс по очереди, но только если он изменился достаточно
+                // Это предотвратит слишком частые и дорогие перерасчеты
                 if (_viewModel.QueueItems.Any())
                 {
-                    var total = _viewModel.QueueItems.Average(x => x.Progress);
-                    _view.UpdateTotalProgress((int)total);
-                    _logger.LogDebug("Total progress updated: {Total}%", (int)total);
+                    var newTotalProgress = (int)_viewModel.QueueItems.Average(x => x.Progress);
+                    if (Math.Abs(newTotalProgress - _view.TotalProgress) >= 1) // Обновляем только при изменении на 1% и более
+                    {
+                        _view.UpdateTotalProgress(newTotalProgress);
+                        _logger.LogDebug("Total progress updated: {Total}%", newTotalProgress);
+                    }
                 }
 
                 if (!string.IsNullOrEmpty(e.Status))
@@ -395,11 +424,46 @@ namespace Converter.Application.Presenters
             InvokeOnUiThread(() =>
             {
                 _view.StatusText = "Queue processing completed";
-                _view.IsBusy = false;
                 _view.ShowInfo("All items have been processed");
 				_view.UpdateCurrentProgress(0);
 				_view.UpdateTotalProgress(100);
+                _view.IsBusy = false; // Разблокируем UI и отключаем кнопку "Остановить" после завершения
             });
+        }
+
+        private async Task OnAddFilesRequestedAsync()
+        {
+            try
+            {
+                var files = _filePicker.PickFiles("Выбор файлов для конвертации", "All Files|*.*");
+                
+                if (files == null || files.Length == 0)
+                {
+                    _view.ShowInfo("Файлы не выбраны");
+                    return;
+                }
+
+                _view.IsBusy = true;
+                _view.StatusText = "Добавление файлов в очередь...";
+                
+                await _addFilesCommand
+                    .ExecuteAsync(files, _view.OutputFolder, _view.NamingPattern)
+                    .ConfigureAwait(false);
+
+                await LoadQueueAsync().ConfigureAwait(false);
+
+                _view.StatusText = $"Добавлено файлов: {files.Length}";
+                _view.ShowInfo($"Добавлено файлов в очередь: {files.Length}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in OnAddFilesRequestedAsync");
+                _view.ShowError($"Ошибка при добавлении файлов: {ex.Message}");
+            }
+            finally
+            {
+                _view.IsBusy = false;
+            }
         }
 
         private async Task OnFilesDroppedAsync(object? sender, string[] files)
@@ -526,9 +590,12 @@ namespace Converter.Application.Presenters
                 if (_viewModel.QueueItems.Count == 0)
                 {
                     _view.ShowInfo("Нет файлов для конвертации");
+                    _view.IsBusy = false;
                     return;
                 }
 
+                // Помечаем UI как занятый на всё время обработки очереди.
+                // Пока IsBusy = true, кнопка "Старт" отключена, а "Остановить" активна.
                 _view.IsBusy = true;
                 _view.StatusText = "Запуск конвертации...";
 
@@ -539,22 +606,41 @@ namespace Converter.Application.Presenters
 
                 _view.StatusText = "Конвертация запущена";
                 _view.ShowInfo("Процесс конвертации начат");
+                // Далее IsBusy будет сброшен в OnQueueCompleted или при отмене конвертации
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error starting conversion");
                 _view.ShowError($"Ошибка при запуске конвертации: {ex.Message}");
             }
-            finally
-            {
-                _view.IsBusy = false;
-            }
         }
 
         private async Task OnCancelConversionRequestedAsync()
-        {
-            await OnCancelConversionRequestedAsync(this, EventArgs.Empty);
-        }
+{
+    try
+    {
+        _logger.LogInformation("User requested to cancel all conversions");
+        _view.StatusText = "Остановка конвертации...";
+
+        // Cancel the current operation
+        await _cancelConversionCommand.ExecuteAsync().ConfigureAwait(false);
+
+        // Reset the cancellation token source for future operations
+        ResetProcessingCancellationToken();
+
+        _view.StatusText = "Конвертация отменена";
+        _view.ShowInfo("Конвертация была отменена пользователем");
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Error while canceling conversion");
+        _view.ShowError($"Ошибка при отмене конвертации: {ex.Message}");
+    }
+    finally
+    {
+        _view.IsBusy = false;
+    }
+}
 
         private async Task OnFilesDroppedAsync(string[] files)
         {
@@ -597,7 +683,7 @@ namespace Converter.Application.Presenters
                 // Отписка от асинхронных событий
                 if (_view != null)
                 {
-                    //_view.AddFilesRequestedAsync -= OnAddFilesRequestedAsync;
+                    _view.AddFilesRequestedAsync -= OnAddFilesRequestedAsync;
                     _view.StartConversionRequested -= OnStartConversionRequested;
                     _view.StartConversionRequestedAsync -= OnStartConversionRequestedAsync;
                     _view.CancelConversionRequestedAsync -= OnCancelConversionRequestedAsync;

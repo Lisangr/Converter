@@ -30,7 +30,7 @@ namespace Converter.Infrastructure
             // Add logging
             builder.Logging.ClearProviders();
             builder.Logging.AddDebug();
-            builder.Logging.SetMinimumLevel(LogLevel.Information);
+            builder.Logging.AddFilter("Converter.Infrastructure.Ffmpeg", LogLevel.Trace);
             
             return builder;
         }
@@ -41,7 +41,7 @@ namespace Converter.Infrastructure
             services.AddInfrastructureServices(configuration);
             
             // Application layer services
-            services.AddScoped<IMainView, Form1>();
+            services.AddSingleton<IMainView, Form1>();
             services.AddSingleton<MainPresenter>();
             services.AddSingleton<MainViewModel>();
 
@@ -65,10 +65,6 @@ namespace Converter.Infrastructure
             services.AddSingleton<ICancelConversionCommand, CancelConversionCommand>();
             services.AddSingleton<IRemoveSelectedFilesCommand, RemoveSelectedFilesCommand>();
             services.AddSingleton<IClearQueueCommand, ClearQueueCommand>();
-
-            // Theme services
-            services.AddSingleton<IThemeManager, ThemeManager>();
-            // IThemeService is already registered in AddInfrastructureServices()
 
             // Queue processing - используем ChannelQueueProcessor и отдельный hosted service
             // ChannelQueueProcessor инкапсулирует обработку через Channel<QueueItem>,

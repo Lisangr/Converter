@@ -39,6 +39,8 @@ namespace Converter.Infrastructure
             services.AddSingleton<IFFmpegExecutor, FFmpegExecutor>();
             services.AddSingleton<FfmpegBootstrapService>(); // This is IHostedService
             services.AddSingleton<IThumbnailProvider, ThumbnailProvider>();
+            services.AddSingleton<IThumbnailGenerator, ThumbnailGenerator>();
+            services.AddSingleton<IThumbnailService, Converter.Application.Services.ThumbnailService>();
 
             // Notification infrastructure
             services.AddSingleton<INotificationGateway, NotificationGateway>();

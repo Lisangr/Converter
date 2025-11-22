@@ -74,72 +74,44 @@ namespace Converter
         private static int RunApplication(string[] args)
         {
             using var cts = new CancellationTokenSource();
-
             IHost? host = null;
+            ILogger? logger = null;
 
             try
             {
-                // Создаем Host через HostingExtensions и настраиваем все сервисы в одном контейнере
-                var builder = HostingExtensions.CreateHostBuilder(args);
-
-                builder.Services
-                    .ConfigureApplicationServices(builder.Configuration)
-                    .ConfigureHostedServices();
+                                var builder = HostingExtensions.CreateHostBuilder(args);
+                
+                                // Configure services using extension methods
+                                builder.Services
+                                    .ConfigureApplicationServices(builder.Configuration)
+                                    .ConfigureHostedServices();
+                
 
                 host = builder.Build();
+                var loggerFactory = host.Services.GetService<ILoggerFactory>();
+                logger = loggerFactory?.CreateLogger("Program");
+                
+                logger?.LogInformation("Host built successfully");
                 var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
 
-                // Обработка завершения через IHostApplicationLifetime
                 lifetime.ApplicationStopping.Register(() =>
                 {
+                    logger?.LogInformation("Application is stopping, cancelling operations...");
                     cts.Cancel();
                 });
 
-                // Запускаем фоновые службы (включая FfmpegBootstrapService как IHostedService)
-                host.StartAsync(cts.Token).GetAwaiter().GetResult();
+                // Запускаем хост в фоновом режиме без ожидания
+                logger?.LogInformation("Starting host in background...");
+                _ = host.StartAsync(cts.Token);
+                logger?.LogInformation("Host started in background, continuing with UI initialization");
 
-                // Получаем основное представление и презентер из DI
-                var presenter = host.Services.GetRequiredService<MainPresenter>();
-                var mainView = host.Services.GetRequiredService<IMainView>() as Form1;
-
-                if (mainView == null)
-                {
-                    MessageBox.Show("Failed to resolve main form from DI", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return 1;
-                }
-
-                // Устанавливаем ссылку на презентер в форме (для взаимодействия View 
-                // с презентером через IMainView)
-                mainView.SetMainPresenter(presenter);
-
-                try
-                {
-                    presenter.InitializeAsync().GetAwaiter().GetResult();
-                }
-                catch (OperationCanceledException)
-                {
-                    MessageBox.Show("Application initialization was cancelled.",
-                        "Initialization Cancelled", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return 0;
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Failed to initialize: {ex.GetBaseException().Message}",
-                        "Initialization Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return 1;
-                }
-
-                using (mainView)
-                {
-                    System.Windows.Forms.Application.Run(mainView);
-                }
-
-                // Graceful shutdown будет выполнен в блоке finally ниже
-                return 0;
+                // Продолжаем с инициализацией UI
+                return RunUi(host, cts.Token);
             }
-            catch (OperationCanceledException)
+            catch (Exception ex)
             {
-                return 0;
+                logger?.LogError(ex, "Fatal error during application startup");
+                return 1;
             }
             finally
             {
@@ -158,6 +130,48 @@ namespace Converter
                 {
                     System.Diagnostics.Debug.WriteLine($"Host shutdown error: {ex.Message}");
                 }
+            }
+        }
+
+        private static int RunUi(IHost host, CancellationToken cancellationToken)
+        {
+            var loggerFactory = host.Services.GetService<ILoggerFactory>();
+            var logger = loggerFactory?.CreateLogger("Program") ?? host.Services.GetService<ILogger<object>>();
+            
+            try 
+            {
+                logger?.LogInformation("Resolving MainPresenter...");
+                var presenter = host.Services.GetRequiredService<MainPresenter>();
+                
+                logger?.LogInformation("Resolving IMainView...");
+                if (host.Services.GetRequiredService<IMainView>() is not Form1 mainView)
+                {
+                    logger?.LogError("Failed to resolve main form from DI");
+                    return 1;
+                }
+
+                // Устанавливаем ссылку на презентер в форме (для взаимодействия View 
+                // с презентером через IMainView)
+                logger?.LogInformation("Wiring MainPresenter into Form1 via SetMainPresenter");
+                mainView.SetMainPresenter(presenter);
+
+                logger?.LogInformation("Initializing MainPresenter...");
+                presenter.InitializeAsync().GetAwaiter().GetResult();
+                
+                logger?.LogInformation("Starting UI message loop...");
+                System.Windows.Forms.Application.Run(mainView);
+                
+                return 0;
+            }
+            catch (OperationCanceledException)
+            {
+                logger?.LogWarning("Application initialization was cancelled (OperationCanceledException)");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                logger?.LogError(ex, "Error during UI initialization");
+                return 1;
             }
         }
     }

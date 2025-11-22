@@ -77,6 +77,13 @@ namespace Converter.Application.ViewModels
             set => SetProperty(ref _namingPattern, value);
         }
 
+        private byte[]? _thumbnailBytes;
+        public byte[]? ThumbnailBytes
+        {
+            get => _thumbnailBytes;
+            set => SetProperty(ref _thumbnailBytes, value);
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
 
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)

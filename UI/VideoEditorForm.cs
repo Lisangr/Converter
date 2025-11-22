@@ -120,7 +120,7 @@ namespace Converter.UI
             try
             {
                 mediaInfo = await FFmpeg.GetMediaInfo(currentVideoPath).ConfigureAwait(true);
-                videoPlayer.LoadVideo(currentVideoPath, mediaInfo);
+                await videoPlayer.LoadVideoAsync(currentVideoPath, mediaInfo).ConfigureAwait(true);
                 subtitlesPanel.SetMediaInfo(mediaInfo);
                 trimPanel.SetMediaInfo(mediaInfo);
             }
@@ -131,7 +131,12 @@ namespace Converter.UI
             }
         }
 
-        private async void BtnApply_Click(object? sender, EventArgs e)
+        private void BtnApply_Click(object? sender, EventArgs e)
+        {
+            _ = BtnApplyAsync();
+        }
+
+        private async Task BtnApplyAsync()
         {
             var tempOutput = Path.Combine(Path.GetTempPath(), $"preview_{Guid.NewGuid():N}.mp4");
             try
@@ -141,7 +146,7 @@ namespace Converter.UI
                 if (File.Exists(tempOutput))
                 {
                     var previewInfo = await FFmpeg.GetMediaInfo(tempOutput).ConfigureAwait(true);
-                    videoPlayer.LoadVideo(tempOutput, previewInfo);
+                    await videoPlayer.LoadVideoAsync(tempOutput, previewInfo).ConfigureAwait(true);
                 }
             }
             catch (Exception ex)
@@ -150,7 +155,12 @@ namespace Converter.UI
             }
         }
 
-        private async void BtnExport_Click(object? sender, EventArgs e)
+        private void BtnExport_Click(object? sender, EventArgs e)
+        {
+            _ = BtnExportAsync();
+        }
+
+        private async Task BtnExportAsync()
         {
             using var saveDialog = new SaveFileDialog
             {

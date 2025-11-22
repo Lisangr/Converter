@@ -296,4 +296,21 @@ public class QueueItemTests
             Assert.Equal($"/input/{fileName}", item.InputPath);
         }
     }
+
+    [Fact]
+    public void QueueItem_ShouldSupportNamingPattern()
+    {
+        // Arrange
+        var pattern = "{original}-{format}-{resolution}";
+        
+        // Act
+        var item = new QueueItem
+        {
+            NamingPattern = pattern
+        };
+        
+        // Assert
+        Assert.Equal(pattern, item.NamingPattern);
+        Assert.Null(new QueueItem().NamingPattern); // Default should be null
+    }
 }

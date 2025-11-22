@@ -86,6 +86,9 @@ namespace Converter.Application.Abstractions
         
         /// <summary>Текст статуса для отображения в интерфейсе</summary>
         string StatusText { get; set; }
+        
+        /// <summary>Общий прогресс конвертации</summary>
+        int TotalProgress { get; set; }
 
         // ===== МЕТОДЫ УВЕДОМЛЕНИЙ =====
         
@@ -131,6 +134,10 @@ namespace Converter.Application.Abstractions
         
         /// <summary>Асинхронно вызывает событие ClearAllFilesRequested</summary>
         Task RaiseClearAllFilesRequestedAsync();
+
+        /// <summary>Обновляет статус, связанный с FFmpeg (например, прогресс загрузки).</summary>
+        /// <param name="message">Текст статуса.</param>
+        void UpdateFfmpegStatus(string message);
 
         /// <summary>
         /// Выполняет указанное действие в контексте UI-потока представления.

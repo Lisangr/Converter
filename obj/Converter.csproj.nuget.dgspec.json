@@ -116,7 +116,7 @@
             },
             "Xabe.FFmpeg.Downloader": {
               "target": "Package",
-              "version": "[5.1.0, )"
+              "version": "[6.0.2, )"
             },
             "coverlet.collector": {
               "include": "Runtime, Build, Native, ContentFiles, Analyzers, BuildTransitive",

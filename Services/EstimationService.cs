@@ -149,6 +149,25 @@ namespace Converter.Services
                 return cached;
 
             var fi = new FileInfo(path);
+            // Гарантируем, что Xabe.FFmpeg знает, где искать бинарники FFmpeg/ffprobe.
+            // Используем ту же пользовательскую папку, что и FfmpegBootstrapService:
+            // %LocalAppData%/Converter/ffmpeg
+            try
+            {
+                var baseDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Converter",
+                    "ffmpeg");
+                if (Directory.Exists(baseDir))
+                {
+                    FFmpeg.SetExecutablesPath(baseDir);
+                }
+            }
+            catch
+            {
+                // Если не удалось выставить путь, полагаемся на уже сконфигурированный FFmpeg
+            }
+
             var media = await FFmpeg.GetMediaInfo(path);
             ct.ThrowIfCancellationRequested();
             var v = media.VideoStreams?.FirstOrDefault();

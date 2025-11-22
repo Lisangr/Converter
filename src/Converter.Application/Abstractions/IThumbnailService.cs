@@ -22,7 +22,8 @@ public interface IThumbnailGenerator
 public interface IThumbnailService
 {
     /// <summary>
-    /// Получает миниатюру видео.
+    /// Получает миниатюру видео в виде массива байт.
+    /// Application-слой не зависит от System.Drawing и передаёт сырые данные выше.
     /// </summary>
-    Task<Stream> GetThumbnailAsync(string videoPath, int width, int height);
+    Task<byte[]> GetThumbnailAsync(string videoPath, int width, int height, CancellationToken ct = default);
 }

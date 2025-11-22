@@ -13,6 +13,8 @@ namespace Converter.Infrastructure.Ffmpeg
     {
         private readonly string? _ffmpegPath;
         private readonly ILogger<FFmpegExecutor>? _logger;
+        private Process? _currentProcess;
+        private readonly object _processLock = new object();
         private bool _disposed = false;
 
         public FFmpegExecutor(string? ffmpegPath = null, ILogger<FFmpegExecutor>? logger = null)
@@ -55,9 +57,10 @@ namespace Converter.Infrastructure.Ffmpeg
         {
             try
             {
-                var exe = ResolveFfmpegExecutable();
-                if (exe == null)
+                var ffprobeExe = ResolveFfprobeExecutable();
+                if (ffprobeExe == null)
                 {
+                    _logger?.LogWarning("FFprobe executable not found for duration probe.");
                     return null;
                 }
 
@@ -65,10 +68,11 @@ namespace Converter.Infrastructure.Ffmpeg
 
                 var startInfo = new ProcessStartInfo
                 {
-                    FileName = exe,
+                    FileName = ffprobeExe,
                     Arguments = args,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
+                    RedirectStandardInput = true, // Added: Redirect Standard Input
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     WindowStyle = ProcessWindowStyle.Hidden
@@ -77,6 +81,7 @@ namespace Converter.Infrastructure.Ffmpeg
                 using var process = new Process { StartInfo = startInfo };
                 process.Start();
                 var output = await process.StandardOutput.ReadToEndAsync().ConfigureAwait(false);
+                var errorOutput = await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
                 await process.WaitForExitAsync(ct).ConfigureAwait(false);
 
                 if (double.TryParse(output.Trim().Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var seconds))
@@ -253,12 +258,13 @@ namespace Converter.Infrastructure.Ffmpeg
                 Arguments = arguments,
                 RedirectStandardError = true,
                 RedirectStandardOutput = true,
+                RedirectStandardInput = true, // Added: Redirect Standard Input
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden
             };
 
-            using var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
+            using var process = new Process { StartInfo = startInfo, EnableRaisingEvents = false };
             var output = new StringWriter();
             var error = new StringWriter();
 
@@ -302,18 +308,115 @@ namespace Converter.Infrastructure.Ffmpeg
                 }
             };
 
-            var tcs = new TaskCompletionSource<ProcessResult>();
-
             // Фоновая задача, которая оценивает прогресс по прошедшему времени относительно длительности файла
             System.Threading.CancellationTokenSource? progressCts = null;
 
-            process.Exited += (_, _) =>
+            // Устанавливаем текущий процесс для отслеживания
+            lock (_processLock)
             {
+                if (_disposed) throw new ObjectDisposedException(nameof(FFmpegExecutor));
+                _currentProcess = process;
+            }
+
+            try
+            {
+                _logger?.LogInformation("Starting FFmpeg process: FileName='{FileName}', Arguments='{Arguments}'", startInfo.FileName, startInfo.Arguments);
+                process.Start();
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+
+                // Запускаем фоновый таймер прогресса ТОЛЬКО после старта процесса,
+                // иначе process.HasExited будет true и цикл сразу завершится.
+                if (progress != null)
+                {
+                    progressCts = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    var token = progressCts.Token;
+
+                    var stopwatch = new System.Diagnostics.Stopwatch();
+
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            stopwatch.Start();
+                            while (!token.IsCancellationRequested && !process.HasExited)
+                            {
+                                double percent;
+                                var elapsed = stopwatch.Elapsed.TotalSeconds;
+
+                                if (totalDurationSeconds.HasValue && totalDurationSeconds.Value > 0.1)
+                                {
+                                    percent = Math.Min(99.0, Math.Max(0.0, elapsed / totalDurationSeconds.Value * 100.0));
+                                }
+                                else
+                                {
+                                    // Синтетический прогресс, если не удалось узнать длительность файла
+                                    // Проверяем, если lastReportedPercent уже достиг 99, то не увеличиваем дальше, дожидаясь 100% при выходе
+                                    if (lastReportedPercent < 99.0)
+                                    {
+                                        percent = Math.Min(99.0, lastReportedPercent + 1.0);
+                                    }
+                                    else
+                                    {
+                                        percent = lastReportedPercent;
+                                    }
+                                }
+
+                                if (percent - lastReportedPercent >= 0.5)
+                                {
+                                    lastReportedPercent = percent;
+                                    try { progress.Report(percent); } catch { }
+                                }
+
+                                await Task.Delay(200, token).ConfigureAwait(false);
+                            }
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            // Нормально при отмене
+                        }
+                        catch
+                        {
+                            // Ошибки фона прогресса не должны падать весь процесс
+                        }
+                    }, CancellationToken.None);
+                }
+
+                using var registration = ct.Register(() =>
+                {
+                    try
+                    {
+                        lock (_processLock)
+                        {
+                            if (_currentProcess != null && !_currentProcess.HasExited)
+                            {
+                                _logger?.LogInformation("Terminating FFmpeg process due to cancellation");
+                                try
+                                {
+                                    _currentProcess.Kill(entireProcessTree: true);
+                                    _logger?.LogInformation("FFmpeg process terminated");
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger?.LogError(ex, "Error terminating FFmpeg process");
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogError(ex, "Error in cancellation callback");
+                    }
+                });
+
+                await process.WaitForExitAsync(ct).ConfigureAwait(false);
+
+                _logger?.LogInformation("FFmpeg process exited with code {ExitCode}", process.ExitCode);
+
                 try
                 {
                     if (progress != null)
                     {
-                        // По факту завершения процесса выставляем 100%
                         if (lastReportedPercent < 100)
                         {
                             try { progress.Report(100); } catch { }
@@ -330,75 +433,22 @@ namespace Converter.Infrastructure.Ffmpeg
                     progressCts?.Dispose();
                 }
 
-                tcs.TrySetResult(new ProcessResult
+                return new ProcessResult
                 {
                     ExitCode = process.ExitCode,
                     Output = output.ToString(),
                     Error = error.ToString()
-                });
-            };
-
-            process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-
-            // Запускаем фоновый таймер прогресса ТОЛЬКО после старта процесса,
-            // иначе process.HasExited будет true и цикл сразу завершится.
-            if (progress != null)
-            {
-                progressCts = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(ct);
-                var token = progressCts.Token;
-
-                var stopwatch = new System.Diagnostics.Stopwatch();
-
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        stopwatch.Start();
-                        while (!token.IsCancellationRequested && !process.HasExited)
-                        {
-                            double percent;
-                            var elapsed = stopwatch.Elapsed.TotalSeconds;
-
-                            if (totalDurationSeconds.HasValue && totalDurationSeconds.Value > 0.1)
-                            {
-                                percent = Math.Min(99.0, Math.Max(0.0, elapsed / totalDurationSeconds.Value * 100.0));
-                            }
-                            else
-                            {
-                                // Синтетический прогресс, если не удалось узнать длительность файла
-                                percent = Math.Min(99.0, lastReportedPercent + 1.0);
-                            }
-
-                            if (percent - lastReportedPercent >= 0.5)
-                            {
-                                lastReportedPercent = percent;
-                                try { progress.Report(percent); } catch { }
-                            }
-
-                            await Task.Delay(200, token).ConfigureAwait(false);
-                        }
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        // Нормально при отмене
-                    }
-                    catch
-                    {
-                        // Ошибки фона прогресса не должны падать весь процесс
-                    }
-                }, CancellationToken.None);
+                };
             }
-
-            using (ct.Register(() => 
+            finally
             {
-                try { process.Kill(); } 
-                catch { /* Ignore */ }
-                tcs.TrySetCanceled(ct);
-            }))
-            {
-                return await tcs.Task.ConfigureAwait(false);
+                lock (_processLock)
+                {
+                    if (_currentProcess == process)
+                    {
+                        _currentProcess = null;
+                    }
+                }
             }
         }
 
@@ -453,13 +503,93 @@ namespace Converter.Infrastructure.Ffmpeg
             return fallbackExeName;
         }
 
+        private string? ResolveFfprobeExecutable()
+        {
+            // 1) Explicit path provided via constructor (can be file or directory)
+            if (!string.IsNullOrWhiteSpace(_ffmpegPath))
+            {
+                try
+                {
+                    if (Directory.Exists(_ffmpegPath))
+                    {
+                        var exeName = OperatingSystem.IsWindows() ? "ffprobe.exe" : "ffprobe";
+                        var candidate = Path.Combine(_ffmpegPath, exeName);
+                        if (File.Exists(candidate))
+                        {
+                            return candidate;
+                        }
+                    }
+                    else if (File.Exists(_ffmpegPath))
+                    {
+                        // If ffmpegPath is a file, assume ffprobe is in the same directory
+                        var dir = Path.GetDirectoryName(_ffmpegPath);
+                        if (dir != null)
+                        {
+                            var exeName = OperatingSystem.IsWindows() ? "ffprobe.exe" : "ffprobe";
+                            var candidate = Path.Combine(dir, exeName);
+                            if (File.Exists(candidate))
+                            {
+                                return candidate;
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // Fallback to other strategies
+                }
+            }
+
+            // 2) Per-user location used by FfmpegBootstrapService (assume ffprobe is alongside ffmpeg)
+            try
+            {
+                var baseDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Converter",
+                    "ffmpeg");
+                var exeName = OperatingSystem.IsWindows() ? "ffprobe.exe" : "ffprobe";
+                var localExe = Path.Combine(baseDir, exeName);
+                if (File.Exists(localExe))
+                {
+                    return localExe;
+                }
+            }
+            catch
+            {
+                // Ignore and fall back to PATH
+            }
+
+            // 3) Let OS resolve from PATH
+            var fallbackExeName = OperatingSystem.IsWindows() ? "ffprobe.exe" : "ffprobe";
+            return fallbackExeName;
+        }
+
         protected virtual void Dispose(bool disposing)
         {
             if (!_disposed)
             {
                 if (disposing)
                 {
-                    // Add any cleanup if needed
+                    lock (_processLock)
+                    {
+                        if (_currentProcess != null && !_currentProcess.HasExited)
+                        {
+                            try
+                            {
+                                _logger?.LogInformation("Terminating FFmpeg process during disposal");
+                                _currentProcess.Kill(entireProcessTree: true);
+                                _logger?.LogInformation("FFmpeg process terminated during disposal");
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger?.LogError(ex, "Error terminating FFmpeg process during disposal");
+                            }
+                            finally
+                            {
+                                _currentProcess = null;
+                            }
+                        }
+                    }
                 }
                 _disposed = true;
             }

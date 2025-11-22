@@ -33,6 +33,7 @@ public class MainPresenterTests
         var progressReporter = new Mock<IProgressReporter>();
         var filePicker = new Mock<IFilePicker>();
         var conversionSettingsService = new Mock<IConversionSettingsService>();
+        var thumbnailService = new Mock<IThumbnailService>();
         var addFilesCommand = new Mock<IAddFilesCommand>();
         var startConversionCommand = new Mock<IStartConversionCommand>();
         var cancelConversionCommand = new Mock<ICancelConversionCommand>();
@@ -49,6 +50,7 @@ public class MainPresenterTests
             progressReporter.Object,
             filePicker.Object,
             conversionSettingsService.Object,
+            thumbnailService.Object,
             addFilesCommand.Object,
             startConversionCommand.Object,
             cancelConversionCommand.Object,
@@ -80,6 +82,7 @@ public class MainPresenterTests
         var progressReporter = new Mock<IProgressReporter>();
         var filePicker = new Mock<IFilePicker>();
         var conversionSettingsService = new Mock<IConversionSettingsService>();
+        var thumbnailService = new Mock<IThumbnailService>();
         var addFilesCommand = new Mock<IAddFilesCommand>();
         var startConversionCommand = new Mock<IStartConversionCommand>();
         var cancelConversionCommand = new Mock<ICancelConversionCommand>();
@@ -101,6 +104,7 @@ public class MainPresenterTests
             progressReporter.Object,
             filePicker.Object,
             conversionSettingsService.Object,
+            thumbnailService.Object,
             addFilesCommand.Object,
             startConversionCommand.Object,
             cancelConversionCommand.Object,
@@ -135,6 +139,7 @@ public class MainPresenterTests
         var progressReporter = new Mock<IProgressReporter>();
         var filePicker = new Mock<IFilePicker>();
         var conversionSettingsService = new Mock<IConversionSettingsService>();
+        var thumbnailService = new Mock<IThumbnailService>();
         var addFilesCommand = new Mock<IAddFilesCommand>();
         var startConversionCommand = new Mock<IStartConversionCommand>();
         var cancelConversionCommand = new Mock<ICancelConversionCommand>();
@@ -151,6 +156,7 @@ public class MainPresenterTests
             progressReporter.Object,
             filePicker.Object,
             conversionSettingsService.Object,
+            thumbnailService.Object,
             addFilesCommand.Object,
             startConversionCommand.Object,
             cancelConversionCommand.Object,
@@ -183,6 +189,7 @@ public class MainPresenterTests
         var progressReporter = new Mock<IProgressReporter>();
         var filePicker = new Mock<IFilePicker>();
         var conversionSettingsService = new Mock<IConversionSettingsService>();
+        var thumbnailService = new Mock<IThumbnailService>();
         var addFilesCommand = new Mock<IAddFilesCommand>();
         var startConversionCommand = new Mock<IStartConversionCommand>();
         var cancelConversionCommand = new Mock<ICancelConversionCommand>();
@@ -199,6 +206,7 @@ public class MainPresenterTests
             progressReporter.Object,
             filePicker.Object,
             conversionSettingsService.Object,
+            thumbnailService.Object,
             addFilesCommand.Object,
             startConversionCommand.Object,
             cancelConversionCommand.Object,
