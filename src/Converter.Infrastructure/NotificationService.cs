@@ -3,10 +3,10 @@ using System.Threading.Tasks;
 using Converter.Application.Abstractions;
 using Converter.Domain.Models;
 
-namespace Converter.Application.Services;
+namespace Converter.Infrastructure;
 
 /// <summary>
-/// Сервис уведомлений.
+/// Сервис уведомлений, реализующий INotificationService поверх INotificationGateway.
 /// </summary>
 public class NotificationService : INotificationService
 {
@@ -32,13 +32,13 @@ public class NotificationService : INotificationService
     {
         var percentage = total > 0 ? (current * 100 / total) : 0;
         var message = $"Progress: {percentage}%";
-        
+
         _ = Task.Run(async () => await _gateway.ShowInfoAsync(message, "Conversion Progress"));
     }
 
     public void ResetProgressNotifications()
     {
-        // Заглушка для тестов
+        // Заглушка для тестов / будущей реализации
     }
 
     public Converter.Domain.Models.NotificationOptions GetSettings()
@@ -49,7 +49,7 @@ public class NotificationService : INotificationService
 
     public void UpdateSettings(Converter.Domain.Models.NotificationOptions settings)
     {
-        // Заглушка для тестов
+        // Заглушка для тестов / будущего сохранения настроек
     }
 
     public void Dispose()

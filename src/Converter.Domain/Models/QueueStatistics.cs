@@ -1,6 +1,6 @@
 using System;
 
-namespace Converter.Application.Models;
+namespace Converter.Domain.Models;
 
 public class QueueStatistics
 {

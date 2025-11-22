@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Converter.Application.Models;
+namespace Converter.Domain.Models;
 
 public static class TimelineUtils
 {

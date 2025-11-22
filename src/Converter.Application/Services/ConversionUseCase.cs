@@ -36,7 +36,7 @@ namespace Converter.Application.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public async Task<Converter.Application.Models.ConversionResult> ExecuteAsync(
+        public async Task<ConversionResult> ExecuteAsync(
             QueueItem item, 
             IProgress<int>? progress = null, 
             CancellationToken cancellationToken = default)
@@ -110,7 +110,7 @@ namespace Converter.Application.Services
                         _logger.LogInformation("Successfully converted item {ItemId} to {OutputPath}",
                             item.Id, outputPath);
 
-                        return new Converter.Application.Models.ConversionResult
+                        return new ConversionResult
                         {
                             Success = true,
                             OutputFileSize = size ?? 0,
@@ -121,7 +121,7 @@ namespace Converter.Application.Services
                     {
                         item.Status = ConversionStatus.Failed;
                         _logger.LogError("Conversion failed for item {ItemId}: {Error}", item.Id, outcome.ErrorMessage);
-                        return new Converter.Application.Models.ConversionResult
+                        return new ConversionResult
                         {
                             Success = false,
                             ErrorMessage = outcome.ErrorMessage
@@ -147,7 +147,7 @@ namespace Converter.Application.Services
                 item.Status = ConversionStatus.Failed;
                 item.ErrorMessage = ex.Message;
                 _logger.LogError(ex, "Error converting item {ItemId}", item.Id);
-                return new Converter.Application.Models.ConversionResult
+                return new ConversionResult
                 {
                     Success = false,
                     ErrorMessage = ex.Message

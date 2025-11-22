@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Converter.Application.Abstractions;
 
-namespace Converter.Application.Services;
+namespace Converter.Infrastructure;
 
 /// <summary>
 /// Реализация IConversionSettingsService на базе ISettingsStore.
@@ -27,16 +27,13 @@ public sealed class ConversionSettingsService : IConversionSettingsService
         var app = await _settingsStore.GetAppSettingsAsync(ct).ConfigureAwait(false);
         var prefs = await _settingsStore.GetUserPreferencesAsync(ct).ConfigureAwait(false);
 
-        // Ffmpeg path из AppSettings
         _current.FfmpegPath = app.FfmpegPath ?? string.Empty;
 
-        // Папка вывода: сначала LastUsedOutputFolder, потом DefaultOutputFolder
         _current.OutputFolder =
             !string.IsNullOrWhiteSpace(prefs.LastUsedOutputFolder)
                 ? prefs.LastUsedOutputFolder
                 : (app.DefaultOutputFolder ?? string.Empty);
 
-        // Шаблон имени: отдельный пользовательский setting с дефолтом
         var naming = await _settingsStore
             .GetSettingAsync("Conversion.NamingPattern", "{original}_converted", ct)
             .ConfigureAwait(false);
@@ -47,7 +44,6 @@ public sealed class ConversionSettingsService : IConversionSettingsService
 
     public async Task SaveAsync(CancellationToken ct = default)
     {
-        // Обновляем AppSettings и UserPreferences на основе текущих значений
         var app = await _settingsStore.GetAppSettingsAsync(ct).ConfigureAwait(false);
         var prefs = await _settingsStore.GetUserPreferencesAsync(ct).ConfigureAwait(false);
 

@@ -22,6 +22,7 @@ using Converter.Services.UIServices;
 using Converter.UI;
 using Converter.UI.Controls;
 using Converter.UI.Dialogs;
+using Converter.Infrastructure;
 
 namespace Converter
 {
@@ -30,8 +31,6 @@ namespace Converter
         private SplitContainer splitContainerMain = null!;
         private Panel panelLeftTop = null!;
         private FlowLayoutPanel filesPanel = null!;
-        private DragDropPanel? _dragDropPanel;
-        private readonly List<QueueItem> _conversionHistory = new();
         private Converter.Domain.Models.NotificationOptions _notificationSettings = new();
 
         // Button fields - initialized in UI building methods
@@ -191,9 +190,9 @@ namespace Converter
         private void BuildLeftPanel()
         {
             // Top toolbar
-            panelLeftTop = new Panel 
-            { 
-                Dock = DockStyle.Top, 
+            panelLeftTop = new Panel
+            {
+                Dock = DockStyle.Top,
                 Height = 50,
                 BackColor = Color.FromArgb(250, 250, 255),
                 Padding = new Padding(10, 10, 10, 5)
@@ -269,8 +268,8 @@ namespace Converter
                 }
             };
 
-            filesPanel.DragEnter += Panel_DragEnter;
-            filesPanel.DragDrop += Panel_DragDrop;
+            filesPanel.DragEnter += FilesPanel_DragEnter;
+            filesPanel.DragDrop += FilesPanel_DragDrop;
 
             var leftContent = new TableLayoutPanel
             {
@@ -281,17 +280,8 @@ namespace Converter
             leftContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 240F));
             leftContent.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
-            _dragDropPanel = new DragDropPanel(_themeService)
-            {
-                Dock = DockStyle.Fill,
-                AutoScroll = true,
-                Margin = new Padding(5)
-            };
-            _dragDropPanel.FilesAdded += OnDragDropPanelFilesAdded;
-            _dragDropPanel.FileRemoved += OnDragDropPanelFileRemoved;
-
-            leftContent.Controls.Add(_dragDropPanel, 0, 0);
-            leftContent.Controls.Add(filesPanel, 0, 1);
+            leftContent.Controls.Add(filesPanel, 0, 0);
+            leftContent.SetRowSpan(filesPanel, 2);
 
             splitContainerMain.Panel1.Controls.Add(leftContent);
             splitContainerMain.Panel1.Controls.Add(panelLeftTop);
@@ -309,7 +299,7 @@ namespace Converter
                 if (files != null && files.Length > 0)
                 {
                     // 1. Обновляем визуальное представление файловой панели
-                    AddFilesToList(files, syncDragDropPanel: false);
+                    AddFilesToList(files);
 
                     // 2. Сообщаем Presenter'у через IMainView, чтобы добавить файлы в очередь
                     await RaiseFilesDroppedAsync(files).ConfigureAwait(false);
@@ -341,23 +331,21 @@ namespace Converter
             {
                 // Используем единый путь удаления, который синхронизирует
                 // выделение и инициирует сценарий удаления через Presenter
-                RemoveFileFromList(fileItem, syncDragDropPanel: false);
+                RemoveFileFromList(fileItem);
             }
 
             // Обновляем состояние UI
             UpdateEditorButtonState();
             UpdateShareButtonState();
-        }        
+        }
 
         private void OnOpenEditorClick(object? sender, EventArgs e)
         {
-            if (_dragDropPanel == null)
-            {
-                MessageBox.Show("Панель файлов не инициализирована", "Ошибка");
-                return;
-            }
+            var files = filesPanel.Controls
+                .OfType<FileListItem>()
+                .Select(item => item.FilePath)
+                .ToArray();
 
-            var files = _dragDropPanel.GetFilePaths();
             if (files.Length == 0)
             {
                 MessageBox.Show("Сначала добавьте видео файл!", "Внимание");
@@ -384,9 +372,9 @@ namespace Converter
 
         private void BuildRightPanel()
         {
-            var panel = new Panel 
-            { 
-                Dock = DockStyle.Fill, 
+            var panel = new Panel
+            {
+                Dock = DockStyle.Fill,
                 Padding = new Padding(10),
                 BackColor = Color.FromArgb(250, 250, 255)
             };
@@ -504,7 +492,7 @@ namespace Converter
                 HeaderText = "Статус",
                 FillWeight = 20
             });
-            
+
             // Progress column with custom formatting
             var progressColumn = new DataGridViewTextBoxColumn
             {
@@ -513,7 +501,7 @@ namespace Converter
                 FillWeight = 10
             };
             _queueGrid.Columns.Add(progressColumn);
-            
+
             _queueGrid.Columns.Add(new DataGridViewTextBoxColumn
             {
                 DataPropertyName = nameof(Converter.Application.ViewModels.QueueItemViewModel.ErrorMessage),
@@ -713,16 +701,16 @@ namespace Converter
 
             // Resolution
             var groupRes = new GroupBox { Left = 10, Top = y, Width = 470, Height = 110, Text = "Разрешение" };
-            
+
             rbUsePreset = new RadioButton { Left = 15, Top = 25, Width = 180, Text = "Стандартное разрешение", Checked = true };
             rbUsePercent = new RadioButton { Left = 15, Top = 55, Width = 200, Text = "Масштаб (% от оригинала)" };
-            
+
             cbPreset = CreateComboBox(230, 22, 120);
             cbPreset.Items.AddRange(new object[] { "360p", "480p", "576p", "720p", "1080p", "1440p", "2160p (4K)" });
-            
+
             nudPercent = new NumericUpDown { Left = 230, Top = 52, Width = 80, Minimum = 10, Maximum = 200, Value = 100, Enabled = false };
 
-            rbUsePreset.CheckedChanged += (s, e) => 
+            rbUsePreset.CheckedChanged += (s, e) =>
             {
                 cbPreset.Enabled = rbUsePreset.Checked;
                 nudPercent.Enabled = !rbUsePreset.Checked;
@@ -768,7 +756,7 @@ namespace Converter
                 "{original}_{codec}_{resolution}"
             });
             if (cbNamingPattern.Items.Count > 1) cbNamingPattern.SelectedIndex = 1;
-            cbNamingPattern.SelectedIndexChanged += (s, e) => 
+            cbNamingPattern.SelectedIndexChanged += (s, e) =>
             {
                 NamingPattern = cbNamingPattern.SelectedItem?.ToString();
                 DebounceEstimate();
@@ -858,11 +846,11 @@ namespace Converter
             panel.Controls.AddRange(new Control[] { txtOutputFolder, btnBrowse });
             y += 70;
 
-            chkCreateConvertedFolder = new CheckBox 
-            { 
-                Left = 10, 
-                Top = y, 
-                Width = 300, 
+            chkCreateConvertedFolder = new CheckBox
+            {
+                Left = 10,
+                Top = y,
+                Width = 300,
                 Text = "Создать подпапку 'Converted'",
                 Checked = true
             };
@@ -871,10 +859,10 @@ namespace Converter
 
             panel.Controls.Add(CreateLabel("Шаблон имени:", 10, y));
             cbNamingPattern = CreateComboBox(140, y, 250);
-            cbNamingPattern.Items.AddRange(new object[] 
-            { 
-                "{original}", 
-                "{original}_converted", 
+            cbNamingPattern.Items.AddRange(new object[]
+            {
+                "{original}",
+                "{original}_converted",
                 "{original}_{format}",
                 "{original}_{codec}_{resolution}"
             });
@@ -905,23 +893,23 @@ namespace Converter
             y += 70;
 
             panel.Controls.Add(CreateLabel("Потоков кодирования:", 10, y));
-            nudThreads = new NumericUpDown 
-            { 
-                Left = 180, 
-                Top = y, 
-                Width = 80, 
-                Minimum = 0, 
-                Maximum = 16, 
-                Value = 0 
+            nudThreads = new NumericUpDown
+            {
+                Left = 180,
+                Top = y,
+                Width = 80,
+                Minimum = 0,
+                Maximum = 16,
+                Value = 0
             };
             panel.Controls.Add(nudThreads);
             y += 40;
 
-            chkHardwareAccel = new CheckBox 
-            { 
-                Left = 10, 
-                Top = y, 
-                Width = 300, 
+            chkHardwareAccel = new CheckBox
+            {
+                Left = 10,
+                Top = y,
+                Width = 300,
                 Text = "Аппаратное ускорение (если доступно)"
             };
             panel.Controls.Add(chkHardwareAccel);
@@ -931,9 +919,9 @@ namespace Converter
 
         private void BuildBottomPanel()
         {
-            panelBottom = new Panel 
-            { 
-                Dock = DockStyle.Bottom, 
+            panelBottom = new Panel
+            {
+                Dock = DockStyle.Bottom,
                 Height = 300, // Increased height to accommodate both sections
                 BackColor = Color.FromArgb(250, 250, 255),
                 Padding = new Padding(10)
@@ -950,9 +938,9 @@ namespace Converter
             };
 
             // Top panel - Progress section
-            var panelTop = new Panel 
-            { 
-                Dock = DockStyle.Fill, 
+            var panelTop = new Panel
+            {
+                Dock = DockStyle.Fill,
                 BackColor = Color.White,
                 Padding = new Padding(10)
             };
@@ -984,7 +972,7 @@ namespace Converter
             btnStart.ForeColor = Color.White;
             btnStart.FlatAppearance.BorderSize = 0;
             // IMainView: запуск конвертации
-            btnStart.Click += async (s, e) => 
+            btnStart.Click += async (s, e) =>
             {
                 try
                 {
@@ -1045,24 +1033,24 @@ namespace Converter
             });
 
             // Bottom panel - Log section
-            var panelBottomLog = new Panel 
-            { 
+            var panelBottomLog = new Panel
+            {
                 Dock = DockStyle.Fill,
                 BackColor = Color.White,
                 Padding = new Padding(5)
             };
 
-            groupLog = new GroupBox 
-            { 
-                Dock = DockStyle.Fill, 
+            groupLog = new GroupBox
+            {
+                Dock = DockStyle.Fill,
                 Text = "📋 Журнал операций",
                 Padding = new Padding(5)
             };
-            
-            txtLog = new TextBox 
-            { 
-                Dock = DockStyle.Fill, 
-                Multiline = true, 
+
+            txtLog = new TextBox
+            {
+                Dock = DockStyle.Fill,
+                Multiline = true,
                 ScrollBars = ScrollBars.Both,
                 BackColor = Color.FromArgb(245, 245, 250),
                 Font = new Font("Consolas", 8.5F),
@@ -1236,7 +1224,7 @@ namespace Converter
             if (preset.Width.HasValue || preset.Height.HasValue)
             {
                 rbUsePreset.Checked = true;
-                var map = new Dictionary<int, string> { {360,"360p"},{480,"480p"},{576,"576p"},{720,"720p"},{1080,"1080p"},{1440,"1440p"},{2160,"2160p (4K)"} };
+                var map = new Dictionary<int, string> { { 360, "360p" }, { 480, "480p" }, { 576, "576p" }, { 720, "720p" }, { 1080, "1080p" }, { 1440, "1440p" }, { 2160, "2160p (4K)" } };
                 if (preset.Height.HasValue && map.TryGetValue(preset.Height.Value, out var label))
                 {
                     for (int i = 0; i < cbPreset.Items.Count; i++)
@@ -1299,60 +1287,56 @@ namespace Converter
                 e.Effect = DragDropEffects.Copy;
         }
 
-        private void Form1_DragDrop(object? sender, DragEventArgs e)
+        private async void Form1_DragDrop(object? sender, DragEventArgs e)
         {
-            _ = HandleDragDropAsync(e);
+            await HandleDragDropAsync(e);
         }
 
         private async Task HandleDragDropAsync(DragEventArgs e)
         {
             if (e.Data?.GetData(DataFormats.FileDrop) is string[] files)
             {
-                AddFilesToList(files);
-                await RaiseFilesDroppedAsync(files).ConfigureAwait(false);
-                DebounceEstimate();
+                await AddFilesAndUpdateQueueAsync(files);
             }
         }
 
-        private void ListView_DragEnter(object? sender, DragEventArgs e)
+        private void FilesPanel_DragEnter(object? sender, DragEventArgs e)
         {
             if (e.Data?.GetDataPresent(DataFormats.FileDrop) == true)
                 e.Effect = DragDropEffects.Copy;
         }
 
-        private void ListView_DragDrop(object? sender, DragEventArgs e)
-        {
-            _ = HandleListViewDragDropAsync(e);
-        }
-
-        private async Task HandleListViewDragDropAsync(DragEventArgs e)
+        private async void FilesPanel_DragDrop(object? sender, DragEventArgs e)
         {
             if (e.Data?.GetData(DataFormats.FileDrop) is string[] files)
             {
-                AddFilesToList(files);
-                await RaiseFilesDroppedAsync(files).ConfigureAwait(false);
-                DebounceEstimate();
+                await AddFilesAndUpdateQueueAsync(files);
             }
         }
 
-        private void Panel_DragEnter(object? sender, DragEventArgs e)
+        private async Task AddFilesAndUpdateQueueAsync(string[] files)
         {
-            if (e.Data?.GetDataPresent(DataFormats.FileDrop) == true)
-                e.Effect = DragDropEffects.Copy;
-        }
+            if (files == null || files.Length == 0) return;
 
-        private void Panel_DragDrop(object? sender, DragEventArgs e)
-        {
-            _ = HandlePanelDragDropAsync(e);
-        }
-
-        private async Task HandlePanelDragDropAsync(DragEventArgs e)
-        {
-            if (e.Data?.GetData(DataFormats.FileDrop) is string[] files)
+            try
             {
+                // Add files to the UI
                 AddFilesToList(files);
+
+                // Notify presenter about new files
                 await RaiseFilesDroppedAsync(files).ConfigureAwait(false);
+
+                // Update estimation
                 DebounceEstimate();
+
+                // Update UI state
+                UpdateShareButtonState();
+                UpdateEditorButtonState();
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error handling drag and drop");
+                ShowError($"Ошибка при добавлении файлов: {ex.Message}");
             }
         }
 
@@ -1404,90 +1388,100 @@ namespace Converter
             }
         }
 
-        private async Task AddFilesToList(string[] paths, bool syncDragDropPanel = true)
+        private async Task AddFilesToList(string[] paths)
         {
             foreach (var path in paths)
             {
-                if (!System.IO.File.Exists(path)) continue;
-
-                // Проверяем, не добавлен ли уже такой файл
-                if (filesPanel.Controls.OfType<FileListItem>().Any(item => item.FilePath == path))
+                if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
                     continue;
 
-                var fileItem = new FileListItem(path, _themeService);
-                fileItem.RemoveClicked += (s, e) => RemoveFileFromList(fileItem);
-                fileItem.DoubleClicked += (s, e) => OpenVideoInPlayer(fileItem.FilePath);
+                // Check if file is already added
+                if (filesPanel.Controls.OfType<FileListItem>().Any(item =>
+                    string.Equals(item.FilePath, path, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
 
-                // Синхронизируем выделение элемента файловой панели с очередью
-                fileItem.SelectionChanged += (s, e) => SyncQueueSelectionWithFileItem(fileItem);
+                var fileItem = new FileListItem(path, _themeService)
+                {
+                    Width = filesPanel.Width - 24, // Account for padding and scrollbar
+                    Margin = new Padding(0, 0, 0, 8)
+                };
+
+                // Use the new handler methods
+                fileItem.RemoveClicked += OnFileItemRemoveClicked;
+                fileItem.SelectionChanged += OnFileItemSelectionChanged;
 
                 filesPanel.Controls.Add(fileItem);
 
-                // Асинхронно загружаем миниатюру для элемента списка файлов
+                // Load thumbnail asynchronously
                 _ = LoadThumbnailForFileItemAsync(fileItem, path);
-
-                if (syncDragDropPanel)
-                {
-                    _dragDropPanel?.AddFiles(new[] { path }, notify: false);
-                }
             }
 
-            AppendLog($"Добавлено файлов: {paths.Length}");
-            DebounceEstimate();
+            // Update UI
+            UpdateShareButtonState();
             UpdateEditorButtonState();
         }
 
         private void ClearAllFiles()
         {
+            // Очищаем панель файлов
+            foreach (Control control in filesPanel.Controls.OfType<FileListItem>().ToList())
+            {
+                control.Dispose();
+            }
+            filesPanel.Controls.Clear();
+        }
+
+        private async void RemoveFileFromList(FileListItem fileItem)
+        {
+            if (fileItem == null) return;
+
             try
             {
-                if (filesPanel != null)
+                // Get the file path before removing
+                string filePath = fileItem.FilePath;
+                if (string.IsNullOrEmpty(filePath)) return;
+
+                // Remove event handlers
+                fileItem.SelectionChanged -= OnFileItemSelectionChanged;
+                fileItem.RemoveClicked -= OnFileItemRemoveClicked;
+
+                // Remove from panel
+                filesPanel.Controls.Remove(fileItem);
+
+                // Notify presenter to remove from queue
+                if (_mainPresenter != null)
                 {
-                    foreach (var item in filesPanel.Controls.OfType<FileListItem>().ToList())
-                    {
-                        filesPanel.Controls.Remove(item);
-                        item.Dispose();
-                    }
+                    // Pass fromView: true to prevent circular reference
+                    await _mainPresenter.RemoveFileFromQueue(filePath, fromView: true);
                 }
 
-                _dragDropPanel?.ClearFiles(notify: false);
+                // Clean up resources
+                fileItem.Dispose();
 
-                UpdateEditorButtonState();
+                // Update UI
                 UpdateShareButtonState();
+                UpdateEditorButtonState();
             }
             catch (Exception ex)
             {
-                AppendLog($"Ошибка при очистке визуального списка файлов: {ex.Message}");
+                _logger?.LogError(ex, "Error removing file from list");
+                ShowError($"Ошибка при удалении файла: {ex.Message}");
             }
         }
 
-        private void RemoveFileFromList(FileListItem item, bool syncDragDropPanel = true)
+        private void OnFileItemRemoveClicked(object? sender, EventArgs e)
         {
-            if (item == null)
+            if (sender is FileListItem fileItem)
             {
-                return;
+                RemoveFileFromList(fileItem);
             }
+        }
 
-            try
-            {
-                if (filesPanel != null)
-                {
-                    filesPanel.Controls.Remove(item);
-                    item.Dispose();
-                }
-
-                if (syncDragDropPanel && _dragDropPanel != null)
-                {
-                    _dragDropPanel.RemoveFile(item.FilePath, notify: false);
-                }
-
-                UpdateEditorButtonState();
-                UpdateShareButtonState();
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"Ошибка при удалении файла из списка: {ex.Message}");
-            }
+        private void OnFileItemSelectionChanged(object? sender, EventArgs e)
+        {
+            UpdateShareButtonState();
         }
 
         private void OpenVideoInPlayer(string filePath)
@@ -1554,7 +1548,7 @@ namespace Converter
             return int.TryParse(sanitized, out var parsed) ? parsed : null;
         }
 
-        
+
 
         private void cbFormat_SelectedIndexChanged(object? sender, EventArgs e)
         {
@@ -1691,7 +1685,7 @@ namespace Converter
                 FailedCount = result.failed,
                 TotalSpaceSaved = CalculateSpaceSaved(successfulItems),
                 TotalProcessingTime = DateTime.Now - startTime,
-                Message = result.failed == 0 
+                Message = result.failed == 0
                     ? $"Успешно конвертировано: {successfulItems.Count} файлов"
                     : $"Успешно: {result.ok} из {result.total}. Ошибок: {result.failed}."
             };
@@ -1754,9 +1748,25 @@ namespace Converter
 
         private void OnShareButtonClick(object? sender, EventArgs e)
         {
-            var successfulItems = _conversionHistory
-                .Where(x => x.Status == ConversionStatus.Completed)
-                .ToList();
+            _ = OnShareButtonClickAsync();
+        }
+
+        private async Task OnShareButtonClickAsync()
+        {
+            List<QueueItem> successfulItems = new List<QueueItem>();
+
+            try
+            {
+                if (_mainPresenter != null)
+                {
+                    successfulItems = await _mainPresenter.GetCompletedItemsAsync().ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowError($"Не удалось получить результаты конвертации для шаринга: {ex.Message}");
+                return;
+            }
 
             if (!successfulItems.Any())
             {
@@ -1790,7 +1800,16 @@ namespace Converter
                 return;
             }
 
-            _btnShare.Enabled = _conversionHistory.Any(x => x.Status == ConversionStatus.Completed);
+            try
+            {
+                var hasCompleted = _queueItemsBinding != null &&
+                                   _queueItemsBinding.Any(x => x.Status == ConversionStatus.Completed);
+                _btnShare.Enabled = hasCompleted;
+            }
+            catch
+            {
+                _btnShare.Enabled = false;
+            }
         }
 
         private void UpdateEditorButtonState()
@@ -1809,7 +1828,7 @@ namespace Converter
             var fileName = System.IO.Path.GetFileName(inputPath);
             AppendLog($"🎬 Начало: {fileName} -> {System.IO.Path.GetFileName(outputPath)}");
 
-            try 
+            try
             {
                 // Ensure input file exists
                 if (!System.IO.File.Exists(inputPath))
@@ -1918,7 +1937,7 @@ namespace Converter
 
                 var conv = FFmpeg.Conversions.New();
                 var finalEstimatedDuration = estimatedDuration; // Захватываем для использования в замыкании
-                
+
                 conv.OnProgress += (s, args) =>
                 {
                     if (cancellationToken.IsCancellationRequested)
@@ -1932,7 +1951,7 @@ namespace Converter
                         var percent = Math.Clamp(args.Percent, 0, 100);
                         progressBarCurrent.Value = (int)percent;
                         progressObserver?.Report(percent);
-                        
+
                         // Вычисляем оставшееся время на основе оценки
                         string timeDisplay;
                         if (finalEstimatedDuration.HasValue && percent > 0 && percent < 100)
@@ -1940,7 +1959,7 @@ namespace Converter
                             var elapsed = finalEstimatedDuration.Value.TotalSeconds * (percent / 100.0);
                             var remaining = finalEstimatedDuration.Value.TotalSeconds - elapsed;
                             var remainingTimeSpan = TimeSpan.FromSeconds(Math.Max(0, remaining));
-                            timeDisplay = remainingTimeSpan.TotalHours >= 1 
+                            timeDisplay = remainingTimeSpan.TotalHours >= 1
                                 ? $"{(int)remainingTimeSpan.TotalHours} ч {remainingTimeSpan.Minutes} мин"
                                 : remainingTimeSpan.TotalMinutes >= 1
                                     ? $"{(int)remainingTimeSpan.TotalMinutes} мин {remainingTimeSpan.Seconds} сек"
@@ -1951,7 +1970,7 @@ namespace Converter
                             // Если оценка недоступна, показываем исходную длительность
                             timeDisplay = args.TotalLength.ToString(@"hh\:mm\:ss");
                         }
-                        
+
                         lblStatusCurrent.Text = $"{fileName}: {percent:F1}% | {timeDisplay}";
                     }));
                 };
@@ -2097,54 +2116,54 @@ namespace Converter
         }
 
         private void btnSavePreset_Click(object? sender, EventArgs e)
-{
-    using var sfd = new SaveFileDialog
-    {
-        Filter = "JSON Preset|*.json|Все файлы|*.*",
-        Title = "Сохранить пресет",
-        DefaultExt = "json",
-        AddExtension = true
-    };
-
-    if (sfd.ShowDialog() == DialogResult.OK)
-    {
-        try
         {
-            var preset = BuildPresetFromUi();
-            _presetService.SavePresetToFile(preset, sfd.FileName);
-            AppendLog($"💾 Пресет сохранен: {System.IO.Path.GetFileName(sfd.FileName)}");
-        }
-        catch (Exception ex)
-        {
-            ShowError($"Ошибка сохранения пресета: {ex.Message}");
-        }
-    }
-}
+            using var sfd = new SaveFileDialog
+            {
+                Filter = "JSON Preset|*.json|Все файлы|*.*",
+                Title = "Сохранить пресет",
+                DefaultExt = "json",
+                AddExtension = true
+            };
 
-private void btnLoadPreset_Click(object? sender, EventArgs e)
-{
-    using var ofd = new OpenFileDialog
-    {
-        Filter = "JSON Preset|*.json|Все файлы|*.*",
-        Title = "Загрузить пресет"
-    };
-
-    if (ofd.ShowDialog() == DialogResult.OK)
-    {
-        try
-        {
-            var preset = _presetService.LoadPresetFromFile(ofd.FileName);
-            ApplyPresetToUi(preset);
-            AppendLog($"📂 Пресет загружен: {System.IO.Path.GetFileName(ofd.FileName)}");
+            if (sfd.ShowDialog() == DialogResult.OK)
+            {
+                try
+                {
+                    var preset = BuildPresetFromUi();
+                    _presetService.SavePresetToFile(preset, sfd.FileName);
+                    AppendLog($"💾 Пресет сохранен: {System.IO.Path.GetFileName(sfd.FileName)}");
+                }
+                catch (Exception ex)
+                {
+                    ShowError($"Ошибка сохранения пресета: {ex.Message}");
+                }
+            }
         }
-        catch (Exception ex)
-        {
-            ShowError($"Ошибка загрузки пресета: {ex.Message}");
-        }
-    }
-}
 
-        
+        private void btnLoadPreset_Click(object? sender, EventArgs e)
+        {
+            using var ofd = new OpenFileDialog
+            {
+                Filter = "JSON Preset|*.json|Все файлы|*.*",
+                Title = "Загрузить пресет"
+            };
+
+            if (ofd.ShowDialog() == DialogResult.OK)
+            {
+                try
+                {
+                    var preset = _presetService.LoadPresetFromFile(ofd.FileName);
+                    ApplyPresetToUi(preset);
+                    AppendLog($"📂 Пресет загружен: {System.IO.Path.GetFileName(ofd.FileName)}");
+                }
+                catch (Exception ex)
+                {
+                    ShowError($"Ошибка загрузки пресета: {ex.Message}");
+                }
+            }
+        }
+
+
 
         private static string FormatFileSize(long bytes)
         {
@@ -2197,7 +2216,7 @@ private void btnLoadPreset_Click(object? sender, EventArgs e)
                     txtLog.BeginInvoke(new Action(() => AppendLog(message)));
                     return;
                 }
-                
+
                 if (txtLog != null)
                 {
                     var timestamp = DateTime.Now.ToString("HH:mm:ss");
@@ -2257,95 +2276,60 @@ private void btnLoadPreset_Click(object? sender, EventArgs e)
             {
                 _estimateDebounceTimer.Stop();
             }
-            
+
             _estimatePending = true;
             _estimateDebounceTimer.Start();
         }
 
         private async Task UpdateEstimateAsync()
         {
+            if (_estimatePanel == null || _mainPresenter == null)
+                return;
+
+            var files = GetCurrentFiles();
+            if (files.Length == 0)
+            {
+                _estimatePanel.ShowCalculating();
+                return;
+            }
+
             try
             {
-                if (_estimatePanel == null) return;
+                // Собираем настройки из UI
+                var settings = CreateConversionSettings();
+                var format = (settings.ContainerFormat ?? "mp4").ToLowerInvariant();
+                var videoCodec = settings.VideoCodec ?? "libx264";
+                var audioCodec = settings.AudioCodec ?? "aac";
+                var audioBitrate = settings.AudioBitrate ?? 128;
+                var crf = settings.Crf ?? 23;
 
-                var files = GetCurrentFiles();
-                if (files.Length == 0)
+                int? targetWidth = null;
+                int? targetHeight = null;
+
+                if (rbUsePreset.Checked && cbPreset.SelectedItem is string preset)
                 {
-                    _estimatePanel.ShowCalculating();
-                    return;
+                    targetHeight = PresetToHeight(preset);
+                }
+                else if (rbUsePercent.Checked)
+                {
+                    targetHeight = null; // Будет рассчитано как процент
                 }
 
-                // Calculate cumulative estimate
-                var totalEstimate = new Converter.Application.Models.ConversionEstimate
+                // Вызываем презентер для оценки
+                var estimate = await _mainPresenter.EstimateConversionAsync(
+                    files,
+                    0, // Автоматический расчет битрейта
+                    targetWidth,
+                    targetHeight,
+                    videoCodec,
+                    chkEnableAudio.Checked,
+                    audioBitrate,
+                    crf,
+                    false); // audioCopy
+
+                if (files.Length > 0)
                 {
-                    InputFileSizeBytes = 0,
-                    EstimatedOutputSizeBytes = 0,
-                    EstimatedDuration = TimeSpan.Zero,
-                    CompressionRatio = 0,
-                    SpaceSavedBytes = 0
-                };
-
-                int processedFiles = 0;
-                foreach (var file in files)
-                {
-                    if (!System.IO.File.Exists(file)) continue;
-
-                    try
-                    {
-                        var settings = CreateConversionSettings();
-                        var format = (settings.ContainerFormat ?? "mp4").ToLowerInvariant();
-                        var videoCodec = settings.VideoCodec ?? "libx264";
-                        var audioCodec = settings.AudioCodec ?? "aac";
-                        var audioBitrate = settings.AudioBitrate ?? 128;
-                        var crf = settings.Crf ?? 23;
-
-                        int? targetWidth = null;
-                        int? targetHeight = null;
-                        
-                        // Resolution handling
-                        if (rbUsePreset.Checked && cbPreset.SelectedItem is string preset)
-                        {
-                            targetHeight = PresetToHeight(preset);
-                        }
-                        else if (rbUsePercent.Checked)
-                        {
-                            // Dynamic scaling based on percentage
-                            targetHeight = null; // Will be calculated as percentage
-                        }
-
-                        var estimate = await _estimationService.EstimateConversion(
-                            file,
-                            0, // Let service determine video bitrate
-                            targetWidth,
-                            targetHeight,
-                            videoCodec,
-                            chkEnableAudio.Checked,
-                            audioBitrate,
-                            crf,
-                            false, // audioCopy - we'll determine this based on codec selection
-                            CancellationToken.None);
-
-                        totalEstimate.InputFileSizeBytes += estimate.InputFileSizeBytes;
-                        totalEstimate.EstimatedOutputSizeBytes += estimate.EstimatedOutputSizeBytes;
-                        totalEstimate.EstimatedDuration = totalEstimate.EstimatedDuration.Add(estimate.EstimatedDuration);
-                        totalEstimate.SpaceSavedBytes += estimate.SpaceSavedBytes;
-                        
-                        processedFiles++;
-                    }
-                    catch (Exception ex)
-                    {
-                        AppendLog($"Ошибка оценки файла {System.IO.Path.GetFileName(file)}: {ex.Message}");
-                    }
-                }
-
-                if (processedFiles > 0)
-                {
-                    // Calculate overall compression ratio
-                    totalEstimate.CompressionRatio = totalEstimate.EstimatedOutputSizeBytes > 0 
-                        ? Math.Min(1.0, Math.Max(0.0, totalEstimate.EstimatedOutputSizeBytes / (double)Math.Max(1, totalEstimate.InputFileSizeBytes)))
-                        : 0;
-
-                    _estimatePanel.UpdateEstimate(totalEstimate);
+                    _estimatePanel.UpdateEstimate(estimate);
                 }
                 else
                 {
@@ -2354,27 +2338,20 @@ private void btnLoadPreset_Click(object? sender, EventArgs e)
             }
             catch (Exception ex)
             {
-                AppendLog($"Ошибка обновления оценки: {ex.Message}");
-                _estimatePanel?.ShowCalculating();
+                _logger?.LogError(ex, "Ошибка обновления оценки");
+                _estimatePanel.ShowCalculating();
             }
         }
 
         private string[] GetCurrentFiles()
         {
-            if (_dragDropPanel != null)
-            {
-                return _dragDropPanel.GetFilePaths();
-            }
-            
             if (filesPanel != null)
             {
                 return filesPanel.Controls
                     .OfType<FileListItem>()
                     .Select(item => item.FilePath)
-                    .Where(path => !string.IsNullOrWhiteSpace(path))
                     .ToArray();
             }
-
             return Array.Empty<string>();
         }
 

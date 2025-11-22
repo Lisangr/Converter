@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Converter.Application.Abstractions;
 using Converter.Application.Services;
 using Converter.Domain.Models;
+using Converter.Infrastructure;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;

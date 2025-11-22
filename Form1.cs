@@ -18,6 +18,7 @@ using Converter.Services;
 using Converter.UI;
 using Converter.UI.Controls;
 using Converter.Application.ViewModels;
+using Converter.Infrastructure;
 
 namespace Converter
 {
@@ -48,6 +49,18 @@ namespace Converter
         public event EventHandler<string[]>? FilesDropped;
         public event EventHandler? RemoveSelectedFilesRequested;
         public event EventHandler? ClearAllFilesRequested;
+
+        public void RemoveFileFromQueue(string filePath)
+        {
+            if (_mainPresenter != null)
+            {
+                _mainPresenter.RemoveFileFromQueue(filePath);
+            }
+            else
+            {
+                AppendLog("Попытка удалить файл из очереди без доступного MainPresenter — операция проигнорирована");
+            }
+        }
 
         // Async events for operations that require asynchronous handling
         public event Func<Task>? AddFilesRequestedAsync;
@@ -100,6 +113,41 @@ namespace Converter
                     PresetSelected?.Invoke(this, value);
                 }
             }
+        }
+
+        public void ShowEstimateCalculating()
+        {
+            RunOnUiThread(() =>
+            {
+                try
+                {
+                    _estimatePanel?.ShowCalculating();
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "Ошибка при отображении состояния расчёта оценки конвертации");
+                }
+            });
+        }
+
+        public void ShowEstimate(ConversionEstimate estimate)
+        {
+            if (estimate == null)
+            {
+                return;
+            }
+
+            RunOnUiThread(() =>
+            {
+                try
+                {
+                    _estimatePanel?.UpdateEstimate(estimate);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "Ошибка при обновлении панели оценки конвертации");
+                }
+            });
         }
 
         // IMainView binding-related properties (bridge to existing UI)
@@ -544,29 +592,6 @@ namespace Converter
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            // Защита от множественных вызовов закрытия
-            if (_closingInProgress)
-            {
-                base.OnFormClosing(e);
-                return;
-            }
-
-            _closingInProgress = true;
-
-            // Мягко уведомляем презентер о запросе завершения работы приложения.
-            // Не блокируем UI-поток ожиданием, чтобы избежать возможных дедлоков.
-            if (_mainPresenter != null)
-            {
-                try
-                {
-                    _ = _mainPresenter.RequestShutdownAsync();
-                }
-                catch
-                {
-                    // Игнорируем ошибки при завершении работы
-                }
-            }
-
             base.OnFormClosing(e);
         }
 

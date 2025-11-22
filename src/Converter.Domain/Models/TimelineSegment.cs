@@ -1,4 +1,4 @@
-namespace Converter.Application.Models;
+namespace Converter.Domain.Models;
 
 public enum SegmentEditMode
 {
@@ -22,5 +22,5 @@ public sealed class TimelineSegment
     }
 
     public override string ToString()
-        => $"{Label ?? "Segment"} [{Start}–{End}] ({Duration})";
+        => $"{Label ?? "Segment"} [{Start}{End}] ({Duration})";
 }

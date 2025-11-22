@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Threading.Tasks;
+using Converter.Application.Models;
 
 namespace Converter.Application.Abstractions
 {
@@ -57,7 +58,7 @@ namespace Converter.Application.Abstractions
         event Func<Task> RemoveSelectedFilesRequestedAsync;
         
         /// <summary>Асинхронное событие запроса на очистку всех файлов</summary>
-        event Func<Task> ClearAllFilesRequestedAsync;
+        event Func<Task>? ClearAllFilesRequestedAsync;
 
         // ===== ОСНОВНЫЕ СВОЙСТВА =====
         
@@ -146,5 +147,19 @@ namespace Converter.Application.Abstractions
         /// </summary>
         /// <param name="action">Действие, которое необходимо выполнить в UI-потоке.</param>
         void RunOnUiThread(Action action);
+
+        /// <summary>
+        /// Переводит UI в состояние ожидания расчёта оценки конвертации.
+        /// Используется для отображения состояния "расчёт" в панели оценки.
+        /// </summary>
+        void ShowEstimateCalculating();
+
+        /// <summary>
+        /// Отображает рассчитанную совокупную оценку конвертации для текущей партии файлов.
+        /// </summary>
+        /// <param name="estimate">Совокупная оценка конвертации.</param>
+        void ShowEstimate(ConversionEstimate estimate);
+
+        void RemoveFileFromQueue(string filePath);
     }
 }

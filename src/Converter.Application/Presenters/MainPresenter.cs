@@ -1,15 +1,16 @@
+using Converter.Application.Abstractions;
+using Converter.Application.Models;
+using Converter.Application.ViewModels;
+using Converter.Domain.Models;
+using Converter.Extensions;
+using Converter.Services;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Converter.Application.Abstractions;
-using Converter.Application.ViewModels;
-using Converter.Domain.Models;
-using Converter.Extensions;
-using Converter.Application.Models;
-using Microsoft.Extensions.Logging;
 
 namespace Converter.Application.Presenters
 {
@@ -34,6 +35,7 @@ namespace Converter.Application.Presenters
         private readonly IRemoveSelectedFilesCommand _removeSelectedFilesCommand;
         private readonly IClearQueueCommand _clearQueueCommand;
         private readonly IApplicationShutdownService _shutdownService;
+        private readonly IConversionEstimationService _estimationService;
         private CancellationTokenSource _cancellationTokenSource;
 
         public MainPresenter(
@@ -53,6 +55,7 @@ namespace Converter.Application.Presenters
             IRemoveSelectedFilesCommand removeSelectedFilesCommand,
             IClearQueueCommand clearQueueCommand,
             IApplicationShutdownService shutdownService,
+            IConversionEstimationService estimationService,
             ILogger<MainPresenter> logger)
         {
             _view = view ?? throw new ArgumentNullException(nameof(view));
@@ -71,6 +74,7 @@ namespace Converter.Application.Presenters
             _removeSelectedFilesCommand = removeSelectedFilesCommand ?? throw new ArgumentNullException(nameof(removeSelectedFilesCommand));
             _clearQueueCommand = clearQueueCommand ?? throw new ArgumentNullException(nameof(clearQueueCommand));
             _shutdownService = shutdownService ?? throw new ArgumentNullException(nameof(shutdownService));
+            _estimationService = estimationService ?? throw new ArgumentNullException(nameof(estimationService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cancellationTokenSource = new CancellationTokenSource();
 
@@ -78,7 +82,7 @@ namespace Converter.Application.Presenters
             _queueRepository.ItemAdded += OnItemAdded;
             _queueRepository.ItemUpdated += OnItemUpdated;
             _queueRepository.ItemRemoved += OnItemRemoved;
-            
+
             // Subscribe to queue processor events for progress updates
             _queueProcessor.ItemStarted += OnItemStarted;
             _queueProcessor.ItemCompleted += OnItemCompleted;
@@ -108,22 +112,22 @@ namespace Converter.Application.Presenters
             {
                 _view.IsBusy = true;
                 _view.StatusText = "Initializing application...";
-                
+
                 // Load settings and presets in parallel
                 await Task.WhenAll(
                     LoadSettingsAsync(),
                     LoadPresetsAsync()
                 );
-                
+
                 // Initialize UI bindings - используем тот же список, что и в ViewModel
                 _view.QueueItemsBinding = _viewModel.QueueItems;
-                
+
                 // Load initial queue (это перезаполнит _viewModel.QueueItems)
                 await LoadQueueAsync();
-                
+
                 // Убеждаемся, что связь всё ещё установлена после LoadQueueAsync
                 _view.QueueItemsBinding = _viewModel.QueueItems;
-                
+
                 _view.StatusText = "Ready";
                 _logger.LogInformation("MainPresenter initialized successfully");
             }
@@ -214,7 +218,7 @@ namespace Converter.Application.Presenters
 
                 // Очищаем текущую очередь в ViewModel
                 _viewModel.QueueItems.Clear();
-                
+
                 // Добавляем элементы в ViewModel
                 foreach (var item in list)
                 {
@@ -380,12 +384,12 @@ namespace Converter.Application.Presenters
             InvokeOnUiThread(() =>
             {
                 _logger.LogDebug("Progress changed for item {ItemId}: {Progress}%", e.Item.Id, e.Progress);
-                
+
                 // Обновляем ViewModel
                 var vm = _viewModel.QueueItems.FirstOrDefault(q => q.Id == e.Item.Id);
                 if (vm != null)
                 {
-                    _logger.LogDebug("Updating ViewModel {ItemId}: Progress={Progress}, Status={Status}", 
+                    _logger.LogDebug("Updating ViewModel {ItemId}: Progress={Progress}, Status={Status}",
                         vm.Id, e.Progress, e.Item.Status);
                     vm.Progress = e.Progress;
                     vm.Status = e.Item.Status;
@@ -426,12 +430,63 @@ namespace Converter.Application.Presenters
         {
             InvokeOnUiThread(() =>
             {
-                _view.StatusText = "Queue processing completed";
-                _view.ShowInfo("All items have been processed");
-				_view.UpdateCurrentProgress(0);
-				_view.UpdateTotalProgress(100);
-                _view.IsBusy = false; // Разблокируем UI и отключаем кнопку "Остановить" после завершения
+                // Check if there are still items in the queue that are being processed
+                var allItems = _viewModel.QueueItems.ToList();
+                var completedItems = allItems.Where(i => i.Status == ConversionStatus.Completed).ToList();
+                var failedItems = allItems.Where(i => i.Status == ConversionStatus.Failed).ToList();
+
+                var total = allItems.Count;
+                var ok = completedItems.Count;
+                var failed = failedItems.Count;
+
+                // Only show completion message if all items are processed
+                if (ok + failed >= total)
+                {
+                    var spaceSavedBytes = CalculateSpaceSaved(completedItems);
+                    var spaceSavedText = FormatFileSize(spaceSavedBytes);
+
+                    _view.StatusText = "Queue processing completed";
+                    _view.ShowInfo($"Конвертация завершена. Успешно: {ok}/{total}. Ошибки: {failed}. Сэкономлено места: {spaceSavedText}.");
+                    _view.UpdateCurrentProgress(0);
+                    _view.UpdateTotalProgress(100);
+                    _view.IsBusy = false; // Unlock UI and disable "Stop" button after completion
+                }
             });
+        }
+
+        private static long CalculateSpaceSaved(IEnumerable<QueueItemViewModel> items)
+        {
+            long total = 0;
+            foreach (var item in items)
+            {
+                var inputSize = item.FileSizeBytes;
+                var outputSize = item.OutputFileSizeBytes ?? inputSize;
+                if (outputSize < inputSize)
+                {
+                    total += inputSize - outputSize;
+                }
+            }
+
+            return total;
+        }
+
+        private static string FormatFileSize(long bytes)
+        {
+            if (bytes <= 0)
+            {
+                return "0 B";
+            }
+
+            string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+            double len = bytes;
+            int order = 0;
+            while (len >= 1024 && order < sizes.Length - 1)
+            {
+                order++;
+                len /= 1024;
+            }
+
+            return $"{len:0.##} {sizes[order]}";
         }
 
         private async Task OnAddFilesRequestedAsync()
@@ -439,7 +494,7 @@ namespace Converter.Application.Presenters
             try
             {
                 var files = _filePicker.PickFiles("Выбор файлов для конвертации", "All Files|*.*");
-                
+
                 if (files == null || files.Length == 0)
                 {
                     _view.ShowInfo("Файлы не выбраны");
@@ -448,7 +503,7 @@ namespace Converter.Application.Presenters
 
                 _view.IsBusy = true;
                 _view.StatusText = "Добавление файлов в очередь...";
-                
+
                 await _addFilesCommand
                     .ExecuteAsync(files, _view.OutputFolder, _view.NamingPattern)
                     .ConfigureAwait(false);
@@ -537,7 +592,7 @@ namespace Converter.Application.Presenters
             }
 
             _clearingInProgress = true;
-            
+
             try
             {
                 if (_viewModel.QueueItems.Count == 0)
@@ -589,7 +644,7 @@ namespace Converter.Application.Presenters
             try
             {
                 _logger.LogInformation("Start conversion requested");
-                
+
                 if (_viewModel.QueueItems.Count == 0)
                 {
                     _view.ShowInfo("Нет файлов для конвертации");
@@ -619,31 +674,31 @@ namespace Converter.Application.Presenters
         }
 
         private async Task OnCancelConversionRequestedAsync()
-{
-    try
-    {
-        _logger.LogInformation("User requested to cancel all conversions");
-        _view.StatusText = "Остановка конвертации...";
+        {
+            try
+            {
+                _logger.LogInformation("User requested to cancel all conversions");
+                _view.StatusText = "Остановка конвертации...";
 
-        // Cancel the current operation
-        await _cancelConversionCommand.ExecuteAsync().ConfigureAwait(false);
+                // Cancel the current operation
+                await _cancelConversionCommand.ExecuteAsync().ConfigureAwait(false);
 
-        // Reset the cancellation token source for future operations
-        ResetProcessingCancellationToken();
+                // Reset the cancellation token source for future operations
+                ResetProcessingCancellationToken();
 
-        _view.StatusText = "Конвертация отменена";
-        _view.ShowInfo("Конвертация была отменена пользователем");
-    }
-    catch (Exception ex)
-    {
-        _logger.LogError(ex, "Error while canceling conversion");
-        _view.ShowError($"Ошибка при отмене конвертации: {ex.Message}");
-    }
-    finally
-    {
-        _view.IsBusy = false;
-    }
-}
+                _view.StatusText = "Конвертация отменена";
+                _view.ShowInfo("Конвертация была отменена пользователем");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error while canceling conversion");
+                _view.ShowError($"Ошибка при отмене конвертации: {ex.Message}");
+            }
+            finally
+            {
+                _view.IsBusy = false;
+            }
+        }
 
         private async Task OnFilesDroppedAsync(string[] files)
         {
@@ -725,6 +780,38 @@ namespace Converter.Application.Presenters
             await OnClearAllFilesRequestedAsync(this, EventArgs.Empty);
         }
 
+        public async Task RemoveFileFromQueue(string filePath, bool fromView = false)
+        {
+            try
+            {
+                var viewModelItem = _viewModel.QueueItems.FirstOrDefault(x => x.FilePath == filePath);
+                if (viewModelItem != null)
+                {
+                    // Convert ViewModel to Domain Model
+                    var domainItem = new QueueItem
+                    {
+                        Id = viewModelItem.Id,
+                        FilePath = viewModelItem.FilePath,
+                        FileSizeBytes = viewModelItem.FileSizeBytes,
+                        Status = viewModelItem.Status,
+                        Progress = viewModelItem.Progress,
+                        ErrorMessage = viewModelItem.ErrorMessage,
+                        OutputPath = viewModelItem.OutputPath,
+                        OutputFileSizeBytes = viewModelItem.OutputFileSizeBytes,
+                        IsStarred = viewModelItem.IsStarred,
+                        Priority = viewModelItem.Priority,
+                        NamingPattern = viewModelItem.NamingPattern
+                    };
+                    
+                    await RemoveItemAsync(domainItem, fromView);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error removing file from queue: {FilePath}", filePath);
+            }
+        }
+
         /// <summary>
         /// Запрашивает мягкое завершение работы приложения:
         /// останавливает конвертацию/очередь и затем инициирует shutdown хоста.
@@ -761,6 +848,97 @@ namespace Converter.Application.Presenters
                 _shutdownService.RequestShutdown();
             }
         }
+
+        public async Task<List<QueueItem>> GetCompletedItemsAsync()
+        {
+            var items = await _queueRepository.GetAllAsync().ConfigureAwait(false);
+            return items
+                .Where(x => x.Status == ConversionStatus.Completed)
+                .ToList();
+        }
+
+        public async Task<ConversionEstimate> EstimateConversionAsync(
+        string[] files,
+        int targetBitrateKbps,
+        int? targetWidth,
+        int? targetHeight,
+        string videoCodec,
+        bool includeAudio,
+        int? audioBitrateKbps,
+        int? crf = null,
+        bool audioCopy = false)
+        {
+            var totalEstimate = new ConversionEstimate
+            {
+                InputFileSizeBytes = 0,
+                EstimatedOutputSizeBytes = 0,
+                EstimatedDuration = TimeSpan.Zero,
+                CompressionRatio = 0,
+                SpaceSavedBytes = 0
+            };
+
+            int processedFiles = 0;
+            foreach (var file in files)
+            {
+                if (!System.IO.File.Exists(file))
+                    continue;
+
+                try
+                {
+                    var estimate = await _estimationService.EstimateConversion(
+                        file,
+                        targetBitrateKbps,
+                        targetWidth,
+                        targetHeight,
+                        videoCodec,
+                        includeAudio,
+                        audioBitrateKbps,
+                        crf,
+                        audioCopy,
+                        CancellationToken.None);
+
+                    totalEstimate.InputFileSizeBytes += estimate.InputFileSizeBytes;
+                    totalEstimate.EstimatedOutputSizeBytes += estimate.EstimatedOutputSizeBytes;
+                    totalEstimate.EstimatedDuration = totalEstimate.EstimatedDuration.Add(estimate.EstimatedDuration);
+                    totalEstimate.SpaceSavedBytes += estimate.SpaceSavedBytes;
+                    processedFiles++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"Ошибка оценки файла {System.IO.Path.GetFileName(file)}");
+                }
+            }
+
+            if (processedFiles > 0)
+            {
+                totalEstimate.CompressionRatio = totalEstimate.EstimatedOutputSizeBytes > 0
+                    ? Math.Min(1.0, Math.Max(0.0, totalEstimate.EstimatedOutputSizeBytes / (double)Math.Max(1, totalEstimate.InputFileSizeBytes)))
+                    : 0;
+            }
+
+            return totalEstimate;
+        }
+
+
+        public async Task RemoveItemAsync(QueueItem item, bool fromView = false, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                // Only notify the view if this call didn't originate from the view
+                if (!fromView)
+                {
+                    _view.RemoveFileFromQueue(item.FilePath);
+                }
+
+                // Remove the item from the queue processor using IQueueProcessor.RemoveItemAsync
+                await _queueProcessor.RemoveItemAsync(item, cancellationToken);
+                _logger.LogInformation("Successfully removed item {ItemId} from queue processor.", item.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error removing item {ItemId} from queue", item.Id);
+                _view.ShowError($"Error removing file '{item.FileName}' from queue: {ex.Message}");
+            }
+        }
     }
 }
-

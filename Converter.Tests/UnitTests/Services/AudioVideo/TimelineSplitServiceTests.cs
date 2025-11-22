@@ -1,6 +1,6 @@
 using System;
 using System.Threading.Tasks;
-using Converter.Application.Models;
+using Converter.Domain.Models;
 using Converter.Services;
 using FluentAssertions;
 using Xunit;

@@ -30,6 +30,9 @@ namespace Converter.Application.Abstractions
         /// <summary>Событие завершения всей очереди</summary>
         event EventHandler QueueCompleted;
         
+        /// <summary>Событие обновления элемента очереди</summary>
+        event EventHandler<QueueItem> ItemUpdated;
+        
         // ===== СОСТОЯНИЕ ПРОЦЕССОРА =====
         
         /// <summary>Указывает, выполняется ли обработка очереди</summary>
@@ -84,7 +87,11 @@ namespace Converter.Application.Abstractions
         /// <summary>
         /// Возвращает все элементы очереди как асинхронный поток.
         /// </summary>
-        System.Collections.Generic.IAsyncEnumerable<QueueItem> GetItemsAsync(CancellationToken cancellationToken = default);
+        IAsyncEnumerable<QueueItem> GetItemsAsync(CancellationToken cancellationToken = default);
+
+        /// <summary>Удаляет указанный элемент из очереди.</summary>
+        /// <param name="item">Элемент для удаления</param>
+        Task RemoveItemAsync(QueueItem item, CancellationToken cancellationToken = default);
         
 
     }

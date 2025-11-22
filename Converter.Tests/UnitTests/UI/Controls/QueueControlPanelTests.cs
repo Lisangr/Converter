@@ -2,7 +2,6 @@ using System;
 using System.Reflection;
 using System.Threading;
 using System.Windows.Forms;
-using Converter.Application.Models;
 using Converter.Domain.Models;
 using Converter.UI.Controls;
 using FluentAssertions;

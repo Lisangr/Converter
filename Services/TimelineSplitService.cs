@@ -1,4 +1,5 @@
 using Converter.Application.Models;
+using Converter.Domain.Models;
 using Xabe.FFmpeg;
 
 namespace Converter.Services;

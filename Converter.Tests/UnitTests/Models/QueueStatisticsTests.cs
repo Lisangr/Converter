@@ -1,5 +1,5 @@
 using Xunit;
-using Converter.Application.Models;
+using Converter.Domain.Models;
 
 namespace Converter.Tests.UnitTests.Models;
 

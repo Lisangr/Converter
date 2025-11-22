@@ -1,7 +1,7 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
-using Converter.Application.Models;
+using Converter.Domain.Models;
 
 namespace Converter.UI.Dialogs;
 

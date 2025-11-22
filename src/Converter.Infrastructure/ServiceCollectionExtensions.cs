@@ -11,7 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using FileService = Converter.Application.Services.FileService;
 using IFileService = Converter.Application.Services.IFileService;
-using NotificationService = Converter.Application.Services.NotificationService;
+using NotificationService = Converter.Infrastructure.NotificationService;
 using ThumbnailProvider = Converter.Infrastructure.Ffmpeg.ThumbnailProvider;
 
 namespace Converter.Infrastructure
@@ -56,7 +56,7 @@ namespace Converter.Infrastructure
             services.AddSingleton<IConversionSettingsService, ConversionSettingsService>();
             
             // Share service
-            services.AddSingleton<IShareService, ShareService>();
+            services.AddSingleton<IShareService, Converter.Infrastructure.ShareService>();
             
             // File services
             services.AddSingleton<IFileService, FileService>(); // application-level file service

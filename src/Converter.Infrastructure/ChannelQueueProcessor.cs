@@ -1,13 +1,13 @@
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using Converter.Application.Abstractions;
+using Converter.Application.Services;
 using Converter.Domain.Models;
 using Microsoft.Extensions.Logging;
 
-namespace Converter.Application.Services
+namespace Converter.Infrastructure
 {
     public class ChannelQueueProcessor : IQueueProcessor, IAsyncDisposable, IDisposable
     {
@@ -23,12 +23,37 @@ namespace Converter.Application.Services
         private bool _isProcessing;
         private bool _disposed;
 
-        public event EventHandler<QueueItem> ItemStarted;
-        public event EventHandler<QueueItem> ItemCompleted;
-        public event EventHandler<QueueItem> ItemFailed;
-        public event EventHandler<QueueProgressEventArgs> ProgressChanged;
-        public event EventHandler QueueCompleted;
-        public event EventHandler<QueueItemEventArgs> ItemUpdated;
+        public event EventHandler<QueueItem>? ItemStarted;
+        public event EventHandler<QueueItem>? ItemCompleted;
+        public event EventHandler<QueueItem>? ItemFailed;
+        public event EventHandler<QueueProgressEventArgs>? ProgressChanged;
+        public event EventHandler? QueueCompleted;
+        public event EventHandler<QueueItem>? ItemUpdated;
+
+        public async Task RemoveItemAsync(QueueItem item, CancellationToken cancellationToken = default)
+        {
+            if (_disposed)
+                return;
+
+            try
+            {
+                // Remove from persistent storage
+                await _queueRepository.RemoveAsync(item.Id).ConfigureAwait(false);
+                _logger.LogInformation("Item {ItemId} removed from repository.", item.Id);
+
+                // Signal UI for removal (or cancellation if it was in progress)
+                // We can't directly remove from the channel, so we'll mark it and let the processor skip it if running.
+                item.Status = ConversionStatus.Cancelled; // Mark as cancelled/removed
+                item.ErrorMessage = "Removed by user";
+                _ = _uiDispatcher.InvokeAsync(async () => ItemUpdated?.Invoke(this, item));
+                _logger.LogInformation("Signaled UI to remove item {ItemId}", item.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error removing item {ItemId} from queue processor", item.Id);
+                throw; // Re-throw to indicate failure
+            }
+        }
 
         public bool IsRunning => _isProcessing && !_itemChannel.Reader.Completion.IsCompleted;
         public bool IsPaused => _pauseEvent.IsPaused;
@@ -53,7 +78,6 @@ namespace Converter.Application.Services
                 SingleWriter = false
             });
 
-            // Подписываемся на события только для получения уведомлений о новых элементах
             _queueRepository.ItemAdded += OnItemAdded;
         }
 
@@ -83,7 +107,6 @@ namespace Converter.Application.Services
                     await foreach (var item in _itemChannel.Reader.ReadAllAsync(token).ConfigureAwait(false))
                     {
                         if (token.IsCancellationRequested) break;
-                        // Учитываем паузу
                         await _pauseEvent.WaitAsync(token).ConfigureAwait(false);
                         if (token.IsCancellationRequested) break;
 
@@ -120,7 +143,6 @@ namespace Converter.Application.Services
                     }
                     catch (OperationCanceledException)
                     {
-                        // Expected when cancellation is requested
                     }
                     catch (Exception ex)
                     {
@@ -128,7 +150,6 @@ namespace Converter.Application.Services
                     }
                 }
 
-                // Clear the channel from any remaining items
                 while (_itemChannel.Reader.TryRead(out var item))
                 {
                     try
@@ -136,7 +157,7 @@ namespace Converter.Application.Services
                         if (item.Status != ConversionStatus.Completed && item.Status != ConversionStatus.Failed)
                         {
                             item.Status = ConversionStatus.Cancelled;
-                            _ = _uiDispatcher.InvokeAsync(async () => ItemUpdated?.Invoke(this, new QueueItemEventArgs(item)));
+                            _ = _uiDispatcher.InvokeAsync(async () => ItemUpdated?.Invoke(this, item));
                         }
                     }
                     catch (Exception ex)
@@ -145,9 +166,9 @@ namespace Converter.Application.Services
                     }
                 }
 
-                _isProcessing = false; // Reset the flag
+                _isProcessing = false;
                 _logger.LogInformation("Queue processor stopped");
-                QueueCompleted?.Invoke(this, EventArgs.Empty); // Ensure QueueCompleted is invoked
+                QueueCompleted?.Invoke(this, EventArgs.Empty);
             }
             catch (Exception ex)
             {
@@ -156,25 +177,26 @@ namespace Converter.Application.Services
             }
         }
 
-        public async Task PauseProcessingAsync()
+        public Task PauseProcessingAsync()
         {
             if (!IsRunning || IsPaused)
-                return;
+                return Task.CompletedTask;
 
             _logger.LogInformation("Pausing queue processor");
             _pauseEvent.Reset();
             _logger.LogInformation("Queue processor paused");
+            return Task.CompletedTask;
         }
 
-        public async Task ResumeProcessingAsync()
+        public Task ResumeProcessingAsync()
         {
             if (!IsRunning || !IsPaused)
-                return;
+                return Task.CompletedTask;
 
             _logger.LogInformation("Resuming queue processor");
             _pauseEvent.Set();
             _logger.LogInformation("Queue processor resumed");
-            await Task.CompletedTask;
+            return Task.CompletedTask;
         }
 
         public async Task ProcessItemAsync(QueueItem item, CancellationToken cancellationToken = default)
@@ -184,14 +206,12 @@ namespace Converter.Application.Services
 
             try
             {
-                // Атомарная операция: пытаемся зарезервировать элемент для обработки
                 if (!await _queueStore.TryReserveAsync(item.Id, cancellationToken).ConfigureAwait(false))
                 {
                     _logger.LogDebug("Item {ItemId} was already reserved or processed, skipping", item.Id);
                     return;
                 }
 
-                // Обновляем кэш через IQueueRepository для генерации событий
                 item.Status = ConversionStatus.Processing;
                 item.StartedAt = DateTime.UtcNow;
                 await _queueRepository.UpdateAsync(item).ConfigureAwait(false);
@@ -201,14 +221,12 @@ namespace Converter.Application.Services
 
                 var progress = new Progress<int>(p =>
                 {
-                    // Обновляем прогресс в кэше для UI
                     item.Progress = p;
                     _ = _queueRepository.UpdateAsync(item).ContinueWith(t =>
                     {
                         if (t.IsFaulted) _logger.LogError(t.Exception, "Error updating queue item progress in repository");
-                    }, TaskScheduler.Default); // Выполняем продолжение в пуле потоков, чтобы не блокировать UI
+                    }, TaskScheduler.Default);
 
-                    // Уведомляем UI
                     _ = _uiDispatcher.InvokeAsync(async () => ProgressChanged?.Invoke(this, new QueueProgressEventArgs(item, p)));
                 });
 
@@ -216,12 +234,10 @@ namespace Converter.Application.Services
 
                 if (result.Success)
                 {
-                    // Атомарно завершаем элемент в IQueueStore
                     await _queueStore
                         .CompleteAsync(item.Id, ConversionStatus.Completed, null, result.OutputFileSize, DateTime.UtcNow, cancellationToken)
                         .ConfigureAwait(false);
 
-                    // Обновляем кэш и генерируем событие
                     item.Status = ConversionStatus.Completed;
                     item.CompletedAt = DateTime.UtcNow;
                     item.OutputFileSizeBytes = result.OutputFileSize;
@@ -232,12 +248,10 @@ namespace Converter.Application.Services
                 }
                 else
                 {
-                    // Атомарно завершаем элемент с ошибкой
                     await _queueStore
                         .CompleteAsync(item.Id, ConversionStatus.Failed, result.ErrorMessage, null, DateTime.UtcNow, cancellationToken)
                         .ConfigureAwait(false);
 
-                    // Обновляем кэш и генерируем событие
                     item.Status = ConversionStatus.Failed;
                     item.ErrorMessage = result.ErrorMessage;
                     await _queueRepository.UpdateAsync(item).ConfigureAwait(false);
@@ -253,12 +267,10 @@ namespace Converter.Application.Services
             }
             catch (Exception ex)
             {
-                // Завершаем элемент с ошибкой в IQueueStore
                 await _queueStore
                     .CompleteAsync(item.Id, ConversionStatus.Failed, ex.Message, null, DateTime.UtcNow, cancellationToken)
                     .ConfigureAwait(false);
 
-                // Обновляем кэш
                 item.Status = ConversionStatus.Failed;
                 item.ErrorMessage = ex.Message;
                 await _queueRepository.UpdateAsync(item).ConfigureAwait(false);
@@ -277,12 +289,10 @@ namespace Converter.Application.Services
             await WriteItemToChannelAsync(item, cancellationToken).ConfigureAwait(false);
         }
 
-        public System.Collections.Generic.IAsyncEnumerable<QueueItem> GetItemsAsync(CancellationToken cancellationToken = default)
+        public IAsyncEnumerable<QueueItem> GetItemsAsync(CancellationToken cancellationToken = default)
         {
             return _itemChannel.Reader.ReadAllAsync(cancellationToken);
         }
-
-
 
         private async Task WriteItemToChannelAsync(QueueItem item, CancellationToken cancellationToken = default)
         {
@@ -295,7 +305,6 @@ namespace Converter.Application.Services
                 {
                     try
                     {
-                        // Use WriteAsync instead of TryWrite for better backpressure handling
                         await _itemChannel.Writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
                         return;
                     }
@@ -312,7 +321,6 @@ namespace Converter.Application.Services
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "Error writing item {ItemId} to channel", item.Id);
-                        // Add a small delay before retry to prevent tight loop on error
                         await Task.Delay(100, cancellationToken).ConfigureAwait(false);
                     }
                 }
@@ -321,7 +329,6 @@ namespace Converter.Application.Services
             }
             catch (OperationCanceledException)
             {
-                // Expected during shutdown
             }
             catch (Exception ex)
             {
@@ -332,10 +339,6 @@ namespace Converter.Application.Services
         private void OnItemAdded(object? sender, QueueItem item)
         {
             if (item == null || _disposed) return;
-            
-            // Ранее здесь автоматически запускалась обработка очереди при добавлении первого элемента.
-            // Теперь старт обработки производится явно через IStartConversionCommand / MainPresenter,
-            // поэтому здесь только добавляем элемент в канал, если обработка уже запущена.
 
             if (_isProcessing && item.Status == ConversionStatus.Pending)
             {
@@ -353,8 +356,6 @@ namespace Converter.Application.Services
             _disposed = true;
 
             _queueRepository.ItemAdded -= OnItemAdded;
-
-            // Stop processing and clean up before disposing
             await StopProcessingAsync().ConfigureAwait(false);
 
             _processingCts?.Dispose();
@@ -368,13 +369,5 @@ namespace Converter.Application.Services
         }
     }
 
-    public class QueueItemEventArgs : EventArgs
-    {
-        public QueueItem Item { get; }
-
-        public QueueItemEventArgs(QueueItem item)
-        {
-            Item = item ?? throw new ArgumentNullException(nameof(item));
-        }
-    }
+    
 }

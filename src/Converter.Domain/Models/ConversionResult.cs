@@ -1,4 +1,4 @@
-namespace Converter.Application.Models;
+namespace Converter.Domain.Models;
 
 public class ConversionResult
 {

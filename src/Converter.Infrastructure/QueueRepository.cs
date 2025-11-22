@@ -1,11 +1,3 @@
-/// <summary>
-/// Реализация <see cref="IQueueRepository"/> как кэш/наблюдатель для очереди элементов конвертации.
-/// Особенности:
-/// - Простой кэш в памяти, синхронизированный с IQueueStore
-/// - Делегирует все операции в IQueueStore (единственный источник правды)
-/// - Генерирует события для UI об изменениях в очереди
-/// - Не содержит бизнес-логики, только кэширование и делегирование
-/// </summary>
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -16,8 +8,16 @@ using Converter.Application.Abstractions;
 using Converter.Domain.Models;
 using Microsoft.Extensions.Logging;
 
-namespace Converter.Application.Services
+namespace Converter.Infrastructure
 {
+    /// <summary>
+    /// Реализация <see cref="IQueueRepository"/> как кэш/наблюдатель для очереди элементов конвертации.
+    /// Особенности:
+    /// - Простой кэш в памяти, синхронизированный с IQueueStore
+    /// - Делегирует все операции в IQueueStore (единственный источник правды)
+    /// - Генерирует события для UI об изменениях в очереди
+    /// - Не содержит бизнес-логики, только кэширование и делегирование
+    /// </summary>
     public class QueueRepository : IQueueRepository
     {
         private readonly ConcurrentDictionary<Guid, QueueItem> _cache = new();
@@ -26,9 +26,9 @@ namespace Converter.Application.Services
         private readonly SemaphoreSlim _initLock = new(1, 1);
         private bool _initialized;
 
-        public event EventHandler<QueueItem> ItemAdded;
-        public event EventHandler<QueueItem> ItemUpdated;
-        public event EventHandler<Guid> ItemRemoved;
+        public event EventHandler<QueueItem>? ItemAdded;
+        public event EventHandler<QueueItem>? ItemUpdated;
+        public event EventHandler<Guid>? ItemRemoved;
 
         public QueueRepository(ILogger<QueueRepository> logger, IQueueStore queueStore)
         {
@@ -48,8 +48,7 @@ namespace Converter.Application.Services
                     return;
 
                 _logger.LogInformation("Initializing queue repository cache from persistent store");
-                
-                // Загружаем все элементы из IQueueStore в кэш
+
                 await foreach (var item in _queueStore.GetAllAsync().ConfigureAwait(false))
                 {
                     _cache[item.Id] = item;
@@ -69,11 +68,10 @@ namespace Converter.Application.Services
             if (item == null) throw new ArgumentNullException(nameof(item));
 
             await EnsureInitializedAsync().ConfigureAwait(false);
-            
-            // Делегируем в IQueueStore и обновляем кэш
+
             await _queueStore.AddAsync(item).ConfigureAwait(false);
             _cache[item.Id] = item;
-            
+
             _logger.LogDebug("Added item {ItemId} to queue", item.Id);
             ItemAdded?.Invoke(this, item);
         }
@@ -82,7 +80,7 @@ namespace Converter.Application.Services
         {
             if (items == null) throw new ArgumentNullException(nameof(items));
             await EnsureInitializedAsync().ConfigureAwait(false);
-            
+
             var itemList = items.ToList();
             foreach (var item in itemList)
             {
@@ -95,11 +93,10 @@ namespace Converter.Application.Services
             if (item == null) throw new ArgumentNullException(nameof(item));
 
             await EnsureInitializedAsync().ConfigureAwait(false);
-            
-            // Делегируем в IQueueStore и обновляем кэш
+
             await _queueStore.UpdateAsync(item).ConfigureAwait(false);
             _cache[item.Id] = item;
-            
+
             _logger.LogDebug("Updated item {ItemId} in cache", item.Id);
             ItemUpdated?.Invoke(this, item);
         }
@@ -107,16 +104,15 @@ namespace Converter.Application.Services
         public async Task RemoveAsync(Guid id)
         {
             await EnsureInitializedAsync().ConfigureAwait(false);
-            
-            // Делегируем в IQueueStore и обновляем кэш
+
             await _queueStore.RemoveAsync(id).ConfigureAwait(false);
             _cache.TryRemove(id, out _);
-            
+
             _logger.LogDebug("Removed item {ItemId} from queue", id);
             ItemRemoved?.Invoke(this, id);
         }
 
-        public async Task<QueueItem> GetByIdAsync(Guid id)
+        public async Task<QueueItem?> GetByIdAsync(Guid id)
         {
             await EnsureInitializedAsync().ConfigureAwait(false);
             _cache.TryGetValue(id, out var item);
@@ -147,13 +143,12 @@ namespace Converter.Application.Services
         public async Task RemoveRangeAsync(IEnumerable<Guid> ids)
         {
             if (ids == null) throw new ArgumentNullException(nameof(ids));
-            
+
             var idList = ids.ToList();
             if (idList.Count == 0) return;
 
             await EnsureInitializedAsync().ConfigureAwait(false);
 
-            // Делегируем в IQueueStore и обновляем кэш
             foreach (var id in idList)
             {
                 await _queueStore.RemoveAsync(id).ConfigureAwait(false);

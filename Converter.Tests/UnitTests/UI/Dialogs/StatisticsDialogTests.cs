@@ -2,7 +2,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
-using Converter.Application.Models;
+using Converter.Domain.Models;
 using Converter.UI.Dialogs;
 using FluentAssertions;
 using Xunit;

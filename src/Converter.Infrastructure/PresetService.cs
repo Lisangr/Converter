@@ -1,9 +1,12 @@
-using System.Text.Json;
+using System;
 using System.IO;
+using System.Text.Json;
+using System.Threading.Tasks;
+using System.Collections.Generic;
 using Converter.Application.Abstractions;
 using Converter.Application.Models;
 
-namespace Converter.Application.Services;
+namespace Converter.Infrastructure;
 
 /// <summary>
 /// Сервис работы с пресетами.
@@ -16,7 +19,7 @@ public class PresetService : IPresetService
     {
         _presetRepository = presetRepository ?? throw new ArgumentNullException(nameof(presetRepository));
     }
-     
+    
     public async Task<IReadOnlyList<ConversionProfile>> GetAllPresetsAsync()
     {
         return await _presetRepository.GetPresetsAsync();

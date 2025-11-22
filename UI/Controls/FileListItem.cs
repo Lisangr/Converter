@@ -18,7 +18,8 @@ namespace Converter.UI.Controls
         private ContextMenuStrip _contextMenu = null!;
         private ToolStripMenuItem _refreshThumbnailItem = null!;
         private ToolStripMenuItem _thumbnailPositionItem = null!;
-        
+
+        public event EventHandler<EventArgs>? RemoveClicked;
         private string _filePath;
         private bool _isConverting;
         private long _fileSizeBytes;
@@ -96,7 +97,6 @@ namespace Converter.UI.Controls
             }
         }
         
-        public event EventHandler<EventArgs>? RemoveClicked;
         public event EventHandler<EventArgs>? DoubleClicked;
         public event EventHandler<ThumbnailPositionEventArgs>? RefreshThumbnailRequested;
         public event EventHandler<EventArgs>? SelectionChanged;
