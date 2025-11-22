@@ -553,8 +553,7 @@ namespace Converter
 
             _closingInProgress = true;
 
-            // Отменяем все фоновые операции, связанные с формой
-            CancelBackgroundOperations();
+
 
             // Мягко уведомляем презентер об очистке очереди (без ожидания)
             if (_mainPresenter != null)

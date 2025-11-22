@@ -79,6 +79,9 @@ public class QueueManagerTests
 
         // Assert: в текущей реализации остановка очереди может корректно завершать задачу
         // без исключения, поэтому просто дожидаемся завершения.
-        await enqueueTask;
+        // await enqueueTask;
+
+        // Assert: Ожидаем, что задача будет отменена при вызове StopAsync.
+        await Assert.ThrowsAsync<TaskCanceledException>(async () => await enqueueTask);
     }
 }
