@@ -3,8 +3,8 @@
   "WorkspaceRootPath": "C:\\Users\\User\\source\\repos\\Converter\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\controls\\filelistitem.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\controls\\filelistitem.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\src\\converter.application\\viewmodels\\mainviewmodel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:src\\converter.application\\viewmodels\\mainviewmodel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\src\\converter.application\\presenters\\mainpresenter.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -15,16 +15,40 @@
       "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:form1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\src\\converter.infrastructure\\presetservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:src\\converter.infrastructure\\presetservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\timelineeditorform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\timelineeditorform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\services\\timelineeditingservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:services\\timelineeditingservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\form1.ui.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:form1.ui.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{AEC2D69D-70B5-4BD7-A13C-11F2F38F6F03}|Converter.Tests\\Converter.Tests.csproj|c:\\users\\user\\source\\repos\\converter\\converter.tests\\unittests\\services\\queuerepositorytests.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{AEC2D69D-70B5-4BD7-A13C-11F2F38F6F03}|Converter.Tests\\Converter.Tests.csproj|solutionrelative:converter.tests\\unittests\\services\\queuerepositorytests.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{AEC2D69D-70B5-4BD7-A13C-11F2F38F6F03}|Converter.Tests\\Converter.Tests.csproj|c:\\users\\user\\source\\repos\\converter\\converter.tests\\unittests\\services\\notificationservicetests.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{AEC2D69D-70B5-4BD7-A13C-11F2F38F6F03}|Converter.Tests\\Converter.Tests.csproj|solutionrelative:converter.tests\\unittests\\services\\notificationservicetests.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\src\\converter.infrastructure\\channelqueueprocessor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:src\\converter.infrastructure\\channelqueueprocessor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\controls\\filelistitem.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\controls\\filelistitem.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{AEC2D69D-70B5-4BD7-A13C-11F2F38F6F03}|Converter.Tests\\Converter.Tests.csproj|c:\\users\\user\\source\\repos\\converter\\converter.tests\\unittests\\services\\queuerepositorytests.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{AEC2D69D-70B5-4BD7-A13C-11F2F38F6F03}|Converter.Tests\\Converter.Tests.csproj|solutionrelative:converter.tests\\unittests\\services\\queuerepositorytests.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{AEC2D69D-70B5-4BD7-A13C-11F2F38F6F03}|Converter.Tests\\Converter.Tests.csproj|c:\\users\\user\\source\\repos\\converter\\converter.tests\\unittests\\application\\channelqueueprocessortests.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -43,10 +67,6 @@
       "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:src\\converter.infrastructure\\notificationservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\src\\converter.infrastructure\\channelqueueprocessor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:src\\converter.infrastructure\\channelqueueprocessor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\src\\converter.infrastructure\\ffmpeg\\ffmpegbootstrapservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:src\\converter.infrastructure\\ffmpeg\\ffmpegbootstrapservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
@@ -61,10 +81,6 @@
     {
       "AbsoluteMoniker": "D:0:0:{AEC2D69D-70B5-4BD7-A13C-11F2F38F6F03}|Converter.Tests\\Converter.Tests.csproj|c:\\users\\user\\source\\repos\\converter\\converter.tests\\unittests\\infrastructure\\ffmpegbootstrapservicetests.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{AEC2D69D-70B5-4BD7-A13C-11F2F38F6F03}|Converter.Tests\\Converter.Tests.csproj|solutionrelative:converter.tests\\unittests\\infrastructure\\ffmpegbootstrapservicetests.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\src\\converter.application\\abstractions\\imainview.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -90,7 +106,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 5,
+          "SelectedChildIndex": 6,
           "Children": [
             {
               "$type": "Bookmark",
@@ -114,7 +130,59 @@
             },
             {
               "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "PresetService.cs",
+              "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\src\\Converter.Infrastructure\\PresetService.cs",
+              "RelativeDocumentMoniker": "src\\Converter.Infrastructure\\PresetService.cs",
+              "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\src\\Converter.Infrastructure\\PresetService.cs",
+              "RelativeToolTip": "src\\Converter.Infrastructure\\PresetService.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAAiAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-23T08:53:39.711Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
               "DocumentIndex": 0,
+              "Title": "MainViewModel.cs",
+              "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\src\\Converter.Application\\ViewModels\\MainViewModel.cs",
+              "RelativeDocumentMoniker": "src\\Converter.Application\\ViewModels\\MainViewModel.cs",
+              "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\src\\Converter.Application\\ViewModels\\MainViewModel.cs",
+              "RelativeToolTip": "src\\Converter.Application\\ViewModels\\MainViewModel.cs",
+              "ViewState": "AgIAAAkAAAAAAAAAAAAswBgAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-23T08:43:54.762Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "TimelineEditorForm.cs",
+              "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\UI\\TimelineEditorForm.cs",
+              "RelativeDocumentMoniker": "UI\\TimelineEditorForm.cs",
+              "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\UI\\TimelineEditorForm.cs",
+              "RelativeToolTip": "UI\\TimelineEditorForm.cs",
+              "ViewState": "AgIAAMsBAAAAAAAAAAAIwNwBAAB1AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-23T08:43:01.237Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "TimelineEditingService.cs",
+              "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Services\\TimelineEditingService.cs",
+              "RelativeDocumentMoniker": "Services\\TimelineEditingService.cs",
+              "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\Services\\TimelineEditingService.cs",
+              "RelativeToolTip": "Services\\TimelineEditingService.cs",
+              "ViewState": "AgIAADEAAAAAAAAAAAAgwB8AAAAvAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-23T08:42:35.372Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 10,
               "Title": "FileListItem.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\UI\\Controls\\FileListItem.cs",
               "RelativeDocumentMoniker": "UI\\Controls\\FileListItem.cs",
@@ -127,7 +195,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 11,
               "Title": "QueueRepositoryTests.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Converter.Tests\\UnitTests\\Services\\QueueRepositoryTests.cs",
               "RelativeDocumentMoniker": "Converter.Tests\\UnitTests\\Services\\QueueRepositoryTests.cs",
@@ -135,12 +203,11 @@
               "RelativeToolTip": "Converter.Tests\\UnitTests\\Services\\QueueRepositoryTests.cs",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAABQAAAAgAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-22T19:58:42.421Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-22T19:58:42.421Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 5,
+              "DocumentIndex": 7,
               "Title": "NotificationServiceTests.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Converter.Tests\\UnitTests\\Services\\NotificationServiceTests.cs",
               "RelativeDocumentMoniker": "Converter.Tests\\UnitTests\\Services\\NotificationServiceTests.cs",
@@ -153,7 +220,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 6,
+              "DocumentIndex": 12,
               "Title": "ChannelQueueProcessorTests.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Converter.Tests\\UnitTests\\Application\\ChannelQueueProcessorTests.cs",
               "RelativeDocumentMoniker": "Converter.Tests\\UnitTests\\Application\\ChannelQueueProcessorTests.cs",
@@ -161,12 +228,11 @@
               "RelativeToolTip": "Converter.Tests\\UnitTests\\Application\\ChannelQueueProcessorTests.cs",
               "ViewState": "AgIAAAYAAAAAAAAAAAAnwBcAAAAfAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-22T19:58:12.416Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-22T19:58:12.416Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 7,
+              "DocumentIndex": 13,
               "Title": "ShareDialog.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\UI\\Dialogs\\ShareDialog.cs",
               "RelativeDocumentMoniker": "UI\\Dialogs\\ShareDialog.cs",
@@ -174,12 +240,11 @@
               "RelativeToolTip": "UI\\Dialogs\\ShareDialog.cs",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAA4AAAApAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-22T19:36:35.843Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-22T19:36:35.843Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 8,
+              "DocumentIndex": 14,
               "Title": "PresetPanel.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\UI\\Controls\\PresetPanel.cs",
               "RelativeDocumentMoniker": "UI\\Controls\\PresetPanel.cs",
@@ -187,25 +252,24 @@
               "RelativeToolTip": "UI\\Controls\\PresetPanel.cs",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAABQAAAAiAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-22T19:36:31.136Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-22T19:36:31.136Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 6,
               "Title": "Form1.UI.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.cs",
               "RelativeDocumentMoniker": "Form1.UI.cs",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.cs",
               "RelativeToolTip": "Form1.UI.cs",
-              "ViewState": "AgIAAJMFAAAAAAAAAAAewKYFAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAKgFAAAAAAAAAAAYwK8FAAAvAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-22T19:36:25.543Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 9,
+              "DocumentIndex": 15,
               "Title": "NotificationService.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\src\\Converter.Infrastructure\\NotificationService.cs",
               "RelativeDocumentMoniker": "src\\Converter.Infrastructure\\NotificationService.cs",
@@ -213,18 +277,17 @@
               "RelativeToolTip": "src\\Converter.Infrastructure\\NotificationService.cs",
               "ViewState": "AgIAACAAAAAAAAAAAAAQwDEAAABKAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-22T19:33:54.306Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-22T19:33:54.306Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 10,
+              "DocumentIndex": 9,
               "Title": "ChannelQueueProcessor.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\src\\Converter.Infrastructure\\ChannelQueueProcessor.cs",
               "RelativeDocumentMoniker": "src\\Converter.Infrastructure\\ChannelQueueProcessor.cs",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\src\\Converter.Infrastructure\\ChannelQueueProcessor.cs",
               "RelativeToolTip": "src\\Converter.Infrastructure\\ChannelQueueProcessor.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABEAAAAkAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAsAAAApAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-22T19:33:44.934Z",
               "EditorCaption": ""
@@ -237,27 +300,26 @@
               "RelativeDocumentMoniker": "src\\Converter.Application\\Presenters\\MainPresenter.cs",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\src\\Converter.Application\\Presenters\\MainPresenter.cs",
               "RelativeToolTip": "src\\Converter.Application\\Presenters\\MainPresenter.cs",
-              "ViewState": "AgIAAAYDAAAAAAAAAAAowCUDAABAAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAqwA4AAAAqAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-22T19:06:01.119Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 12,
-              "Title": "Converter",
+              "DocumentIndex": 17,
+              "Title": "Converter.csproj",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Converter.csproj",
               "RelativeDocumentMoniker": "Converter.csproj",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\Converter.csproj",
               "RelativeToolTip": "Converter.csproj",
               "ViewState": "AgIAABgAAAAAAAAAAAAAACwAAAAfAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
-              "WhenOpened": "2025-11-22T17:26:44.256Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-22T17:26:44.256Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 13,
+              "DocumentIndex": 18,
               "Title": "test.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\test.cs",
               "RelativeDocumentMoniker": "test.cs",
@@ -265,12 +327,11 @@
               "RelativeToolTip": "test.cs",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-22T17:18:09.299Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-22T17:18:09.299Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 11,
+              "DocumentIndex": 16,
               "Title": "FfmpegBootstrapService.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\src\\Converter.Infrastructure\\Ffmpeg\\FfmpegBootstrapService.cs",
               "RelativeDocumentMoniker": "src\\Converter.Infrastructure\\Ffmpeg\\FfmpegBootstrapService.cs",
@@ -278,12 +339,11 @@
               "RelativeToolTip": "src\\Converter.Infrastructure\\Ffmpeg\\FfmpegBootstrapService.cs",
               "ViewState": "AgIAAPwAAAAAAAAAAAAwwBEBAABXAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-22T17:00:10.228Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-22T17:00:10.228Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 14,
+              "DocumentIndex": 19,
               "Title": "FfmpegBootstrapServiceTests.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Converter.Tests\\UnitTests\\Infrastructure\\FfmpegBootstrapServiceTests.cs",
               "RelativeDocumentMoniker": "Converter.Tests\\UnitTests\\Infrastructure\\FfmpegBootstrapServiceTests.cs",
@@ -291,12 +351,11 @@
               "RelativeToolTip": "Converter.Tests\\UnitTests\\Infrastructure\\FfmpegBootstrapServiceTests.cs",
               "ViewState": "AgIAAC8AAAAAAAAAAAAqwDwAAAApAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-22T16:27:06.195Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-22T16:27:06.195Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 16,
+              "DocumentIndex": 20,
               "Title": "IMainView.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\src\\Converter.Application\\Abstractions\\IMainView.cs",
               "RelativeDocumentMoniker": "src\\Converter.Application\\Abstractions\\IMainView.cs",
@@ -304,8 +363,7 @@
               "RelativeToolTip": "src\\Converter.Application\\Abstractions\\IMainView.cs",
               "ViewState": "AgIAAHwAAAAAAAAAAAAQwKQAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-22T16:22:46.471Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-22T16:22:46.471Z"
             },
             {
               "$type": "Document",
@@ -315,59 +373,56 @@
               "RelativeDocumentMoniker": "Form1.cs",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\Form1.cs",
               "RelativeToolTip": "Form1.cs",
-              "ViewState": "AgIAAAYAAAAAAAAAAAAewBgAAAAnAAAAAAAAAA==",
+              "ViewState": "AgIAADcAAAAAAAAAAAAvwEkAAAA+AAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-19T19:11:33.624Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 15,
+              "DocumentIndex": 8,
               "Title": "Program.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Program.cs",
               "RelativeDocumentMoniker": "Program.cs",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\Program.cs",
               "RelativeToolTip": "Program.cs",
-              "ViewState": "AgIAAIIAAAAAAAAAAAAAAEsAAAA6AAAAAAAAAA==",
+              "ViewState": "AgIAAC8AAAAAAAAAAAAnwCcAAAAhAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-16T09:17:41.383Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 19,
+              "DocumentIndex": 23,
               "Title": "Form1.UI.resx",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.resx",
               "RelativeDocumentMoniker": "Form1.UI.resx",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.resx",
               "RelativeToolTip": "Form1.UI.resx",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001005|",
-              "WhenOpened": "2025-11-07T12:17:07.59Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-07T12:17:07.59Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 18,
+              "DocumentIndex": 22,
               "Title": "Form1.UI.cs [\u041A\u043E\u043D\u0441\u0442\u0440\u0443\u043A\u0442\u043E\u0440]",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.cs",
               "RelativeDocumentMoniker": "Form1.UI.cs",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\Form1.UI.cs [\u041A\u043E\u043D\u0441\u0442\u0440\u0443\u043A\u0442\u043E\u0440]",
               "RelativeToolTip": "Form1.UI.cs [\u041A\u043E\u043D\u0441\u0442\u0440\u0443\u043A\u0442\u043E\u0440]",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-07T12:17:01.283Z",
-              "EditorCaption": " [\u041A\u043E\u043D\u0441\u0442\u0440\u0443\u043A\u0442\u043E\u0440]"
+              "WhenOpened": "2025-11-07T12:17:01.283Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 17,
+              "DocumentIndex": 21,
               "Title": "Form1.resx",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\Form1.resx",
               "RelativeDocumentMoniker": "Form1.resx",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\Form1.resx",
               "RelativeToolTip": "Form1.resx",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001005|",
-              "WhenOpened": "2025-11-07T12:16:59.585Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-07T12:16:59.585Z"
             }
           ]
         }

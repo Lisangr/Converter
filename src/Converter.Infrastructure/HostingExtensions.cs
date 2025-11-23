@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging;
 using Converter.Application.Abstractions;
 using Converter.Application.Presenters;
 using Converter.Application.Services;
-using Converter.Application.Abstractions;
 using Converter.Application.ViewModels;
 using Converter.Application.Builders;
 using Converter.Infrastructure.Ffmpeg;
@@ -86,10 +85,12 @@ namespace Converter.Infrastructure
         public static IServiceCollection ConfigureHostedServices(this IServiceCollection services)
         {
             // Register FFmpeg bootstrap as hosted service
-            services.AddSingleton<FfmpegBootstrapService>();
+            // FfmpegBootstrapService уже зарегистрирован как Singleton в AddInfrastructureServices,
+            // поэтому просто регистрируем его как IHostedService
             services.AddHostedService(provider => provider.GetRequiredService<FfmpegBootstrapService>());
             
             // QueueWorkerHostedService уже зарегистрирован в ConfigureApplicationServices()
+            // ThemeBootstrapHostedService уже зарегистрирован в AddInfrastructureServices()
             
             return services;
         }

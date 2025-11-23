@@ -21,6 +21,10 @@ public class MainPresenterTests
     {
         var view = new Mock<IMainView>();
         view.SetupAllProperties();
+        // Настраиваем RunOnUiThread для выполнения действий синхронно в тесте
+        view
+            .Setup(v => v.RunOnUiThread(It.IsAny<Action>()))
+            .Callback<Action>(action => action());
         var vm = new MainViewModel();
         var queueRepository = new Mock<IQueueRepository>();
         queueRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<QueueItem> { new() { FilePath = "a.mp4" } });
@@ -41,6 +45,8 @@ public class MainPresenterTests
         var cancelConversionCommand = new Mock<ICancelConversionCommand>();
         var removeSelectedFilesCommand = new Mock<IRemoveSelectedFilesCommand>();
         var clearQueueCommand = new Mock<IClearQueueCommand>();
+        var estimationService = new Mock<IConversionEstimationService>();
+        var shutdownService = new Mock<IApplicationShutdownService>();
 
         var presenter = new MainPresenter(
             view.Object,
@@ -58,6 +64,8 @@ public class MainPresenterTests
             cancelConversionCommand.Object,
             removeSelectedFilesCommand.Object,
             clearQueueCommand.Object,
+            shutdownService.Object,
+            estimationService.Object,
             NullLogger<MainPresenter>.Instance);
 
         await presenter.InitializeAsync();
@@ -97,6 +105,9 @@ public class MainPresenterTests
             .Returns(Task.CompletedTask)
             .Verifiable();
 
+        var estimationService = new Mock<IConversionEstimationService>();
+        var shutdownService = new Mock<IApplicationShutdownService>();
+
         var presenter = new MainPresenter(
             view.Object,
             vm,
@@ -113,6 +124,8 @@ public class MainPresenterTests
             cancelConversionCommand.Object,
             removeSelectedFilesCommand.Object,
             clearQueueCommand.Object,
+            shutdownService.Object,
+            estimationService.Object,
             NullLogger<MainPresenter>.Instance);
 
         await presenter.InitializeAsync();
@@ -149,6 +162,8 @@ public class MainPresenterTests
         var cancelConversionCommand = new Mock<ICancelConversionCommand>();
         var removeSelectedFilesCommand = new Mock<IRemoveSelectedFilesCommand>();
         var clearQueueCommand = new Mock<IClearQueueCommand>();
+        var estimationService = new Mock<IConversionEstimationService>();
+        var shutdownService = new Mock<IApplicationShutdownService>();
 
         var presenter = new MainPresenter(
             view.Object,
@@ -166,6 +181,8 @@ public class MainPresenterTests
             cancelConversionCommand.Object,
             removeSelectedFilesCommand.Object,
             clearQueueCommand.Object,
+            shutdownService.Object,
+            estimationService.Object,
             NullLogger<MainPresenter>.Instance);
 
         await presenter.InitializeAsync();
@@ -199,6 +216,8 @@ public class MainPresenterTests
         var cancelConversionCommand = new Mock<ICancelConversionCommand>();
         var removeSelectedFilesCommand = new Mock<IRemoveSelectedFilesCommand>();
         var clearQueueCommand = new Mock<IClearQueueCommand>();
+        var estimationService = new Mock<IConversionEstimationService>();
+        var shutdownService = new Mock<IApplicationShutdownService>();
 
         var presenter = new MainPresenter(
             view.Object,
@@ -216,6 +235,8 @@ public class MainPresenterTests
             cancelConversionCommand.Object,
             removeSelectedFilesCommand.Object,
             clearQueueCommand.Object,
+            shutdownService.Object,
+            estimationService.Object,
             NullLogger<MainPresenter>.Instance);
 
         var item = new QueueItem { Id = Guid.NewGuid(), FilePath = "test.mp4" };

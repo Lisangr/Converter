@@ -1,8 +1,9 @@
 using System.Threading;
 using System.Threading.Tasks;
 using Converter.Application.Abstractions;
-using Converter.Application.Services;
+using Converter.Application.Models;
 using Converter.Domain.Models;
+using Converter.Infrastructure;
 using Moq;
 using Xunit;
 

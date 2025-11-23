@@ -17,7 +17,7 @@ public class TimelineEditorForm : Form
 {
     private readonly string _inputPath;
     private readonly List<TimelineSegment> _segments;
-    private SegmentEditMode _editMode;
+    private Application.Models.SegmentEditMode _editMode;
     private bool _lossless;
 
     private IMediaInfo? _mediaInfo;
@@ -71,13 +71,13 @@ public class TimelineEditorForm : Form
     private TimeSpan? _markerB;
 
     public IReadOnlyList<TimelineSegment> ResultSegments => _segments;
-    public SegmentEditMode ResultEditMode => _editMode;
+    public Application.Models.SegmentEditMode ResultEditMode => _editMode;
     public bool ResultLossless => _lossless;
 
     public TimelineEditorForm(
         string inputPath,
         IEnumerable<TimelineSegment> segments,
-        SegmentEditMode editMode,
+        Application.Models.SegmentEditMode editMode,
         bool lossless)
     {
         _inputPath = inputPath ?? throw new ArgumentNullException(nameof(inputPath));
@@ -177,8 +177,8 @@ public class TimelineEditorForm : Form
         gbEditMode = new GroupBox { Text = "Режим", Dock = DockStyle.Top, Height = 80 };
         rbModeKeepOnly = new RadioButton { Text = "Оставить только эти сегменты", Left = 10, Top = 20, AutoSize = true };
         rbModeRemove = new RadioButton { Text = "Вырезать эти сегменты", Left = 10, Top = 45, AutoSize = true };
-        rbModeKeepOnly.CheckedChanged += (_, _) => { if (rbModeKeepOnly.Checked) _editMode = SegmentEditMode.KeepOnly; };
-        rbModeRemove.CheckedChanged += (_, _) => { if (rbModeRemove.Checked) _editMode = SegmentEditMode.Remove; };
+        rbModeKeepOnly.CheckedChanged += (_, _) => { if (rbModeKeepOnly.Checked) _editMode = Application.Models.SegmentEditMode.KeepOnly; };
+        rbModeRemove.CheckedChanged += (_, _) => { if (rbModeRemove.Checked) _editMode = Application.Models.SegmentEditMode.Remove; };
         gbEditMode.Controls.AddRange(new Control[] { rbModeKeepOnly, rbModeRemove });
 
         gbOutputMode = new GroupBox { Text = "Вывод", Dock = DockStyle.Top, Height = 120 };
@@ -237,8 +237,8 @@ public class TimelineEditorForm : Form
         // Bindings
         bsSegments.DataSource = _segments;
         dgvSegments.DataSource = bsSegments;
-        rbModeKeepOnly.Checked = (_editMode == SegmentEditMode.KeepOnly);
-        rbModeRemove.Checked = (_editMode == SegmentEditMode.Remove);
+        rbModeKeepOnly.Checked = (_editMode == Application.Models.SegmentEditMode.KeepOnly);
+        rbModeRemove.Checked = (_editMode == Application.Models.SegmentEditMode.Remove);
         cbLossless.Checked = _lossless;
 
         // Key bindings for A/B
@@ -474,7 +474,7 @@ private void UpdateMarkerLabels()
             if (_lossless)
             {
                 // For quick preview in lossless mode perform KeepOnly concat via filter if possible
-                await TimelineEditingService.CutToSingleFileAsync(_inputPath, output, normalized, SegmentEditMode.KeepOnly).ConfigureAwait(true);
+                await TimelineEditingService.CutToSingleFileAsync(_inputPath, output, normalized, Application.Models.SegmentEditMode.KeepOnly).ConfigureAwait(true);
             }
             else
             {

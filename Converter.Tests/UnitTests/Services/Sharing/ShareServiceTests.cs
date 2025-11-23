@@ -1,6 +1,7 @@
 using Xunit;
 using Converter.Services;
 using Converter.Domain.Models;
+using Converter.Infrastructure;
 using FluentAssertions;
 using System;
 using System.Collections.Generic;

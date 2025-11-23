@@ -80,6 +80,20 @@ namespace Converter.Application.Services
                     orchestratorProfile,
                     TargetWidth: profile.Width,
                     TargetHeight: profile.Height);
+                
+                // Логируем информацию о конвертации
+                _logger.LogInformation("Conversion parameters: Input={Input}, Output={Output}, VideoCodec={VideoCodec}, AudioCodec={AudioCodec}, CRF={CRF}, Width={Width}, Height={Height}",
+                    item.FilePath, outputPath, orchestratorProfile.VideoCodec, orchestratorProfile.AudioCodec, 
+                    orchestratorProfile.CRF, profile.Width, profile.Height);
+                
+                // Строим команду FFmpeg для логирования (через временный builder)
+                var commandBuilder = new Builders.ConversionCommandBuilder();
+                var ffmpegCommand = commandBuilder.Build(request);
+                _logger.LogInformation("FFmpeg command: {Command}", ffmpegCommand);
+                
+                // Сохраняем команду в item для последующего логирования в UI
+                // (можно использовать item.Metadata или добавить свойство для хранения команды)
+                
                 var safeProgress = progress ?? new Progress<int>(_ => { });
                 var outcome = await _orchestrator.ConvertAsync(request, safeProgress, cancellationToken).ConfigureAwait(false);
 

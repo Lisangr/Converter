@@ -290,6 +290,7 @@ namespace Converter.Infrastructure.Ffmpeg
                 try { progress.Report(0); } catch { }
             }
 
+            // Последнее отправленное значение прогресса (в процентах 0-100)
             double lastReportedPercent = 0; // чтобы не спамить одинаковыми значениями
 
             process.OutputDataReceived += (_, e) =>
@@ -305,10 +306,23 @@ namespace Converter.Infrastructure.Ffmpeg
                 if (e.Data != null)
                 {
                     error.WriteLine(e.Data);
+
+                    // Если известна длительность файла, пытаемся извлечь реальный прогресс из time=
+                    if (progress != null && totalDurationSeconds.HasValue && totalDurationSeconds.Value > 0.1)
+                    {
+                        try
+                        {
+                            TryReportProgressFromLine(e.Data, totalDurationSeconds.Value, progress, ref lastReportedPercent);
+                        }
+                        catch
+                        {
+                            // Любые ошибки парсинга прогресса игнорируем, чтобы не завалить процесс
+                        }
+                    }
                 }
             };
 
-            // Фоновая задача, которая оценивает прогресс по прошедшему времени относительно длительности файла
+            // Фоновая задача, которая оценивает прогресс по прошедшему времени, когда длительность неизвестна
             System.Threading.CancellationTokenSource? progressCts = null;
 
             // Устанавливаем текущий процесс для отслеживания
@@ -326,8 +340,9 @@ namespace Converter.Infrastructure.Ffmpeg
                 process.BeginErrorReadLine();
 
                 // Запускаем фоновый таймер прогресса ТОЛЬКО после старта процесса,
-                // иначе process.HasExited будет true и цикл сразу завершится.
-                if (progress != null)
+                // и ТОЛЬКО если мы не знаем реальную длительность файла.
+                // Если длительность известна, прогресс будет рассчитываться через парсинг time= из stderr.
+                if (progress != null && !totalDurationSeconds.HasValue)
                 {
                     progressCts = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(ct);
                     var token = progressCts.Token;
@@ -344,22 +359,15 @@ namespace Converter.Infrastructure.Ffmpeg
                                 double percent;
                                 var elapsed = stopwatch.Elapsed.TotalSeconds;
 
-                                if (totalDurationSeconds.HasValue && totalDurationSeconds.Value > 0.1)
+                                // Синтетический прогресс, если не удалось узнать длительность файла
+                                // Проверяем, если lastReportedPercent уже достиг 99, то не увеличиваем дальше, дожидаясь 100% при выходе
+                                if (lastReportedPercent < 99.0)
                                 {
-                                    percent = Math.Min(99.0, Math.Max(0.0, elapsed / totalDurationSeconds.Value * 100.0));
+                                    percent = Math.Min(99.0, lastReportedPercent + 1.0);
                                 }
                                 else
                                 {
-                                    // Синтетический прогресс, если не удалось узнать длительность файла
-                                    // Проверяем, если lastReportedPercent уже достиг 99, то не увеличиваем дальше, дожидаясь 100% при выходе
-                                    if (lastReportedPercent < 99.0)
-                                    {
-                                        percent = Math.Min(99.0, lastReportedPercent + 1.0);
-                                    }
-                                    else
-                                    {
-                                        percent = lastReportedPercent;
-                                    }
+                                    percent = lastReportedPercent;
                                 }
 
                                 if (percent - lastReportedPercent >= 0.5)
@@ -577,26 +585,77 @@ namespace Converter.Infrastructure.Ffmpeg
                 {
                     lock (_processLock)
                     {
-                        if (_currentProcess != null && !_currentProcess.HasExited)
+                        try
                         {
-                            try
+                            if (_currentProcess != null)
                             {
-                                _logger?.LogInformation("Terminating FFmpeg process during disposal");
-                                _currentProcess.Kill(entireProcessTree: true);
-                                _logger?.LogInformation("FFmpeg process terminated during disposal");
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger?.LogError(ex, "Error terminating FFmpeg process during disposal");
-                            }
-                            finally
-                            {
+                                if (!_currentProcess.HasExited)
+                                {
+                                    _logger?.LogInformation("Terminating FFmpeg process during disposal");
+                                    try
+                                    {
+                                        _currentProcess.Kill(entireProcessTree: true);
+                                        _logger?.LogInformation("FFmpeg process terminated during disposal");
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        _logger?.LogError(ex, "Error terminating FFmpeg process during disposal");
+                                    }
+                                }
+                                _currentProcess.Dispose();
                                 _currentProcess = null;
                             }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogError(ex, "Error during FFmpeg process cleanup");
                         }
                     }
                 }
                 _disposed = true;
+            }
+        }
+
+        /// <summary>
+        /// Kills all running FFmpeg processes
+        /// </summary>
+        public static void KillAllFFmpegProcesses(ILogger? logger = null)
+        {
+            try
+            {
+                var processes = System.Diagnostics.Process.GetProcesses()
+                    .Where(p => p.ProcessName.StartsWith("ffmpeg", StringComparison.OrdinalIgnoreCase) ||
+                                p.ProcessName.StartsWith("ffprobe", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (processes.Count > 0)
+                {
+                    logger?.LogInformation("Killing {Count} orphaned FFmpeg processes", processes.Count);
+                    
+                    foreach (var process in processes)
+                    {
+                        try
+                        {
+                            if (!process.HasExited)
+                            {
+                                process.Kill(entireProcessTree: true);
+                                logger?.LogInformation("Killed FFmpeg process with ID: {ProcessId}", process.Id);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            logger?.LogError(ex, "Error killing FFmpeg process with ID: {ProcessId}", process.Id);
+                        }
+                        finally
+                        {
+                            process.Dispose();
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.LogError(ex, "Error while trying to kill FFmpeg processes");
             }
         }
 

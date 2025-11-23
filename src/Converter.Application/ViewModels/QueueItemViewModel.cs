@@ -84,6 +84,20 @@ namespace Converter.Application.ViewModels
             set => SetProperty(ref _thumbnailBytes, value);
         }
 
+        private int? _totalFrameCount;
+        public int? TotalFrameCount
+        {
+            get => _totalFrameCount;
+            set => SetProperty(ref _totalFrameCount, value);
+        }
+
+        private int? _currentFrame;
+        public int? CurrentFrame
+        {
+            get => _currentFrame;
+            set => SetProperty(ref _currentFrame, value);
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
 
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)

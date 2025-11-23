@@ -30,6 +30,9 @@ public sealed class ConversionOrchestrator : IConversionOrchestrator
         {
             _logger.LogInformation("Starting conversion: {Input} -> {Output}", request.InputPath, request.OutputPath);
             var args = _builder.Build(request);
+            _logger.LogInformation("FFmpeg command: {Command}", args);
+            
+            // Логируем команду FFmpeg для отладки (команда уже залогирована через _logger)
             var adapter = new Progress<double>(v => progress.Report((int)Math.Clamp(Math.Round(v), 0, 100)));
             var code = await _executor.ExecuteAsync(args, adapter, ct).ConfigureAwait(false);
             if (code == 0)

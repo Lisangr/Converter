@@ -211,8 +211,6 @@ namespace Converter
             IThumbnailProvider thumbnailProvider,
             IShareService shareService,
             IOutputPathBuilder outputPathBuilder,
-            IPresetService presetService,
-            IConversionEstimationService estimationService,
             Microsoft.Extensions.Logging.ILogger<Form1> logger)
         {
             _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
@@ -220,8 +218,6 @@ namespace Converter
             _thumbnailProvider = thumbnailProvider ?? throw new ArgumentNullException(nameof(thumbnailProvider));
             _shareService = shareService ?? throw new ArgumentNullException(nameof(shareService));
             _outputPathBuilder = outputPathBuilder ?? throw new ArgumentNullException(nameof(outputPathBuilder));
-            _presetService = presetService ?? throw new ArgumentNullException(nameof(presetService));
-            _estimationService = estimationService ?? throw new ArgumentNullException(nameof(estimationService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             InitializeComponent();
@@ -254,9 +250,14 @@ namespace Converter
 
         private void UpdateControlsState(bool isBusy)
         {
+            // Управление кнопками на основе состояния конвертации
+            // Проверяем, есть ли элементы в обработке
+            bool hasProcessing = _queueItemsBinding != null && 
+                _queueItemsBinding.Any(x => x.Status == ConversionStatus.Processing || x.Status == ConversionStatus.Pending);
+            
             // Основные управляющие кнопки формы. Их поля объявлены в Form1.UI.cs.
-            if (btnStart != null) btnStart.Enabled = !isBusy;
-            if (btnStop != null) btnStop.Enabled = isBusy;
+            if (btnStart != null) btnStart.Enabled = !hasProcessing && !isBusy;
+            if (btnStop != null) btnStop.Enabled = hasProcessing;
             if (btnAddFiles != null) btnAddFiles.Enabled = !isBusy;
             if (btnRemoveSelected != null) btnRemoveSelected.Enabled = !isBusy;
             if (btnClearAll != null) btnClearAll.Enabled = !isBusy;
@@ -266,6 +267,19 @@ namespace Converter
             // Кнопки _btnShare / _btnOpenEditor / _btnNotificationSettings управляются отдельной логикой
             // (например, UpdateShareButtonState / UpdateEditorButtonState), поэтому здесь их состояние
             // не переопределяем, чтобы не ломать UX.
+        }
+        
+        // Публичный метод для обновления состояния кнопок конвертации из MainPresenter
+        public void UpdateConversionButtons(bool hasProcessing)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => UpdateConversionButtons(hasProcessing)));
+                return;
+            }
+            
+            if (btnStart != null) btnStart.Enabled = !hasProcessing;
+            if (btnStop != null) btnStop.Enabled = hasProcessing;
         }
 
         public void SetStatusText(string status)

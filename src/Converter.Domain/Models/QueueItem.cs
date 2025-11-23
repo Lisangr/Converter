@@ -133,4 +133,7 @@ public class QueueItem
     /// Поддерживает замены: {original}, {format}, {codec}, {resolution}
     /// </summary>
     public string? NamingPattern { get; set; }
+
+    public int? TotalFrameCount { get; set; }
+    public int? CurrentFrame { get; set; }
 }

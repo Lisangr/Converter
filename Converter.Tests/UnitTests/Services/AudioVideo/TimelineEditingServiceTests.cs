@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Converter.Application.Models;
 using Converter.Services;
+using Converter.Domain.Models;
 using FluentAssertions;
 using Xunit;
 
@@ -14,7 +14,7 @@ public class TimelineEditingServiceTests
     public async Task CutToSingleFileAsync_WithEmptyInputPath_ShouldThrow()
     {
         // Act
-        Func<Task> act = () => TimelineEditingService.CutToSingleFileAsync("", "out.mp4", Array.Empty<TimelineSegment>(), SegmentEditMode.KeepOnly);
+        Func<Task> act = () => TimelineEditingService.CutToSingleFileAsync("", "out.mp4", Array.Empty<TimelineSegment>(), Converter.Application.Models.SegmentEditMode.KeepOnly);
 
         // Assert
         await act.Should().ThrowAsync<ArgumentNullException>()
@@ -25,7 +25,7 @@ public class TimelineEditingServiceTests
     public async Task CutToSingleFileAsync_WithEmptyOutputPath_ShouldThrow()
     {
         // Act
-        Func<Task> act = () => TimelineEditingService.CutToSingleFileAsync("in.mp4", "", Array.Empty<TimelineSegment>(), SegmentEditMode.KeepOnly);
+        Func<Task> act = () => TimelineEditingService.CutToSingleFileAsync("in.mp4", "", Array.Empty<TimelineSegment>(), Converter.Application.Models.SegmentEditMode.KeepOnly);
 
         // Assert
         await act.Should().ThrowAsync<ArgumentNullException>()

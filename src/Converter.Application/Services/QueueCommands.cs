@@ -8,6 +8,7 @@ using Converter.Application.Abstractions;
 using Converter.Application.ViewModels;
 using Converter.Domain.Models;
 using Microsoft.Extensions.Logging;
+using Xabe.FFmpeg;
 
 namespace Converter.Application.Services
 {
@@ -30,18 +31,29 @@ namespace Converter.Application.Services
         public async Task ExecuteAsync(IEnumerable<string> filePaths, string? outputFolder, string? namingPattern, CancellationToken cancellationToken = default)
         {
             if (filePaths == null) return;
-
             var items = new List<QueueItem>();
 
             foreach (var file in filePaths)
             {
                 if (!File.Exists(file))
                     continue;
-
                 var directory = !string.IsNullOrWhiteSpace(outputFolder)
                     ? outputFolder
                     : Path.GetDirectoryName(file) ?? string.Empty;
-
+                
+                int? totalFrames = null;
+                try
+                {
+                    var mediaInfo = await FFmpeg.GetMediaInfo(file);
+                    var duration = mediaInfo.Duration.TotalSeconds;
+                    var fps = mediaInfo.VideoStreams?.FirstOrDefault()?.Framerate ?? 0;
+                    if (fps > 0 && duration > 0)
+                    {
+                        totalFrames = (int)Math.Round(duration * fps);
+                    }
+                }
+                catch { /* можно залогировать ошибку */ }
+                
                 items.Add(new QueueItem
                 {
                     Id = Guid.NewGuid(),
@@ -51,7 +63,8 @@ namespace Converter.Application.Services
                     Status = ConversionStatus.Pending,
                     Progress = 0,
                     AddedAt = DateTime.UtcNow,
-                    NamingPattern = namingPattern
+                    NamingPattern = namingPattern,
+                    TotalFrameCount = totalFrames
                 });
             }
 
@@ -66,9 +79,6 @@ namespace Converter.Application.Services
     public sealed class StartConversionCommand : IStartConversionCommand
     {
         private readonly IQueueProcessor _queueProcessor;
-        private Task? _workerTask;
-        private bool _isRunning;
-        private readonly object _syncRoot = new();
 
         public StartConversionCommand(IQueueProcessor queueProcessor)
         {
@@ -77,41 +87,10 @@ namespace Converter.Application.Services
 
         public Task ExecuteAsync(CancellationToken cancellationToken = default)
         {
-            lock (_syncRoot)
-            {
-                if (_isRunning)
-                {
-                    // Уже запущено, повторный вызов игнорируем
-                    return Task.CompletedTask;
-                }
-
-                _isRunning = true;
-                _workerTask = RunAsync(cancellationToken);
-                return Task.CompletedTask;
-            }
-        }
-
-        private async Task RunAsync(CancellationToken cancellationToken)
-        {
-            try
-            {
-                // Инициализируем процессор (загрузка Pending-элементов в канал)
-                await _queueProcessor.StartProcessingAsync(cancellationToken).ConfigureAwait(false);
-
-                // Основной цикл обработки: читаем элементы из канала и обрабатываем их
-                await foreach (var item in _queueProcessor.GetItemsAsync(cancellationToken))
-                {
-                    await _queueProcessor.ProcessItemAsync(item, cancellationToken).ConfigureAwait(false);
-                }
-            }
-            finally
-            {
-                lock (_syncRoot)
-                {
-                    _isRunning = false;
-                    _workerTask = null;
-                }
-            }
+            // Делегируем запуск обработки очереди самому IQueueProcessor.
+            // ChannelQueueProcessor сам управляет фоновым циклом обработки и флагом IsProcessing,
+            // поэтому здесь не требуется собственный долгоживущий воркер.
+            return _queueProcessor.StartProcessingAsync(cancellationToken);
         }
     }
 

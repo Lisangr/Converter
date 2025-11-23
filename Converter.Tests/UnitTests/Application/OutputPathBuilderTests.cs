@@ -2,6 +2,7 @@ using System.IO;
 using Converter.Application.Models;
 using Converter.Application.Services;
 using Converter.Domain.Models;
+using Converter.Infrastructure;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;

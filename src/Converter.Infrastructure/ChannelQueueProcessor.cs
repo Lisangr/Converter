@@ -29,7 +29,10 @@ namespace Converter.Infrastructure
         public event EventHandler<QueueProgressEventArgs>? ProgressChanged;
         public event EventHandler? QueueCompleted;
         public event EventHandler<QueueItem>? ItemUpdated;
-
+        /// <summary>
+        /// Указывает, выполняется ли какая-либо операция в процессоре
+        /// </summary>
+        public bool IsProcessing => _isProcessing;
         public async Task RemoveItemAsync(QueueItem item, CancellationToken cancellationToken = default)
         {
             if (_disposed)
@@ -55,7 +58,7 @@ namespace Converter.Infrastructure
             }
         }
 
-        public bool IsRunning => _isProcessing && !_itemChannel.Reader.Completion.IsCompleted;
+        public bool IsRunning => _isProcessing;
         public bool IsPaused => _pauseEvent.IsPaused;
 
         public ChannelQueueProcessor(
@@ -95,32 +98,39 @@ namespace Converter.Infrastructure
                 _processingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 var token = _processingCts.Token;
 
+                // Берём снимок всех Pending-элементов на момент запуска и обрабатываем их
                 var pendingItems = await _queueRepository.GetPendingItemsAsync().ConfigureAwait(false);
-                foreach (var item in pendingItems)
-                {
-                    token.ThrowIfCancellationRequested();
-                    await WriteItemToChannelAsync(item, token).ConfigureAwait(false);
-                }
 
                 _processingTask = Task.Run(async () =>
                 {
-                    await foreach (var item in _itemChannel.Reader.ReadAllAsync(token).ConfigureAwait(false))
+                    try
                     {
-                        if (token.IsCancellationRequested) break;
-                        await _pauseEvent.WaitAsync(token).ConfigureAwait(false);
-                        if (token.IsCancellationRequested) break;
+                        foreach (var item in pendingItems)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            await _pauseEvent.WaitAsync(token).ConfigureAwait(false);
+                            token.ThrowIfCancellationRequested();
 
-                        await ProcessItemAsync(item, token).ConfigureAwait(false);
+                            await ProcessItemAsync(item, token).ConfigureAwait(false);
+                        }
+
+                        _logger.LogInformation("Queue processing loop finished.");
                     }
-                    _logger.LogInformation("Queue processing loop finished.");
-                    QueueCompleted?.Invoke(this, EventArgs.Empty);
+                    finally
+                    {
+                        // Естественное завершение цикла обработки: считаем, что текущий сеанс обработки очереди завершён.
+                        // Сбрасываем флаг _isProcessing, чтобы новые добавленные элементы не начинали обрабатываться
+                        // автоматически до следующего явного вызова StartProcessingAsync (по кнопке "Старт").
+                        _isProcessing = false;
+                        QueueCompleted?.Invoke(this, EventArgs.Empty);
+                    }
                 }, CancellationToken.None);
 
                 _logger.LogInformation("Queue processor started");
             }
             catch (OperationCanceledException)
             {
-                await StopProcessingAsync().ConfigureAwait(false);
+                _logger.LogInformation("Queue processing was cancelled before completion");
                 throw;
             }
         }
@@ -132,7 +142,7 @@ namespace Converter.Infrastructure
             try
             {
                 _logger.LogInformation("Stopping queue processor...");
-
+                
                 _processingCts?.Cancel();
 
                 if (_processingTask != null && !_processingTask.IsCompleted)
@@ -147,22 +157,6 @@ namespace Converter.Infrastructure
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "Error during queue processing task completion");
-                    }
-                }
-
-                while (_itemChannel.Reader.TryRead(out var item))
-                {
-                    try
-                    {
-                        if (item.Status != ConversionStatus.Completed && item.Status != ConversionStatus.Failed)
-                        {
-                            item.Status = ConversionStatus.Cancelled;
-                            _ = _uiDispatcher.InvokeAsync(async () => ItemUpdated?.Invoke(this, item));
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error cleaning up queue item from channel");
                     }
                 }
 
@@ -339,11 +333,8 @@ namespace Converter.Infrastructure
         private void OnItemAdded(object? sender, QueueItem item)
         {
             if (item == null || _disposed) return;
-
-            if (_isProcessing && item.Status == ConversionStatus.Pending)
-            {
-                _ = WriteItemToChannelAsync(item, _processingCts?.Token ?? CancellationToken.None);
-            }
+            // В строгой модели "один старт — один пакет" новые элементы не добавляются
+            // в текущий сеанс обработки автоматически, а ждут следующего явного запуска.
         }
 
         public async ValueTask DisposeAsync()

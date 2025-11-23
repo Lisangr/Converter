@@ -23,6 +23,7 @@ using Converter.UI;
 using Converter.UI.Controls;
 using Converter.UI.Dialogs;
 using Converter.Infrastructure;
+using Converter.Extensions;
 
 namespace Converter
 {
@@ -83,9 +84,7 @@ namespace Converter
         private GroupBox groupLog = null!;
         private TextBox txtLog = null!;
 
-        // Services - получаем через DI
-        private readonly IPresetService _presetService;
-        private readonly IConversionEstimationService _estimationService;
+        // Services - получаем через DI (только для UI-специфичных операций)
         private PresetPanel? _presetPanel;
         private bool _presetsLoaded = false;
 
@@ -304,8 +303,11 @@ namespace Converter
                     // 2. Сообщаем Presenter'у через IMainView, чтобы добавить файлы в очередь
                     await RaiseFilesDroppedAsync(files).ConfigureAwait(false);
 
-                    // 3. Обновляем оценку времени
-                    DebounceEstimate();
+                // 3. Запрашиваем обновление оценки через MainPresenter
+                if (_mainPresenter != null)
+                {
+                    _ = _mainPresenter.RequestEstimateUpdateAsync();
+                }
                 }
             }
             catch (Exception ex)
@@ -540,9 +542,33 @@ namespace Converter
 
             tabPresets.Controls.Add(subTabs);
 
-            // Получаем пресеты через асинхронный интерфейс IPresetService
-            var presets = await _presetService.GetAllPresetsAsync();
-            AppendLog($"Загружено пресетов из сервиса: {presets.Count}");
+            // Получаем пресеты через AvailablePresets из IMainView
+            // AvailablePresets заполняется в MainPresenter.LoadPresetsAsync() при инициализации
+            var presets = AvailablePresets?.ToList() ?? new List<ConversionProfile>();
+            
+            // Если пресеты еще не загружены, пытаемся загрузить их напрямую
+            if (presets.Count == 0 && _mainPresenter != null)
+            {
+                try
+                {
+                    // Ждем немного, чтобы дать время MainPresenter инициализироваться
+                    await Task.Delay(500);
+                    presets = AvailablePresets?.ToList() ?? new List<ConversionProfile>();
+                }
+                catch (Exception ex)
+                {
+                    AppendLog($"Ошибка загрузки пресетов: {ex.Message}");
+                }
+            }
+            
+            AppendLog($"Загружено пресетов: {presets.Count}");
+            
+            // Логируем категории для отладки
+            if (presets.Count > 0)
+            {
+                var categories = presets.GroupBy(p => p.Category ?? "Unknown").Select(g => $"{g.Key}: {g.Count()}").ToList();
+                AppendLog($"Категории: {string.Join(", ", categories)}");
+            }
 
             if (presets.Count == 0)
             {
@@ -653,9 +679,45 @@ namespace Converter
                     {
                         try
                         {
-                            ApplyPresetToUi(preset);
-                            AppendLog($"Выбран пресет: {preset.Name}");
-                            DebounceEstimate();
+                            // Делегируем применение пресета в MainPresenter
+                            if (_mainPresenter != null)
+                            {
+                                // Конвертируем ConversionProfile в PresetProfile для MainPresenter
+                                var presetProfile = new PresetProfile
+                                {
+                                    Id = preset.Id,
+                                    Name = preset.Name,
+                                    Description = preset.Description,
+                                    Category = preset.Category,
+                                    VideoCodec = preset.VideoCodec,
+                                    Bitrate = preset.Bitrate,
+                                    Width = preset.Width,
+                                    Height = preset.Height,
+                                    CRF = preset.CRF,
+                                    Format = preset.Format,
+                                    AudioCodec = preset.AudioCodec,
+                                    AudioBitrate = preset.AudioBitrate,
+                                    IncludeAudio = preset.IncludeAudio,
+                                    MaxFileSizeMB = preset.MaxFileSizeMB,
+                                    MaxDurationSeconds = preset.MaxDurationSeconds,
+                                    Icon = preset.Icon,
+                                    ColorHex = preset.ColorHex,
+                                    IsPro = preset.IsPro
+                                };
+                                
+                                _mainPresenter.ApplyPreset(presetProfile);
+                                ApplyPresetToUi(preset); // Визуальное обновление UI
+                                AppendLog($"Выбран пресет: {preset.Name}");
+                                
+                                // Запрашиваем обновление оценки через MainPresenter
+                                _ = _mainPresenter.RequestEstimateUpdateAsync();
+                            }
+                            else
+                            {
+                                // Fallback: применяем только визуально, если MainPresenter недоступен
+                                ApplyPresetToUi(preset);
+                                AppendLog($"Выбран пресет: {preset.Name}");
+                            }
                         }
                         catch (Exception ex)
                         {
@@ -759,7 +821,12 @@ namespace Converter
             cbNamingPattern.SelectedIndexChanged += (s, e) =>
             {
                 NamingPattern = cbNamingPattern.SelectedItem?.ToString();
-                DebounceEstimate();
+                
+                // Запрашиваем обновление оценки через MainPresenter
+                if (_mainPresenter != null)
+                {
+                    _ = _mainPresenter.RequestEstimateUpdateAsync();
+                }
             };
             panel.Controls.Add(cbNamingPattern);
 
@@ -1146,7 +1213,8 @@ namespace Converter
             WireEstimateTriggers();
         }
 
-        public void ApplyPresetToUi(PresetProfile preset)
+        // Визуальное применение пресета к UI (только обновление контролов)
+        private void ApplyPresetToUi(ConversionProfile preset)
         {
             // Format
             if (!string.IsNullOrWhiteSpace(preset.Format))
@@ -1242,11 +1310,12 @@ namespace Converter
             DebounceEstimate();
         }
 
+        // Собирает настройки из UI и создает PresetProfile (для сохранения)
         private PresetProfile BuildPresetFromUi()
         {
             var fmt = cbFormat.SelectedItem?.ToString() ?? "mp4";
             var vcodec = ExtractCodecName(cbVideoCodec.SelectedItem?.ToString() ?? "libx264");
-            var acodec = cbAudioCodec.SelectedItem?.ToString() ?? "aac";
+            var acodec = ExtractCodecName(cbAudioCodec.SelectedItem?.ToString() ?? "aac");
             int? abitrate = null;
             if (chkEnableAudio.Checked && cbAudioBitrate.SelectedItem != null)
             {
@@ -1261,6 +1330,14 @@ namespace Converter
             var crf = ExtractCRF(cbQuality.SelectedItem?.ToString() ?? "CRF 23");
             var threads = nudThreads != null && nudThreads.Value > 0 ? (int?)nudThreads.Value : null;
 
+            // Определяем разрешение
+            int? width = null;
+            int? height = null;
+            if (rbUsePreset.Checked && cbPreset.SelectedItem != null)
+            {
+                height = PresetToHeight(cbPreset.SelectedItem.ToString() ?? "720p");
+            }
+
             return new PresetProfile
             {
                 Id = Guid.NewGuid().ToString("N"),
@@ -1268,8 +1345,8 @@ namespace Converter
                 Category = "Custom",
                 Icon = "⭐",
                 Description = "Пользовательский пресет",
-                Width = null,
-                Height = null,
+                Width = width,
+                Height = height,
                 VideoCodec = vcodec,
                 Bitrate = null, // use CRF primarily; bitrate could be derived later
                 CRF = crf,
@@ -1326,8 +1403,11 @@ namespace Converter
                 // Notify presenter about new files
                 await RaiseFilesDroppedAsync(files).ConfigureAwait(false);
 
-                // Update estimation
-                DebounceEstimate();
+                // Запрашиваем обновление оценки через MainPresenter
+                if (_mainPresenter != null)
+                {
+                    _ = _mainPresenter.RequestEstimateUpdateAsync();
+                }
 
                 // Update UI state
                 UpdateShareButtonState();
@@ -1345,83 +1425,106 @@ namespace Converter
             _ = HandleAddFilesClickAsync();
         }
 
-        private async Task HandleAddFilesClickAsync()
+       private async Task HandleAddFilesClickAsync()
+{
+    try
+    {
+        using var ofd = new OpenFileDialog
         {
-            try
+            Filter = "Видео файлы|*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.flv;*.webm;*.m4v;*.mpg;*.mpeg|Все файлы|*.*",
+            Multiselect = true,
+            Title = "Выберите файлы для добавления"
+        };
+
+        if (ofd.ShowDialog(this) == DialogResult.OK)
+        {
+            var filePaths = ofd.FileNames;
+            if (filePaths.Length > 0)
             {
-                using var ofd = new OpenFileDialog
+                // Use Invoke to ensure we're on the UI thread when updating controls
+                ControlExtensions.InvokeIfRequired(this, () => btnAddFiles.Enabled = false);
+                
+                try
                 {
-                    Filter = "Видео файлы|*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.flv;*.webm;*.m4v;*.mpg;*.mpeg|Все файлы|*.*",
-                    Multiselect = true,
-                    Title = "Выберите файлы для добавления"
-                };
+                    // 1) Add files to the list on the UI thread
+                    ControlExtensions.InvokeIfRequired(this, () => AddFilesToList(filePaths));
 
-                if (ofd.ShowDialog(this) == DialogResult.OK)
-                {
-                    var filePaths = ofd.FileNames;
-                    if (filePaths.Length > 0)
+                    // 2) Notify presenter about the new files
+                    await RaiseFilesDroppedAsync(filePaths).ConfigureAwait(false);
+
+                    // 3) Request estimation update
+                    if (_mainPresenter != null)
                     {
-                        // Отключаем кнопку на время добавления файлов
-                        btnAddFiles.Enabled = false;
-                        try
-                        {
-                            // 1) Добавляем элементы на панель файлов (старый UI)
-                            AddFilesToList(filePaths);
-
-                            // 2) Сообщаем презентеру через FilesDroppedAsync, чтобы добавить в очередь
-                            await RaiseFilesDroppedAsync(filePaths).ConfigureAwait(false);
-
-                            // 3) Обновляем оценку
-                            DebounceEstimate();
-                        }
-                        finally
-                        {
-                            btnAddFiles.Enabled = true;
-                        }
+                        _ = _mainPresenter.RequestEstimateUpdateAsync();
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                ShowError($"Ошибка при добавлении файлов: {ex.Message}");
-                _logger?.LogError(ex, "Ошибка в обработчике btnAddFiles_Click");
+                finally
+                {
+                    // Make sure to re-enable the button on the UI thread
+                    this.InvokeIfRequired(() => btnAddFiles.Enabled = true);
+                }
             }
         }
+    }
+    catch (Exception ex)
+    {
+        _logger?.LogError(ex, "Ошибка в обработчике btnAddFiles_Click");
+        Converter.Extensions.ControlExtensions.InvokeIfRequired(this, () => ShowError($"Ошибка при добавлении файлов: {ex.Message}"));
+    }
+}
+
+// Add this extension method if it doesn't exist
+
 
         private async Task AddFilesToList(string[] paths)
+{
+    // Ensure we're on the UI thread for all UI operations
+    if (InvokeRequired)
+    {
+        Invoke((Action<string[]>)((p) => AddFilesToList(p).ConfigureAwait(false)), paths);
+        return;
+    }
+
+    try
+    {
+        foreach (var path in paths)
         {
-            foreach (var path in paths)
+            if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
+                continue;
+
+            // Check if file is already added
+            if (filesPanel.Controls.OfType<FileListItem>().Any(item =>
+                string.Equals(item.FilePath, path, StringComparison.OrdinalIgnoreCase)))
             {
-                if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
-                    continue;
-
-                // Check if file is already added
-                if (filesPanel.Controls.OfType<FileListItem>().Any(item =>
-                    string.Equals(item.FilePath, path, StringComparison.OrdinalIgnoreCase)))
-                {
-                    continue;
-                }
-
-                var fileItem = new FileListItem(path, _themeService)
-                {
-                    Width = filesPanel.Width - 24, // Account for padding and scrollbar
-                    Margin = new Padding(0, 0, 0, 8)
-                };
-
-                // Use the new handler methods
-                fileItem.RemoveClicked += OnFileItemRemoveClicked;
-                fileItem.SelectionChanged += OnFileItemSelectionChanged;
-
-                filesPanel.Controls.Add(fileItem);
-
-                // Load thumbnail asynchronously
-                _ = LoadThumbnailForFileItemAsync(fileItem, path);
+                continue;
             }
 
-            // Update UI
-            UpdateShareButtonState();
-            UpdateEditorButtonState();
+            var fileItem = new FileListItem(path, _themeService)
+            {
+                Width = filesPanel.Width - 24, // Account for padding and scrollbar
+                Margin = new Padding(0, 0, 0, 8)
+            };
+
+            // Use the new handler methods
+            fileItem.RemoveClicked += OnFileItemRemoveClicked;
+            fileItem.SelectionChanged += OnFileItemSelectionChanged;
+
+            filesPanel.Controls.Add(fileItem);
+
+            // Load thumbnail asynchronously
+            _ = LoadThumbnailForFileItemAsync(fileItem, path);
         }
+
+        // Update UI
+        UpdateShareButtonState();
+        UpdateEditorButtonState();
+    }
+    catch (Exception ex)
+    {
+        _logger?.LogError(ex, "Error in AddFilesToList");
+        ShowError($"Error adding files: {ex.Message}");
+    }
+}
 
         private void ClearAllFiles()
         {
@@ -1503,6 +1606,7 @@ namespace Converter
             }
         }
 
+        // Собирает настройки конвертации из UI (для передачи в MainPresenter)
         private Converter.Domain.Models.ConversionSettings CreateConversionSettings()
         {
             var format = (cbFormat.SelectedItem?.ToString() ?? "MP4").ToLowerInvariant();
@@ -1554,7 +1658,12 @@ namespace Converter
         {
             var fmt = cbFormat.SelectedItem?.ToString() ?? "MP4";
             PopulateCodecsForFormat(fmt);
-            DebounceEstimate();
+            
+            // Запрашиваем обновление оценки через MainPresenter
+            if (_mainPresenter != null)
+            {
+                _ = _mainPresenter.RequestEstimateUpdateAsync();
+            }
         }
 
         private void PopulateCodecsForFormat(string format)
@@ -1822,283 +1931,7 @@ namespace Converter
             _btnOpenEditor.Enabled = filesPanel.Controls.Count > 0;
         }
 
-        private async Task ConvertFileAsync(string inputPath, string outputPath, string format, string vcodec,
-            string acodec, string abitrate, int crf, CancellationToken cancellationToken, IProgress<double>? progressObserver = null)
-        {
-            var fileName = System.IO.Path.GetFileName(inputPath);
-            AppendLog($"🎬 Начало: {fileName} -> {System.IO.Path.GetFileName(outputPath)}");
-
-            try
-            {
-                // Ensure input file exists
-                if (!System.IO.File.Exists(inputPath))
-                {
-                    throw new FileNotFoundException($"Входной файл не найден: {inputPath}");
-                }
-
-                // Ensure output directory exists
-                var outputDir = System.IO.Path.GetDirectoryName(outputPath);
-                if (!string.IsNullOrEmpty(outputDir) && !System.IO.Directory.Exists(outputDir))
-                {
-                    System.IO.Directory.CreateDirectory(outputDir);
-                }
-
-                IMediaInfo? mediaInfo = null;
-                string? scaleFilter = null;
-                TimeSpan? estimatedDuration = null;
-                try
-                {
-                    mediaInfo = await FFmpeg.GetMediaInfo(inputPath);
-                    var v = mediaInfo.VideoStreams?.FirstOrDefault();
-
-                    if (v != null)
-                    {
-                        if (rbUsePreset.Checked)
-                        {
-                            int newHeight = PresetToHeight(cbPreset.SelectedItem?.ToString() ?? "720p");
-                            scaleFilter = $"scale=-2:{newHeight}";
-                        }
-                        else
-                        {
-                            var pct = (int)nudPercent.Value;
-                            scaleFilter = $"scale=trunc(iw*{pct}/100/2)*2:trunc(ih*{pct}/100/2)*2";
-                        }
-
-                        // Вычисляем оценку времени конвертации для отображения оставшегося времени
-                        try
-                        {
-                            int? targetW = null;
-                            int? targetH = null;
-                            if (rbUsePreset.Checked)
-                            {
-                                targetH = PresetToHeight(cbPreset.SelectedItem?.ToString() ?? "720p");
-                                if (targetH.HasValue && v.Height > 0)
-                                {
-                                    double scale = targetH.Value / (double)v.Height;
-                                    targetW = Math.Max(2, (int)Math.Round(v.Width * scale));
-                                    if (targetW % 2 != 0) targetW++;
-                                    if (targetH.Value % 2 != 0) targetH++;
-                                }
-                            }
-                            else if (rbUsePercent.Checked)
-                            {
-                                var pct = (int)nudPercent.Value;
-                                if (v.Height > 0)
-                                {
-                                    targetH = Math.Max(2, (int)Math.Round(v.Height * pct / 100m));
-                                    double scale = targetH.Value / (double)v.Height;
-                                    targetW = Math.Max(2, (int)Math.Round(v.Width * scale));
-                                    if (targetW % 2 != 0) targetW++;
-                                    if (targetH.Value % 2 != 0) targetH++;
-                                }
-                            }
-
-                            int estAudioKbps = 0;
-                            bool estAudioCopy = false;
-                            if (chkEnableAudio.Checked)
-                            {
-                                var selAudio = cbAudioCodec.SelectedItem?.ToString() ?? string.Empty;
-                                if (selAudio.StartsWith("copy", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    estAudioCopy = true;
-                                }
-                                else
-                                {
-                                    var s = cbAudioBitrate.SelectedItem?.ToString() ?? "128k";
-                                    if (s.EndsWith("k", StringComparison.OrdinalIgnoreCase)) s = s[..^1];
-                                    int.TryParse(s, out estAudioKbps);
-                                    if (estAudioKbps == 0) estAudioKbps = 128;
-                                }
-                            }
-
-                            var est = await _estimationService.EstimateConversion(
-                                inputPath,
-                                0,
-                                targetW,
-                                targetH,
-                                vcodec,
-                                chkEnableAudio.Checked,
-                                estAudioKbps,
-                                crf,
-                                estAudioCopy,
-                                cancellationToken);
-                            estimatedDuration = est.EstimatedDuration;
-                        }
-                        catch
-                        {
-                            // Если не удалось вычислить оценку, используем null
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    AppendLog($"⚠ Предупреждение при анализе: {ex.Message}");
-                }
-
-                var conv = FFmpeg.Conversions.New();
-                var finalEstimatedDuration = estimatedDuration; // Захватываем для использования в замыкании
-
-                conv.OnProgress += (s, args) =>
-                {
-                    if (cancellationToken.IsCancellationRequested)
-                    {
-                        // FFmpeg will handle cancellation
-                        return;
-                    }
-
-                    this.BeginInvoke(new Action(() =>
-                    {
-                        var percent = Math.Clamp(args.Percent, 0, 100);
-                        progressBarCurrent.Value = (int)percent;
-                        progressObserver?.Report(percent);
-
-                        // Вычисляем оставшееся время на основе оценки
-                        string timeDisplay;
-                        if (finalEstimatedDuration.HasValue && percent > 0 && percent < 100)
-                        {
-                            var elapsed = finalEstimatedDuration.Value.TotalSeconds * (percent / 100.0);
-                            var remaining = finalEstimatedDuration.Value.TotalSeconds - elapsed;
-                            var remainingTimeSpan = TimeSpan.FromSeconds(Math.Max(0, remaining));
-                            timeDisplay = remainingTimeSpan.TotalHours >= 1
-                                ? $"{(int)remainingTimeSpan.TotalHours} ч {remainingTimeSpan.Minutes} мин"
-                                : remainingTimeSpan.TotalMinutes >= 1
-                                    ? $"{(int)remainingTimeSpan.TotalMinutes} мин {remainingTimeSpan.Seconds} сек"
-                                    : $"{remainingTimeSpan.Seconds} сек";
-                        }
-                        else
-                        {
-                            // Если оценка недоступна, показываем исходную длительность
-                            timeDisplay = args.TotalLength.ToString(@"hh\:mm\:ss");
-                        }
-
-                        lblStatusCurrent.Text = $"{fileName}: {percent:F1}% | {timeDisplay}";
-                    }));
-                };
-
-                conv.OnDataReceived += (sender, args) =>
-                {
-                    if (!string.IsNullOrWhiteSpace(args.Data))
-                    {
-                        AppendLog($"FFmpeg: {args.Data}");
-                    }
-                };
-
-                conv.AddParameter("-loglevel verbose");
-                conv.AddParameter($"-i \"{inputPath}\"");
-
-                bool isGif = string.Equals(format, "gif", StringComparison.OrdinalIgnoreCase);
-                bool videoCopy = string.Equals(vcodec, "copy", StringComparison.OrdinalIgnoreCase);
-                bool audioCopy = chkEnableAudio.Checked && string.Equals(acodec, "copy", StringComparison.OrdinalIgnoreCase);
-                AudioProcessingOptions? audioProcessingOptions = null;
-                string? audioFilterString = null;
-                bool audioFiltersActive = false;
-                if (!isGif && chkEnableAudio.Checked && _audioProcessingPanel != null)
-                {
-                    var snapshot = _audioProcessingPanel.GetOptions().Clone();
-                    snapshot.TotalDuration = mediaInfo?.Duration.TotalSeconds ?? 0;
-                    var builtFilters = AudioProcessingService.BuildAudioFilterString(snapshot);
-                    if (!string.IsNullOrWhiteSpace(builtFilters))
-                    {
-                        audioProcessingOptions = snapshot;
-                        audioFilterString = builtFilters;
-                        audioFiltersActive = true;
-                    }
-                }
-
-                if (chkHardwareAccel.Checked)
-                {
-                    conv.AddParameter("-hwaccel auto");
-                }
-
-                // GIF не содержит аудио
-                if (isGif)
-                {
-                    conv.AddParameter("-an");
-                }
-                else if (!chkEnableAudio.Checked)
-                {
-                    conv.AddParameter("-an");
-                }
-
-                // Видео кодирование/копирование
-                if (videoCopy)
-                {
-                    conv.AddParameter("-c:v copy");
-                }
-                else
-                {
-                    if (!string.IsNullOrWhiteSpace(scaleFilter))
-                    {
-                        conv.AddParameter($"-vf {scaleFilter}");
-                    }
-                    conv.AddParameter($"-c:v {vcodec}");
-                    if (!isGif)
-                    {
-                        conv.AddParameter("-pix_fmt yuv420p");
-                    }
-                    if (vcodec.IndexOf("x264", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        vcodec.IndexOf("x265", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        conv.AddParameter($"-crf {crf} -preset medium");
-                    }
-                }
-
-                var threads = (int)nudThreads.Value;
-                if (threads > 0)
-                {
-                    conv.AddParameter($"-threads {threads}");
-                }
-
-                // Аудио кодирование/копирование (если не GIF и аудио включено)
-                if (!isGif && chkEnableAudio.Checked)
-                {
-                    if (audioCopy && audioFiltersActive)
-                    {
-                        audioCopy = false;
-                    }
-
-                    if (audioCopy)
-                    {
-                        conv.AddParameter("-c:a copy");
-                    }
-                    else
-                    {
-                        conv.AddParameter($"-c:a {acodec} -b:a {abitrate}");
-                    }
-
-                    if (audioFiltersActive && audioProcessingOptions != null)
-                    {
-                        AudioProcessingService.ApplyAudioProcessing(conv, audioProcessingOptions, audioFilterString);
-                    }
-                }
-
-                if (string.Equals(format, "mp4", StringComparison.OrdinalIgnoreCase))
-                {
-                    conv.AddParameter("-movflags +faststart");
-                }
-
-                conv.AddParameter($"\"{outputPath}\"");
-
-                try
-                {
-                    AppendLog("FFmpeg cmd: " + conv.Build());
-                }
-                catch { }
-
-                await conv.Start(cancellationToken);
-                AppendLog($"✅ Завершено: {fileName}");
-            }
-            catch (OperationCanceledException)
-            {
-                AppendLog($"⏹ Прервано: {fileName}");
-                throw;
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"❌ Ошибка при обработке {fileName}: {ex.Message}");
-                throw new Exception($"Не удалось обработать {fileName}: {ex.Message}", ex);
-            }
-        }
+        // ConvertFileAsync удален - конвертация теперь выполняется через IQueueProcessor и ConversionUseCase
 
         private string GetSelectedPresetLabel()
         {
@@ -2130,8 +1963,17 @@ namespace Converter
                 try
                 {
                     var preset = BuildPresetFromUi();
-                    _presetService.SavePresetToFile(preset, sfd.FileName);
-                    AppendLog($"💾 Пресет сохранен: {System.IO.Path.GetFileName(sfd.FileName)}");
+                    
+                    // Делегируем сохранение в MainPresenter
+                    if (_mainPresenter != null)
+                    {
+                        _mainPresenter.SavePresetToFile(preset, sfd.FileName);
+                        AppendLog($"💾 Пресет сохранен: {System.IO.Path.GetFileName(sfd.FileName)}");
+                    }
+                    else
+                    {
+                        ShowError("MainPresenter недоступен для сохранения пресета");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -2152,9 +1994,44 @@ namespace Converter
             {
                 try
                 {
-                    var preset = _presetService.LoadPresetFromFile(ofd.FileName);
-                    ApplyPresetToUi(preset);
-                    AppendLog($"📂 Пресет загружен: {System.IO.Path.GetFileName(ofd.FileName)}");
+                    // Делегируем загрузку в MainPresenter
+                    if (_mainPresenter != null)
+                    {
+                        var preset = _mainPresenter.LoadPresetFromFile(ofd.FileName);
+                        
+                        // Применяем пресет через MainPresenter
+                        _mainPresenter.ApplyPreset(preset);
+                        
+                        // Визуально обновляем UI
+                        var conversionProfile = new ConversionProfile
+                        {
+                            Id = preset.Id,
+                            Name = preset.Name,
+                            Description = preset.Description,
+                            Category = preset.Category,
+                            VideoCodec = preset.VideoCodec,
+                            Bitrate = preset.Bitrate,
+                            Width = preset.Width,
+                            Height = preset.Height,
+                            CRF = preset.CRF,
+                            Format = preset.Format,
+                            AudioCodec = preset.AudioCodec,
+                            AudioBitrate = preset.AudioBitrate,
+                            IncludeAudio = preset.IncludeAudio,
+                            MaxFileSizeMB = preset.MaxFileSizeMB,
+                            MaxDurationSeconds = preset.MaxDurationSeconds,
+                            Icon = preset.Icon,
+                            ColorHex = preset.ColorHex,
+                            IsPro = preset.IsPro
+                        };
+                        ApplyPresetToUi(conversionProfile);
+                        
+                        AppendLog($"📂 Пресет загружен: {System.IO.Path.GetFileName(ofd.FileName)}");
+                    }
+                    else
+                    {
+                        ShowError("MainPresenter недоступен для загрузки пресета");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -2207,7 +2084,20 @@ namespace Converter
             return match.Success ? int.Parse(match.Value) : 23;
         }
 
-        private void AppendLog(string message)
+        // Метод для перестроения вкладки пресетов после загрузки
+        public void RebuildPresetsTab()
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(RebuildPresetsTab));
+                return;
+            }
+            
+            _ = BuildPresetsTabAsync();
+        }
+        
+        // IMainView: логирование в UI
+        public void AppendLog(string message)
         {
             try
             {
@@ -2237,7 +2127,7 @@ namespace Converter
             public int Height { get; set; }
         }
 
-        // Debounce functionality for estimation updates
+        // Debounce functionality for estimation updates (делегируется в MainPresenter)
         private System.Windows.Forms.Timer _estimateDebounceTimer = new System.Windows.Forms.Timer();
         private bool _estimatePending = false;
 
@@ -2248,11 +2138,55 @@ namespace Converter
             _estimateDebounceTimer.Stop();
         }
 
-        private void EstimateDebounceTimer_Tick(object? sender, EventArgs e)
+        private async void EstimateDebounceTimer_Tick(object? sender, EventArgs e)
         {
             _estimateDebounceTimer.Stop();
+
+            if (!_estimatePending)
+            {
+                return;
+            }
+
             _estimatePending = false;
-            _ = UpdateEstimateAsync();
+
+            try
+            {
+                if (_mainPresenter != null)
+                {
+                    // Собираем текущие настройки из UI и пробрасываем их как SelectedPreset,
+                    // чтобы MainPresenter.RequestEstimateUpdateAsync использовал актуальные параметры.
+                    var uiPreset = BuildPresetFromUi();
+                    var conversionProfile = new ConversionProfile
+                    {
+                        Id = uiPreset.Id,
+                        Name = uiPreset.Name,
+                        Description = uiPreset.Description,
+                        Category = uiPreset.Category,
+                        VideoCodec = uiPreset.VideoCodec,
+                        Bitrate = uiPreset.Bitrate,
+                        Width = uiPreset.Width,
+                        Height = uiPreset.Height,
+                        CRF = uiPreset.CRF,
+                        Format = uiPreset.Format,
+                        AudioCodec = uiPreset.AudioCodec,
+                        AudioBitrate = uiPreset.AudioBitrate,
+                        IncludeAudio = uiPreset.IncludeAudio,
+                        MaxFileSizeMB = uiPreset.MaxFileSizeMB,
+                        MaxDurationSeconds = uiPreset.MaxDurationSeconds,
+                        Icon = uiPreset.Icon,
+                        ColorHex = uiPreset.ColorHex,
+                        IsPro = uiPreset.IsPro
+                    };
+
+                    SelectedPreset = conversionProfile;
+
+                    await _mainPresenter.RequestEstimateUpdateAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Ошибка обновления оценки: {ex.Message}");
+            }
         }
 
         private void DebounceEstimate()
@@ -2263,111 +2197,37 @@ namespace Converter
             {
                 try
                 {
-                    this.BeginInvoke(new Action(DebounceEstimate));
+                    BeginInvoke(new Action(DebounceEstimate));
                 }
                 catch
                 {
-                    // Если форма уже уничтожена - просто игнорируем
+                    // форма закрывается / уничтожается
                 }
                 return;
-            }
-
-            if (_estimatePending)
-            {
-                _estimateDebounceTimer.Stop();
             }
 
             _estimatePending = true;
+            _estimateDebounceTimer.Stop();
             _estimateDebounceTimer.Start();
-        }
-
-        private async Task UpdateEstimateAsync()
-        {
-            if (_estimatePanel == null || _mainPresenter == null)
-                return;
-
-            var files = GetCurrentFiles();
-            if (files.Length == 0)
-            {
-                _estimatePanel.ShowCalculating();
-                return;
-            }
-
-            try
-            {
-                // Собираем настройки из UI
-                var settings = CreateConversionSettings();
-                var format = (settings.ContainerFormat ?? "mp4").ToLowerInvariant();
-                var videoCodec = settings.VideoCodec ?? "libx264";
-                var audioCodec = settings.AudioCodec ?? "aac";
-                var audioBitrate = settings.AudioBitrate ?? 128;
-                var crf = settings.Crf ?? 23;
-
-                int? targetWidth = null;
-                int? targetHeight = null;
-
-                if (rbUsePreset.Checked && cbPreset.SelectedItem is string preset)
-                {
-                    targetHeight = PresetToHeight(preset);
-                }
-                else if (rbUsePercent.Checked)
-                {
-                    targetHeight = null; // Будет рассчитано как процент
-                }
-
-                // Вызываем презентер для оценки
-                var estimate = await _mainPresenter.EstimateConversionAsync(
-                    files,
-                    0, // Автоматический расчет битрейта
-                    targetWidth,
-                    targetHeight,
-                    videoCodec,
-                    chkEnableAudio.Checked,
-                    audioBitrate,
-                    crf,
-                    false); // audioCopy
-
-                if (files.Length > 0)
-                {
-                    _estimatePanel.UpdateEstimate(estimate);
-                }
-                else
-                {
-                    _estimatePanel.ShowCalculating();
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "Ошибка обновления оценки");
-                _estimatePanel.ShowCalculating();
-            }
-        }
-
-        private string[] GetCurrentFiles()
-        {
-            if (filesPanel != null)
-            {
-                return filesPanel.Controls
-                    .OfType<FileListItem>()
-                    .Select(item => item.FilePath)
-                    .ToArray();
-            }
-            return Array.Empty<string>();
         }
 
         private void WireEstimateTriggers()
         {
             // Wire up all the controls that should trigger estimate updates
+            // Все обновления делегируются в MainPresenter через DebounceEstimate
             var controls = new Control[]
             {
                 cbFormat, cbVideoCodec, cbQuality, cbPreset, nudPercent,
-                chkEnableAudio, cbAudioCodec, cbAudioBitrate,
-                txtOutputFolder, chkCreateConvertedFolder, cbNamingPattern,
+                cbAudioCodec, cbAudioBitrate, chkEnableAudio,
+                txtFfmpegPath, txtOutputFolder, chkCreateConvertedFolder, cbNamingPattern,
                 rbUsePreset, rbUsePercent
             };
 
             foreach (var control in controls)
             {
+                if (control is null)
+                    continue;
+
                 if (control is ComboBox comboBox)
                     comboBox.SelectedIndexChanged += (s, e) => DebounceEstimate();
                 else if (control is NumericUpDown numericUpDown)

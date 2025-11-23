@@ -16,7 +16,7 @@ public static class TimelineEditingService
         string inputPath,
         string outputPath,
         IEnumerable<TimelineSegment> rawSegments,
-        SegmentEditMode mode)
+        Application.Models.SegmentEditMode mode)
     {
         if (string.IsNullOrWhiteSpace(inputPath))
             throw new ArgumentNullException(nameof(inputPath));
@@ -29,7 +29,7 @@ public static class TimelineEditingService
 
         IReadOnlyList<TimelineSegment> segments;
 
-        if (mode == SegmentEditMode.KeepOnly)
+        if (mode == Application.Models.SegmentEditMode.KeepOnly)
         {
             segments = TimelineUtils.Normalize(rawSegments);
         }

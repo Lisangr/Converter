@@ -141,28 +141,68 @@ namespace Converter.Application.Services
         {
             try
             {
-                if (!Directory.Exists(ProfilesDirectory))
+                // Загружаем JSON пресеты из папки Profiles
+                if (Directory.Exists(ProfilesDirectory))
                 {
-                    Directory.CreateDirectory(ProfilesDirectory);
-                    return;
-                }
-
-                var profileFiles = Directory.GetFiles(ProfilesDirectory, "*.json");
-                foreach (var file in profileFiles)
-                {
-                    try
+                    var profileFiles = Directory.GetFiles(ProfilesDirectory, "*.json");
+                    foreach (var file in profileFiles)
                     {
-                        var json = await File.ReadAllTextAsync(file);
-                        var profile = JsonSerializer.Deserialize<Converter.Application.Models.ConversionProfile>(json);
-                        if (profile != null)
+                        try
                         {
-                            _profiles[profile.Id] = profile;
+                            var json = await File.ReadAllTextAsync(file);
+                            var profile = JsonSerializer.Deserialize<Converter.Application.Models.ConversionProfile>(json);
+                            if (profile != null)
+                            {
+                                _profiles[profile.Id] = profile;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Error loading profile from {FilePath}", file);
                         }
                     }
-                    catch (Exception ex)
+                }
+
+                // Загружаем XML пресеты из папки Presets
+                try
+                {
+                    var xmlLoader = new Converter.Services.XmlPresetLoader();
+                    var xmlPresets = xmlLoader.LoadAllPresets();
+                    
+                    foreach (var xmlPreset in xmlPresets)
                     {
-                        _logger.LogError(ex, "Error loading profile from {FilePath}", file);
+                        // Конвертируем PresetProfile в ConversionProfile
+                        var conversionProfile = new Converter.Application.Models.ConversionProfile
+                        {
+                            Id = xmlPreset.Id ?? Guid.NewGuid().ToString("N"),
+                            Name = xmlPreset.Name,
+                            Description = xmlPreset.Description,
+                            Category = xmlPreset.Category,
+                            VideoCodec = xmlPreset.VideoCodec,
+                            Bitrate = xmlPreset.Bitrate,
+                            Width = xmlPreset.Width,
+                            Height = xmlPreset.Height,
+                            CRF = xmlPreset.CRF,
+                            Format = xmlPreset.Format,
+                            AudioCodec = xmlPreset.AudioCodec,
+                            AudioBitrate = xmlPreset.AudioBitrate,
+                            IncludeAudio = xmlPreset.IncludeAudio,
+                            MaxFileSizeMB = xmlPreset.MaxFileSizeMB,
+                            MaxDurationSeconds = xmlPreset.MaxDurationSeconds,
+                            Icon = xmlPreset.Icon,
+                            ColorHex = xmlPreset.ColorHex,
+                            IsPro = xmlPreset.IsPro
+                        };
+                        
+                        // Добавляем или обновляем пресет (XML пресеты имеют приоритет)
+                        _profiles[conversionProfile.Id] = conversionProfile;
                     }
+                    
+                    _logger.LogInformation("Loaded {Count} XML presets from Presets directory", xmlPresets.Count);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error loading XML presets from Presets directory");
                 }
 
                 // Load default profile ID if not set

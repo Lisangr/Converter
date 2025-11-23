@@ -37,10 +37,13 @@ namespace Converter.Application.Abstractions
         
         /// <summary>Указывает, выполняется ли обработка очереди</summary>
         bool IsRunning { get; }
-        
+
         /// <summary>Указывает, приостановлена ли обработка очереди</summary>
         bool IsPaused { get; }
-        
+
+        /// <summary>Указывает, выполняется ли какая-либо операция в процессоре</summary>
+        bool IsProcessing { get; }
+  
         // ===== УПРАВЛЕНИЕ ПРОЦЕССОРОМ =====
         
         /// <summary>

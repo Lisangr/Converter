@@ -100,6 +100,10 @@ namespace Converter.Application.Abstractions
         /// <summary>Отображает информационное сообщение пользователю</summary>
         /// <param name="message">Текст информационного сообщения</param>
         void ShowInfo(string message);
+        
+        /// <summary>Добавляет сообщение в лог UI</summary>
+        /// <param name="message">Текст сообщения для лога</param>
+        void AppendLog(string message);
 
         // ===== ОТСЛЕЖИВАНИЕ ПРОГРЕССА =====
         
