@@ -1,10 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.IO;
-using System.Linq;
 using System.Text;
-using System.Windows.Forms;
 using Xabe.FFmpeg;
 
 namespace Converter.UI
@@ -23,183 +17,305 @@ namespace Converter.UI
         private readonly CheckBox chkBold;
         private readonly CheckBox chkOutline;
 
+        private Font? currentFont;
+
         private readonly List<SubtitleItem> subtitles = new();
         private IMediaInfo? mediaInfo;
 
         public bool HasSubtitles => subtitles.Count > 0;
 
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                // Dispose of the cached font
+                currentFont?.Dispose();
+                currentFont = null; // Help GC
+
+                // Unsubscribe from events to prevent memory leaks if the player is still alive
+                videoPlayer.PositionChanged -= OnPlayerPositionChanged;
+            }
+            base.Dispose(disposing);
+        }
+
         public SubtitlesEditorPanel(VideoPlayerPanel player)
         {
             videoPlayer = player;
             BackColor = Color.White;
+            Padding = new Padding(10);
+            AutoScroll = true;
 
-            var lblList = new Label
-            {
-                Text = "Субтитры:",
-                Location = new Point(10, 10),
-                AutoSize = true,
-                Font = new Font("Segoe UI", 9, FontStyle.Bold)
-            };
-            Controls.Add(lblList);
-
-            lstSubtitles = new ListBox
-            {
-                Location = new Point(10, 35),
-                Size = new Size(500, 180),
-                Font = new Font("Consolas", 9)
-            };
-            lstSubtitles.SelectedIndexChanged += LstSubtitles_SelectedIndexChanged;
-            lstSubtitles.DoubleClick += (_, _) => EditSelectedSubtitle();
-            Controls.Add(lstSubtitles);
-
-            var btnAdd = new Button
-            {
-                Text = "➕ Добавить",
-                Location = new Point(520, 35),
-                Size = new Size(120, 30)
-            };
-            btnAdd.Click += BtnAdd_Click;
-            Controls.Add(btnAdd);
-
-            btnEdit = new Button
-            {
-                Text = "✏️ Изменить",
-                Location = new Point(520, 70),
-                Size = new Size(120, 30),
-                Enabled = false
-            };
-            btnEdit.Click += (_, _) => EditSelectedSubtitle();
-            Controls.Add(btnEdit);
-
-            btnDelete = new Button
-            {
-                Text = "🗑 Удалить",
-                Location = new Point(520, 105),
-                Size = new Size(120, 30),
-                Enabled = false
-            };
-            btnDelete.Click += BtnDelete_Click;
-            Controls.Add(btnDelete);
-
-            var btnImport = new Button
-            {
-                Text = "📂 Импорт SRT",
-                Location = new Point(520, 145),
-                Size = new Size(120, 30)
-            };
-            btnImport.Click += BtnImport_Click;
-            Controls.Add(btnImport);
-
-            var btnExport = new Button
-            {
-                Text = "💾 Экспорт SRT",
-                Location = new Point(520, 180),
-                Size = new Size(120, 30)
-            };
-            btnExport.Click += BtnExport_Click;
-            Controls.Add(btnExport);
-
+            // 1. Нижняя панель стиля субтитров
             var grpStyle = new GroupBox
             {
                 Text = "🎨 Стиль субтитров",
-                Location = new Point(10, 225),
-                Size = new Size(630, 90),
-                Font = new Font("Segoe UI", 9, FontStyle.Bold)
+                Dock = DockStyle.Bottom,
+                Height = 140,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                Padding = new Padding(10)
             };
             Controls.Add(grpStyle);
 
-            var lblFont = new Label
+            var styleFlow = new FlowLayoutPanel
             {
-                Text = "Шрифт:",
-                Location = new Point(10, 25),
-                AutoSize = true
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true,
+                Padding = new Padding(5),
+                AutoScroll = true
             };
-            grpStyle.Controls.Add(lblFont);
+            grpStyle.Controls.Add(styleFlow);
 
+            // Параметры стиля (как в присланном коде)
+            var fontPanel = new Panel { Height = 30, Width = 200, Margin = new Padding(5) };
+            var lblFont = new Label { Text = "Шрифт:", Location = new Point(0, 5), AutoSize = true };
+            fontPanel.Controls.Add(lblFont);
             cmbFont = new ComboBox
             {
-                Location = new Point(60, 22),
-                Width = 120,
+                Location = new Point(60, 2),
+                Width = 130,
                 DropDownStyle = ComboBoxStyle.DropDownList
             };
             cmbFont.Items.AddRange(new[] { "Arial", "Impact", "Bebas", "Montserrat", "Roboto" });
             cmbFont.SelectedIndex = 0;
-            grpStyle.Controls.Add(cmbFont);
+            fontPanel.Controls.Add(cmbFont);
+            styleFlow.Controls.Add(fontPanel);
 
-            var lblSize = new Label
-            {
-                Text = "Размер:",
-                Location = new Point(190, 25),
-                AutoSize = true
-            };
-            grpStyle.Controls.Add(lblSize);
-
+            var sizePanel = new Panel { Height = 30, Width = 140, Margin = new Padding(5) };
+            var lblSize = new Label { Text = "Размер:", Location = new Point(0, 5), AutoSize = true };
+            sizePanel.Controls.Add(lblSize);
             numFontSize = new NumericUpDown
             {
-                Location = new Point(250, 22),
-                Width = 60,
+                Location = new Point(65, 2),
+                Width = 70,
                 Minimum = 12,
                 Maximum = 120,
                 Value = 48
             };
-            grpStyle.Controls.Add(numFontSize);
+            sizePanel.Controls.Add(numFontSize);
+            styleFlow.Controls.Add(sizePanel);
 
             btnFontColor = new Button
             {
                 Text = "Цвет текста",
-                Location = new Point(320, 20),
-                Size = new Size(100, 25),
-                BackColor = Color.White
+                Size = new Size(110, 30),
+                BackColor = Color.White,
+                Margin = new Padding(5)
             };
             btnFontColor.Click += BtnFontColor_Click;
-            grpStyle.Controls.Add(btnFontColor);
+            styleFlow.Controls.Add(btnFontColor);
 
             btnBackgroundColor = new Button
             {
                 Text = "Цвет фона",
-                Location = new Point(430, 20),
-                Size = new Size(100, 25),
+                Size = new Size(110, 30),
                 BackColor = Color.Black,
-                ForeColor = Color.White
+                ForeColor = Color.White,
+                Margin = new Padding(5)
             };
             btnBackgroundColor.Click += BtnBackgroundColor_Click;
-            grpStyle.Controls.Add(btnBackgroundColor);
+            styleFlow.Controls.Add(btnBackgroundColor);
 
-            var lblPos = new Label
-            {
-                Text = "Позиция:",
-                Location = new Point(540, 25),
-                AutoSize = true
-            };
-            grpStyle.Controls.Add(lblPos);
-
+            var posPanel = new Panel { Height = 30, Width = 160, Margin = new Padding(5) };
+            var lblPos = new Label { Text = "Позиция:", Location = new Point(0, 5), AutoSize = true };
+            posPanel.Controls.Add(lblPos);
             cmbPosition = new ComboBox
             {
-                Location = new Point(540, 45),
-                Width = 80,
+                Location = new Point(65, 2),
+                Width = 90,
                 DropDownStyle = ComboBoxStyle.DropDownList
             };
             cmbPosition.Items.AddRange(new[] { "Внизу", "Вверху", "По центру" });
             cmbPosition.SelectedIndex = 0;
-            grpStyle.Controls.Add(cmbPosition);
+            posPanel.Controls.Add(cmbPosition);
+            styleFlow.Controls.Add(posPanel);
 
             chkBold = new CheckBox
             {
                 Text = "Жирный",
-                Location = new Point(10, 55),
                 AutoSize = true,
-                Checked = true
+                Checked = true,
+                Margin = new Padding(5, 8, 5, 5)
             };
-            grpStyle.Controls.Add(chkBold);
+            styleFlow.Controls.Add(chkBold);
 
             chkOutline = new CheckBox
             {
                 Text = "Обводка",
-                Location = new Point(100, 55),
                 AutoSize = true,
-                Checked = true
+                Checked = true,
+                Margin = new Padding(5, 8, 5, 5)
             };
-            grpStyle.Controls.Add(chkOutline);
+            styleFlow.Controls.Add(chkOutline);
+
+            // 2. Главная панель сверху
+            var mainPanel = new Panel
+            {
+                Dock = DockStyle.Fill,
+                Padding = new Padding(0, 0, 0, 10)
+            };
+            Controls.Add(mainPanel);
+
+            // Сначала правая панель с кнопками
+            var rightPanel = new Panel
+            {
+                Dock = DockStyle.Right,
+                Width = 160,
+                Padding = new Padding(5, 0, 0, 0)
+            };
+            mainPanel.Controls.Add(rightPanel);
+
+            int buttonY = 0;
+            var btnAdd = new Button
+            {
+                Text = "➕ Добавить",
+                Location = new Point(0, buttonY),
+                Size = new Size(155, 35),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            };
+            btnAdd.Click += BtnAdd_Click;
+            rightPanel.Controls.Add(btnAdd);
+
+            buttonY += 40;
+            btnEdit = new Button
+            {
+                Text = "✏️ Изменить",
+                Location = new Point(0, buttonY),
+                Size = new Size(155, 35),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+                Enabled = false
+            };
+            btnEdit.Click += (_, _) => EditSelectedSubtitle();
+            rightPanel.Controls.Add(btnEdit);
+
+            buttonY += 40;
+            btnDelete = new Button
+            {
+                Text = "🗑 Удалить",
+                Location = new Point(0, buttonY),
+                Size = new Size(155, 35),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+                Enabled = false
+            };
+            btnDelete.Click += BtnDelete_Click;
+            rightPanel.Controls.Add(btnDelete);
+
+            buttonY += 45;
+            var btnImport = new Button
+            {
+                Text = "📂 Импорт SRT",
+                Location = new Point(0, buttonY),
+                Size = new Size(155, 35),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            };
+            btnImport.Click += BtnImport_Click;
+            rightPanel.Controls.Add(btnImport);
+
+            buttonY += 40;
+            var btnExport = new Button
+            {
+                Text = "💾 Экспорт SRT",
+                Location = new Point(0, buttonY),
+                Size = new Size(155, 35),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            };
+            btnExport.Click += BtnExport_Click;
+            rightPanel.Controls.Add(btnExport);
+
+            // Затем левая панель со списком субтитров
+            var leftPanel = new Panel
+            {
+                Dock = DockStyle.Fill,
+                Padding = new Padding(0, 0, 5, 0)
+            };
+            mainPanel.Controls.Add(leftPanel);
+
+            var lblList = new Label
+            {
+                Text = "Субтитры:",
+                Dock = DockStyle.Top,
+                Height = 25,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            leftPanel.Controls.Add(lblList);
+
+            lstSubtitles = new ListBox
+            {
+                Dock = DockStyle.Fill,
+                Font = new Font("Consolas", 9),
+                IntegralHeight = false
+            };
+            lstSubtitles.SelectedIndexChanged += LstSubtitles_SelectedIndexChanged;
+            lstSubtitles.DoubleClick += (_, _) => EditSelectedSubtitle();
+            leftPanel.Controls.Add(lstSubtitles);
+
+            // Живой предпросмотр субтитров по позиции плеера
+            videoPlayer.PositionChanged += OnPlayerPositionChanged;
+        }
+
+        private void OnPlayerPositionChanged(TimeSpan position)
+        {
+            if (subtitles.Count == 0)
+            {
+                videoPlayer.SetSubtitleOverlay(null, null, null, null, ContentAlignment.BottomCenter);
+                return;
+            }
+
+            SubtitleItem? current = null;
+            foreach (var s in subtitles)
+            {
+                if (position >= s.StartTime && position <= s.EndTime)
+                {
+                    current = s;
+                    break;
+                }
+            }
+
+            if (current == null)
+            {
+                videoPlayer.SetSubtitleOverlay(null, null, null, null, ContentAlignment.BottomCenter);
+                return;
+            }
+
+            // Настройки стиля для live-просмотра (упрощённо на основе текущих контролов)
+            var fontStyle = chkBold.Checked ? FontStyle.Bold : FontStyle.Regular;
+            var newFont = new Font(cmbFont.Text, (float)numFontSize.Value, fontStyle);
+
+            // Dispose of the old font if it exists and is different from the new one
+            if (currentFont != null && !currentFont.Equals(newFont))
+            {
+                currentFont.Dispose();
+                currentFont = null;
+            }
+
+            // Cache the new font if it's not already cached
+            if (currentFont == null)
+            {
+                currentFont = newFont;
+            }
+            else
+            {
+                // If the font is the same, dispose of the newly created one to avoid leak
+                newFont.Dispose();
+            }
+
+            var fore = btnFontColor.BackColor;
+            var back = btnBackgroundColor.BackColor;
+
+            var align = ContentAlignment.BottomCenter;
+            if (cmbPosition.SelectedIndex >= 0 && cmbPosition.SelectedIndex <= 2)
+            {
+                align = cmbPosition.SelectedIndex switch
+                {
+                    0 => ContentAlignment.BottomCenter,
+                    1 => ContentAlignment.TopCenter,
+                    2 => ContentAlignment.MiddleCenter,
+                    _ => ContentAlignment.BottomCenter // Default fallback, though index should be valid
+                };
+            }
+            var outlineThickness = chkOutline.Checked ? 2 : 0;
+            videoPlayer.SetSubtitleOverlay(current.Text, currentFont, fore, back, align, outlineThickness);
         }
 
         private void BtnAdd_Click(object? sender, EventArgs e)
@@ -353,7 +469,19 @@ namespace Converter.UI
 
             var assPath = Path.Combine(Path.GetTempPath(), $"subtitles_{Guid.NewGuid():N}.ass");
             GenerateASSFile(assPath);
-            return $"ass='{assPath.Replace("\\", "/").Replace(":", "\\\\:")}'";
+
+            // Для FFmpeg под Windows рекомендуемый формат пути в фильтрах:
+            // C\\:/path/file.ass  (экранируем двоеточие после буквы диска)
+            var normalizedPath = assPath.Replace("\\", "/");
+            if (normalizedPath.Length >= 2 && normalizedPath[1] == ':')
+            {
+                normalizedPath = normalizedPath[0] + "\\:" + normalizedPath.Substring(2);
+            }
+
+            normalizedPath = normalizedPath.Replace("'", "\\'");
+
+            // Используем фильтр subtitles, он тоже принимает ASS-файл
+            return $"subtitles='{normalizedPath}'";
         }
 
         private void GenerateASSFile(string outputPath)
@@ -372,7 +500,7 @@ namespace Converter.UI
             var bgColor = ColorToAss(btnBackgroundColor.BackColor);
             var alignment = GetAlignment();
             var bold = chkBold.Checked ? -1 : 0;
-            var outline = chkOutline.Checked ? 2 : 0;
+            var outline = chkOutline.Checked ? 3 : 0;
 
             ass.AppendLine($"Style: Default,{cmbFont.Text},{numFontSize.Value},{fontColor},&H00000000,&H00000000,{bgColor},{bold},0,0,0,100,100,0,0,1,{outline},1,{alignment},10,10,10,1");
             ass.AppendLine();

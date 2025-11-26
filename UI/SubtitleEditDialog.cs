@@ -151,7 +151,15 @@ namespace Converter.UI
 
         private static TimeSpan ParseTime(string text)
         {
-            if (TimeSpan.TryParseExact(text, "hh\\:mm\\:ss\\.fff", CultureInfo.InvariantCulture, out var result))
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                throw new FormatException("Неверный формат времени");
+            }
+
+            // Нормализуем разделитель дробной части: заменяем запятую на точку
+            var normalized = text.Trim().Replace(',', '.');
+
+            if (TimeSpan.TryParseExact(normalized, "hh\\:mm\\:ss\\.fff", CultureInfo.InvariantCulture, out var result))
             {
                 return result;
             }

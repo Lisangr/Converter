@@ -12,16 +12,14 @@ namespace Converter.UI
     {
         private readonly VideoPlayerPanel videoPlayer;
         private readonly TabControl editorTabs;
-
+        private readonly SplitContainer mainLayout;
         private readonly SubtitlesEditorPanel subtitlesPanel;
         private readonly CropPanel cropPanel;
         private readonly TrimPanel trimPanel;
         private readonly EffectsPanel effectsPanel;
-
         private readonly Button btnApply;
         private readonly Button btnExport;
         private readonly Button btnCancel;
-
         private readonly string currentVideoPath;
         private IMediaInfo? mediaInfo;
 
@@ -30,129 +28,141 @@ namespace Converter.UI
             currentVideoPath = videoPath ?? throw new ArgumentNullException(nameof(videoPath));
 
             Text = "Видео редактор";
-            Size = new Size(1200, 800);
+            Size = new Size(1200, 850);
+            MinimumSize = new Size(800, 600);
             StartPosition = FormStartPosition.CenterScreen;
+
+            var bottomPanel = new Panel
+            {
+                Dock = DockStyle.Bottom,
+                Height = 60,
+                Padding = new Padding(10),
+                BackColor = Color.FromArgb(245, 245, 250)
+            };
+            Controls.Add(bottomPanel);
+
+            mainLayout = new SplitContainer
+            {
+                Dock = DockStyle.Fill,
+                Orientation = Orientation.Horizontal,
+                FixedPanel = FixedPanel.None,
+                SplitterWidth = 6,
+                BackColor = Color.FromArgb(240, 240, 240)
+            };
+
+            mainLayout.SplitterDistance = 380;
+
+            Controls.Add(mainLayout);
 
             videoPlayer = new VideoPlayerPanel
             {
-                Dock = DockStyle.Top,
-                Height = 400
+                Dock = DockStyle.Fill,
+                BackColor = Color.Black
             };
-            Controls.Add(videoPlayer);
+            mainLayout.Panel1.Controls.Add(videoPlayer);
 
             editorTabs = new TabControl
             {
-                Location = new Point(0, 410),
-                Size = new Size(1184, 310),
+                Dock = DockStyle.Fill,
                 Font = new Font("Segoe UI", 10, FontStyle.Regular)
             };
-            Controls.Add(editorTabs);
+            mainLayout.Panel2.Controls.Add(editorTabs);
 
-            subtitlesPanel = new SubtitlesEditorPanel(videoPlayer)
-            {
-                Dock = DockStyle.Fill
-            };
+            subtitlesPanel = new SubtitlesEditorPanel(videoPlayer) { Dock = DockStyle.Fill };
             var tabSubtitles = new TabPage("📝 Субтитры");
             tabSubtitles.Controls.Add(subtitlesPanel);
             editorTabs.TabPages.Add(tabSubtitles);
 
-            cropPanel = new CropPanel(videoPlayer)
-            {
-                Dock = DockStyle.Fill
-            };
+            cropPanel = new CropPanel(videoPlayer) { Dock = DockStyle.Fill };
             var tabCrop = new TabPage("✂️ Кадрирование");
             tabCrop.Controls.Add(cropPanel);
             editorTabs.TabPages.Add(tabCrop);
 
-            trimPanel = new TrimPanel(videoPlayer)
-            {
-                Dock = DockStyle.Fill
-            };
+            trimPanel = new TrimPanel(videoPlayer) { Dock = DockStyle.Fill };
             var tabTrim = new TabPage("⏱ Обрезка");
             tabTrim.Controls.Add(trimPanel);
             editorTabs.TabPages.Add(tabTrim);
 
-            effectsPanel = new EffectsPanel(videoPlayer)
-            {
-                Dock = DockStyle.Fill
-            };
+            effectsPanel = new EffectsPanel(videoPlayer) { Dock = DockStyle.Fill };
             var tabEffects = new TabPage("✨ Эффекты");
             tabEffects.Controls.Add(effectsPanel);
             editorTabs.TabPages.Add(tabEffects);
 
-            var btnY = 730;
+            var buttonsFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Right,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                Padding = new Padding(0),
+                Margin = new Padding(0)
+            };
+            bottomPanel.Controls.Add(buttonsFlow);
 
             btnApply = new Button
             {
                 Text = "👁 Предпросмотр",
-                Location = new Point(800, btnY),
-                Size = new Size(120, 35)
+                AutoSize = true,
+                Margin = new Padding(0, 0, 10, 0),
+                Height = 35
             };
             btnApply.Click += BtnApply_Click;
-            Controls.Add(btnApply);
+            buttonsFlow.Controls.Add(btnApply);
 
             btnExport = new Button
             {
                 Text = "💾 Экспортировать",
-                Location = new Point(930, btnY),
-                Size = new Size(130, 35),
+                AutoSize = true,
+                Margin = new Padding(0, 0, 10, 0),
                 BackColor = Color.FromArgb(76, 175, 80),
                 ForeColor = Color.White,
-                FlatStyle = FlatStyle.Flat
+                FlatStyle = FlatStyle.Flat,
+                Height = 35
             };
             btnExport.Click += BtnExport_Click;
-            Controls.Add(btnExport);
+            buttonsFlow.Controls.Add(btnExport);
 
             btnCancel = new Button
             {
                 Text = "Отмена",
-                Location = new Point(1070, btnY),
-                Size = new Size(100, 35)
+                AutoSize = true,
+                Margin = new Padding(0),
+                Height = 35
             };
             btnCancel.Click += (_, _) => Close();
-            Controls.Add(btnCancel);
+            buttonsFlow.Controls.Add(btnCancel);
 
-            Load += async (_, _) => await LoadVideoAsync();
+            Load += (_, _) => LoadVideo();
         }
 
-        private async Task LoadVideoAsync()
+        private void LoadVideo()
         {
             try
             {
-                mediaInfo = await FFmpeg.GetMediaInfo(currentVideoPath).ConfigureAwait(true);
-                await videoPlayer.LoadVideoAsync(currentVideoPath, mediaInfo).ConfigureAwait(true);
+                mediaInfo = FFmpeg.GetMediaInfo(currentVideoPath).GetAwaiter().GetResult();
+                videoPlayer.LoadVideoAsync(currentVideoPath, mediaInfo).GetAwaiter().GetResult();
                 subtitlesPanel.SetMediaInfo(mediaInfo);
                 trimPanel.SetMediaInfo(mediaInfo);
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Ошибка загрузки видео: {ex.Message}", "Ошибка");
-                Close();
             }
         }
 
         private void BtnApply_Click(object? sender, EventArgs e)
         {
-            _ = BtnApplyAsync();
-        }
-
-        private async Task BtnApplyAsync()
-        {
-            var tempOutput = Path.Combine(Path.GetTempPath(), $"preview_{Guid.NewGuid():N}.mp4");
-            try
+            // Живой предпросмотр: просто переходим к началу (или началу трима),
+            // субтитры рисуются поверх видео в VideoPlayerPanel без перекодирования.
+            var start = TimeSpan.Zero;
+            if (trimPanel.IsTrimEnabled)
             {
-                await ApplyEditsAndExport(tempOutput, isPreview: true).ConfigureAwait(true);
+                var trim = trimPanel.GetTrimData();
+                start = trim.StartTime;
+            }
 
-                if (File.Exists(tempOutput))
-                {
-                    var previewInfo = await FFmpeg.GetMediaInfo(tempOutput).ConfigureAwait(true);
-                    await videoPlayer.LoadVideoAsync(tempOutput, previewInfo).ConfigureAwait(true);
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Не удалось подготовить предпросмотр: {ex.Message}", "Ошибка");
-            }
+            videoPlayer.SeekTo(start);
         }
 
         private void BtnExport_Click(object? sender, EventArgs e)
@@ -195,11 +205,9 @@ namespace Converter.UI
         private async Task ApplyEditsAndExport(string outputPath, bool isPreview)
         {
             var conversion = FFmpeg.Conversions.New();
-            conversion.AddParameter("-y");
             conversion.AddParameter($"-i \"{currentVideoPath}\"");
 
             var videoFilters = new List<string>();
-            var complexFilters = new List<string>();
 
             if (trimPanel.IsTrimEnabled)
             {
@@ -225,18 +233,13 @@ namespace Converter.UI
                 var subtitlesFilter = subtitlesPanel.BuildSubtitlesFilter();
                 if (!string.IsNullOrEmpty(subtitlesFilter))
                 {
-                    complexFilters.Add(subtitlesFilter);
+                    videoFilters.Add(subtitlesFilter);
                 }
             }
 
             if (videoFilters.Count > 0)
             {
                 conversion.AddParameter($"-vf \"{string.Join(",", videoFilters)}\"");
-            }
-
-            if (complexFilters.Count > 0)
-            {
-                conversion.AddParameter($"-filter_complex \"{string.Join(";", complexFilters)}\"");
             }
 
             if (isPreview)
