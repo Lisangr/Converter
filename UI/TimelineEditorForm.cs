@@ -312,7 +312,7 @@ private void UpdateMarkerLabels()
         {
             if (e.RowIndex >= 0 && dgvSegments.Rows[e.RowIndex].DataBoundItem is TimelineSegment seg)
             {
-                SeekTo(seg.Start);
+                SetPosition(seg.Start);
                 SetMarkerA(seg.Start);
                 SetMarkerB(seg.End);
             }
@@ -398,7 +398,7 @@ private void UpdateMarkerLabels()
         {
             SetMarkerA(seg.Start);
             SetMarkerB(seg.End);
-            SeekTo(seg.Start);
+            SetPosition(seg.Start);
         }
     }
 
@@ -436,7 +436,7 @@ private void UpdateMarkerLabels()
     }
 
     private TimeSpan GetCurrentTime() => videoPlayer.GetCurrentTime();
-    private void SeekTo(TimeSpan t) => videoPlayer.SeekTo(t);
+    private void SetPosition(TimeSpan t) => videoPlayer.SetPosition(t);
 
     private void ResetSegments()
     {
@@ -533,7 +533,7 @@ private void UpdateMarkerLabels()
         if (_duration <= TimeSpan.Zero) return;
         double percent = e.X / (double)Math.Max(1, panelTimelineBar.Width);
         var t = TimeSpan.FromSeconds(_duration.TotalSeconds * percent);
-        SeekTo(t);
+        SetPosition(t);
         panelTimelineBar.Invalidate();
     }
 

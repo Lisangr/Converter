@@ -1,28 +1,14 @@
-using System;
-using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Drawing;
 using System.Drawing.Imaging;
-using System.IO;
-using System.Linq;
-using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows.Forms;
 using Microsoft.Extensions.Logging;
-using Xabe.FFmpeg;
-using Xabe.FFmpeg.Downloader;
 using Converter.Application.Abstractions;
-using Converter.Application.Services;
 using Converter.Domain.Models;
 using Converter.Application.Models;
 using NotificationOptions = Converter.Domain.Models.NotificationOptions;
-using Converter.Services;
-using Converter.Services.UIServices;
 using Converter.UI;
 using Converter.UI.Controls;
 using Converter.UI.Dialogs;
-using Converter.Infrastructure;
 using Converter.Extensions;
 
 namespace Converter
@@ -530,6 +516,12 @@ namespace Converter
 
         private async Task BuildPresetsTabAsync()
         {
+            // Ensure AvailablePresets is initialized
+            AvailablePresets ??= new ObservableCollection<ConversionProfile>();
+
+            // Early exit if the UI container is null or disposed
+            if (tabPresets == null || tabPresets.IsDisposed) return;
+
             // Простейшая реализация: просто набор кнопок пресетов в FlowLayoutPanel
             tabPresets.Controls.Clear();
 
@@ -544,22 +536,7 @@ namespace Converter
 
             // Получаем пресеты через AvailablePresets из IMainView
             // AvailablePresets заполняется в MainPresenter.LoadPresetsAsync() при инициализации
-            var presets = AvailablePresets?.ToList() ?? new List<ConversionProfile>();
-            
-            // Если пресеты еще не загружены, пытаемся загрузить их напрямую
-            if (presets.Count == 0 && _mainPresenter != null)
-            {
-                try
-                {
-                    // Ждем немного, чтобы дать время MainPresenter инициализироваться
-                    await Task.Delay(500);
-                    presets = AvailablePresets?.ToList() ?? new List<ConversionProfile>();
-                }
-                catch (Exception ex)
-                {
-                    AppendLog($"Ошибка загрузки пресетов: {ex.Message}");
-                }
-            }
+            var presets = AvailablePresets.ToList();
             
             AppendLog($"Загружено пресетов: {presets.Count}");
             

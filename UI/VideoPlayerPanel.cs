@@ -38,8 +38,11 @@ namespace Converter.UI
         private Font? subtitleFont;
         private string currentSubtitleText = string.Empty;
         private ContentAlignment subtitleAlignment = ContentAlignment.BottomCenter;
+        private bool isSepia;
+        private bool isBlur;
+        private bool IsVignette;
 
-        public event EventHandler<TimeSpan>? PlaybackTimeChanged;
+        public event EventHandler<TimeSpan>? PositionChanged;
         public event EventHandler<Rectangle>? CropRectChanged;
 
         public int VideoWidth => currentMediaInfo?.VideoStreams.FirstOrDefault()?.Width ?? 0;
@@ -224,6 +227,60 @@ namespace Converter.UI
             };
         }
 
+        public void SetAudioEqualizer(bool enable, Converter.Domain.Models.EqualizerPreset preset)
+        {
+            if (mediaPlayer == null) return;
+
+            // Если эквалайзер выключен или пресет None - сбрасываем
+            if (!enable || preset == Converter.Domain.Models.EqualizerPreset.None)
+            {
+                mediaPlayer.SetEqualizer(null);
+                return;
+            }
+
+            // Индексы стандартных пресетов VLC:
+            // 0=Flat, 1=Classical, 2=Club, 3=Dance, 4=Full bass, 5=Full bass&treble, 
+            // 6=Full treble, 7=Headphones, 8=Large Hall, 9=Live, 10=Party, 
+            // 11=Pop, 12=Reggae, 13=Rock, 14=Ska, 15=Soft, 16=Techno
+
+            uint presetIndex = 0; // По умолчанию Flat
+
+            switch (preset)
+            {
+                case Converter.Domain.Models.EqualizerPreset.Bass:
+                    presetIndex = 4; // Full bass
+                    break;
+                case Converter.Domain.Models.EqualizerPreset.Treble:
+                    presetIndex = 6; // Full treble
+                    break;
+                case Converter.Domain.Models.EqualizerPreset.Pop:
+                    presetIndex = 11; // Pop
+                    break;
+                case Converter.Domain.Models.EqualizerPreset.Rock:
+                    presetIndex = 13; // Rock
+                    break;
+                case Converter.Domain.Models.EqualizerPreset.Classical:
+                    presetIndex = 1; // Classical
+                    break;
+                case Converter.Domain.Models.EqualizerPreset.Jazz:
+                    presetIndex = 9; // Live (как замена Jazz)
+                    break;
+                case Converter.Domain.Models.EqualizerPreset.Cinema:
+                    presetIndex = 8; // Large Hall
+                    break;
+                // Custom пока сбрасываем на Flat или можно реализовать ручную настройку полос
+                case Converter.Domain.Models.EqualizerPreset.Custom:
+                default:
+                    presetIndex = 0;
+                    break;
+            }
+
+            // ИСПРАВЛЕНИЕ: Создаем эквалайзер сразу с нужным пресетом через конструктор
+            var equalizer = new Equalizer(presetIndex);
+
+            // Применяем эквалайзер к плееру
+            mediaPlayer.SetEqualizer(equalizer);
+        }
         protected override void OnParentChanged(EventArgs e)
         {
             base.OnParentChanged(e);
@@ -261,6 +318,15 @@ namespace Converter.UI
             }
         }
 
+       public void SetVideoAdjustments(Application.Models.VideoAdjustments adjustments)
+        {
+            // обновляем флаг сепии для корректной гаммы
+            isSepia = adjustments.IsSepia;
+            isBlur = adjustments.IsBlur;
+            IsVignette = adjustments.IsVignette;
+            SetVideoAdjustments(adjustments.Brightness, adjustments.Contrast, adjustments.Saturation, adjustments.Gamma);
+        }
+        
         private void UpdateOverlayBounds()
         {
             if (!IsHandleCreated || videoView.IsDisposed)
@@ -367,11 +433,30 @@ namespace Converter.UI
 
         public void Stop()
         {
-            mediaPlayer.Stop();
+            // 1. Сначала отключаем фильтр эффектов, чтобы избежать краша в libvlc
+            if (mediaPlayer != null)
+            {
+                try
+                {
+                    // 0 = выключить фильтр Adjustments
+                    mediaPlayer.SetAdjustInt(VideoAdjustOption.Enable, 0);
+                }
+                catch
+                {
+                    // Игнорируем ошибки, если плеер уже в нестабильном состоянии
+                }
+
+                // 2. Теперь безопасно останавливаем воспроизведение
+                mediaPlayer.Stop();
+            }
+
             currentPosition = TimeSpan.Zero;
-            btnPlay.Enabled = mediaPlayer.Media != null;
+
+            // Обновление кнопок
+            btnPlay.Enabled = mediaPlayer?.Media != null;
             btnPause.Enabled = false;
             btnStop.Enabled = false;
+
             UpdateUI();
             UpdateSubtitleOverlay(TimeSpan.Zero);
         }
@@ -393,7 +478,7 @@ namespace Converter.UI
                 OnTimeChangedUi(time);
             }
         }
-
+        public event EventHandler<TimeSpan> PlaybackTimeChanged;
         private void OnTimeChangedUi(TimeSpan time)
         {
             currentPosition = time;
@@ -485,15 +570,55 @@ namespace Converter.UI
 
         public TimeSpan GetCurrentTime() => currentPosition;
 
-        public void SeekTo(TimeSpan time)
+        public void SetPosition(TimeSpan position)
         {
             if (mediaPlayer.Media == null)
             {
                 return;
             }
 
-            mediaPlayer.Time = (long)time.TotalMilliseconds;
+            mediaPlayer.Time = (long)position.TotalMilliseconds;
         }
+
+        public void SetVideoAdjustments(float brightness, float contrast, float saturation, float gamma)
+{
+    if (mediaPlayer == null || mediaPlayer.Media == null) return;
+
+    mediaPlayer.SetAdjustInt(VideoAdjustOption.Enable, 1);
+
+    // Apply brightness
+    float vlcBrightness = Math.Clamp(brightness + 1.0f, 0.0f, 2.0f);
+    mediaPlayer.SetAdjustFloat(VideoAdjustOption.Brightness, vlcBrightness);
+
+    // Apply contrast
+    float vlcContrast = Math.Clamp(contrast + 1.0f, 0.0f, 2.0f);
+    mediaPlayer.SetAdjustFloat(VideoAdjustOption.Contrast, vlcContrast);
+
+    // Apply saturation
+    float vlcSaturation = Math.Clamp(saturation, 0.0f, 3.0f);
+    mediaPlayer.SetAdjustFloat(VideoAdjustOption.Saturation, vlcSaturation);
+
+    // Apply gamma with adjustments for sepia
+    float finalGamma = gamma;
+    if (isSepia)
+    {
+        finalGamma *= 1.4f;
+    }
+    
+    // Apply additional gamma adjustments for blur and vignette if needed
+    if (isBlur)
+    {
+        finalGamma *= 0.9f; // Slight darkening for blur effect
+    }
+    
+    if (IsVignette)
+    {
+        finalGamma *= 1.1f; // Slight brightening for vignette effect
+    }
+    
+    float vlcGamma = Math.Clamp(finalGamma, 0.01f, 10.0f);
+    mediaPlayer.SetAdjustFloat(VideoAdjustOption.Gamma, vlcGamma);
+}
 
         public Rectangle UiToVideoCoordinates(Rectangle uiRect)
         {

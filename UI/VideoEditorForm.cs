@@ -1,3 +1,4 @@
+using Converter.Application.Models;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -5,11 +6,13 @@ using System.IO;
 using System.Linq; // Added for .OfType<T>()
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using Xabe.FFmpeg;
+using Xabe.FFmpeg; // For IMediaInfo, IStream
+using Converter.Services; // For IVideoProcessingService
+using Converter.UI.Presenters; // For VideoEditorPresenter
 
 namespace Converter.UI
 {
-    public class VideoEditorForm : Form
+    public partial class VideoEditorForm : Form, IVideoEditorView
     {
         // Контролы
         private readonly VideoPlayerPanel videoPlayer;
@@ -20,21 +23,22 @@ namespace Converter.UI
         private readonly CropPanel cropPanel;
         private readonly TrimPanel trimPanel;
         private readonly EffectsPanel effectsPanel;
+        private readonly AudioPanel audioPanel; // <-- Добавить поле
 
         private readonly Button btnExport;
         private readonly Button btnCancel;
 
-        private readonly string currentVideoPath;
-        private readonly string _originalVideoPath; // Store original path
-        private IMediaInfo? mediaInfo;
+        private readonly string _initialVideoPath;
+
+        private VideoEditorPresenter _presenter;
+        private IVideoProcessingService _videoProcessingService;
 
         public VideoEditorForm(string videoPath)
         {
-            currentVideoPath = videoPath ?? throw new ArgumentNullException(nameof(videoPath));
-            _originalVideoPath = currentVideoPath; // Store the original path
+            _initialVideoPath = videoPath ?? throw new ArgumentNullException(nameof(videoPath));
 
             Text = "Видео редактор";
-            Size = new Size(1200, 800);
+            Size = new Size(1200, 900); // Increased height by 100
             MinimumSize = new Size(900, 600);
             StartPosition = FormStartPosition.CenterScreen;
 
@@ -82,7 +86,7 @@ namespace Converter.UI
                 MinimumSize = new Size(140, 36),
                 Padding = new Padding(12, 0, 12, 0)
             };
-            btnExport.Click += BtnExport_Click;
+            btnExport.Click += (s, e) => ExportRequested?.Invoke(this, EventArgs.Empty);
             buttonsFlow.Controls.Add(btnExport);
 
             btnCancel = new Button
@@ -163,15 +167,34 @@ namespace Converter.UI
             };
             editorTabs.TabPages.Add(new TabPage("⏱ Обрезка") { Controls = { trimPanel } });
 
-            trimPanel.TrimRequested += OnTrimRequested;
-
+            // --- 6. Эффекты ---
             effectsPanel = new EffectsPanel(videoPlayer)
             {
                 Dock = DockStyle.Fill,
                 AutoScroll = true
             };
-            editorTabs.TabPages.Add(new TabPage("✨ Эффекты") { Controls = { effectsPanel } });
+            editorTabs.TabPages.Add(new TabPage("🎨 Эффекты") { Controls = { effectsPanel } });
 
+            // --- 7. Аудио ---
+            audioPanel = new AudioPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true
+            };
+            editorTabs.TabPages.Add(new TabPage("🔊 Аудио") { Controls = { audioPanel } });
+
+            // Wire up panel events to view events
+            trimPanel.TrimRequested += (s, e) => TrimRequested?.Invoke(this, EventArgs.Empty);
+            audioPanel.ApplyRequested += (s, e) => AudioApplyRequested?.Invoke(this, e);
+            effectsPanel.ApplyRequested += (s, e) => EffectsApplyRequested?.Invoke(this, e);
+            effectsPanel.LiveEffectChanged += OnLiveEffectChanged;
+            // Подписка на изменение эквалайзера
+            audioPanel.LiveEqChanged += (enabled, preset) =>
+            {
+                videoPlayer.SetAudioEqualizer(enabled, preset);
+            };
+
+            effectsPanel.LiveEffectChanged += OnLiveEffectChanged;
             // Wire up crop events
             // CropPanel оперирует в координатах исходного видео, а CropOverlay в координатах UI (оверлея)
             cropPanel.CropRectChangedByUser += (s, videoRect) =>
@@ -187,7 +210,7 @@ namespace Converter.UI
                 var videoRect = videoPlayer.UiToVideoCoordinates(uiRect);
                 cropPanel.SetCropRect(videoRect);
             };
-            cropPanel.CropApplied += HandleCropApplied;
+            cropPanel.CropApplied += (s, cropRect) => CropRequested?.Invoke(this, EventArgs.Empty);
             cropPanel.CropEnabledChanged += (s, enabled) => 
             {
                 if (enabled)
@@ -208,13 +231,15 @@ namespace Converter.UI
                 }
             };
 
+
             Load += VideoEditorForm_Load;
+
+            // Initialize services and presenter
+            _videoProcessingService = new VideoProcessingService();
+            _presenter = new VideoEditorPresenter(this, _videoProcessingService, _initialVideoPath);
         }
 
-        private string? _trimmedVideoTempPath;
-        private string? _croppedVideoTempPath;
-
-        private void VideoEditorForm_Load(object? sender, EventArgs e)
+        private async void VideoEditorForm_Load(object? sender, EventArgs e)
         {
             try
             {
@@ -232,279 +257,174 @@ namespace Converter.UI
             {
                 // Игнорируем ошибки размеров при инициализации
             }
-
-            LoadVideo();
+            await _presenter.LoadInitialVideo();
         }
 
-        protected override void OnFormClosed(FormClosedEventArgs e)
+        // IVideoEditorView Implementation
+        public string CurrentVideoPath { get; set; }
+        public IMediaInfo MediaInfo { get; set; }
+        public TimeSpan TrimStartTime { get => trimPanel.StartTime; set => trimPanel.StartTime = value; }
+        public TimeSpan TrimEndTime { get => trimPanel.EndTime; set => trimPanel.EndTime = value; }
+
+        // Implementation for Crop Panel methods
+        public Rectangle GetCurrentCropRectangle() => cropPanel.GetCropData();
+        public void SetCurrentCropRectangle(Rectangle rect) => cropPanel.SetCropRect(rect);
+
+        // Реализация метода интерфейса (см. шаг 4)
+        public Converter.Domain.Models.AudioProcessingOptions GetAudioOptions()
         {
-            base.OnFormClosed(e);
-            CleanupTempFiles();
+             // Если нужно, здесь можно добавить TotalDuration видео в опции,
+             // чтобы логика могла проверить валидность FadeOut
+             var opts = audioPanel.GetAudioOptions();
+             if (MediaInfo != null)
+             {
+                 opts.TotalDuration = MediaInfo.Duration.TotalSeconds;
+             }
+             return opts;
+        }
+        
+        public string? GetVideoEffectsFilter()
+        {
+            return effectsPanel.GetVideoFilterGraph();
         }
 
-        private void CleanupTempFiles()
+        public bool IsExporting 
         {
-            if (!string.IsNullOrEmpty(_trimmedVideoTempPath) && File.Exists(_trimmedVideoTempPath))
+            get => btnExport.Enabled == false; 
+            set 
             {
-                try
-                {
-                    File.Delete(_trimmedVideoTempPath);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error deleting temporary trimmed video file: {ex.Message}");
-                } 
-            }
-            if (!string.IsNullOrEmpty(_croppedVideoTempPath) && File.Exists(_croppedVideoTempPath))
-            {
-                try
-                {
-                    File.Delete(_croppedVideoTempPath);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error deleting temporary cropped video file: {ex.Message}");
-                }
-            }
+                btnExport.Enabled = !value;
+                btnExport.Text = value ? "Экспорт..." : "💾 Экспортировать";
+            } 
         }
 
-        // --- ИСПРАВЛЕННЫЙ МЕТОД ---
-        private async void OnTrimRequested(object? sender, TrimPanel.TrimRequestedEventArgs e)
+        public void LoadVideo(string filePath)
         {
-            // 1. Подготовка (UI поток)
-            CleanupTempFiles();
-            var tempPath = Path.Combine(Path.GetTempPath(), $"preview_trim_{Guid.NewGuid()}.mp4");
-            var inputPath = _originalVideoPath;
-            var start = e.StartTime;
-            var duration = e.Duration;
-
-            try
+            if (this.InvokeRequired)
             {
-                // 2. Фоновая работа (Background Thread)
-                // Запускаем через Task.Run, чтобы не блокировать UI и иметь чистый контекст
-                await Task.Run(async () =>
-                {
-                    var conversion = FFmpeg.Conversions.New();
-                    conversion.AddParameter($"-ss {start} -i \"{inputPath}\" -t {duration} -c copy");
-                    conversion.SetOutput(tempPath);
-                    
-                    // Запуск FFmpeg
-                    await conversion.Start();
-
-                    // Получение инфо о новом файле (тоже IO операция)
-                    var newInfo = await FFmpeg.GetMediaInfo(tempPath);
-
-                    // 3. Обновление UI (UI Thread)
-                    // Используем Invoke для гарантированного выполнения в главном потоке
-                    if (!this.IsDisposed && this.IsHandleCreated)
-                    {
-                        this.Invoke(new MethodInvoker(() =>
-                        {
-                            _trimmedVideoTempPath = tempPath;
-                            mediaInfo = newInfo;
-
-                            // Обновление плеера (LoadVideoAsync меняет Label.Text, поэтому строго в UI потоке)
-                            videoPlayer.LoadVideoAsync(_trimmedVideoTempPath, mediaInfo);
-                            
-                            // Обновление панели тримминга
-                            trimPanel.SetMediaInfo(mediaInfo);
-
-                            MessageBox.Show("Видео успешно обрезано для предпросмотра!", "Обрезка применена");
-                        }));
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                // Обработка ошибок в UI потоке
-                if (!this.IsDisposed && this.IsHandleCreated)
-                {
-                    this.Invoke(new MethodInvoker(() =>
-                    {
-                        MessageBox.Show($"Ошибка при обрезке видео: {ex.Message}", "Ошибка обрезки");
-                        _trimmedVideoTempPath = null;
-                    }));
-                }
-            }
-        }
-
-        private async void HandleCropApplied(object? sender, Rectangle cropRect)
-        {
-            CleanupTempFiles();
-            var tempPath = Path.Combine(Path.GetTempPath(), $"preview_crop_{Guid.NewGuid()}.mp4");
-            var inputPath = _trimmedVideoTempPath ?? _originalVideoPath;
-
-            btnExport.Enabled = false;
-            btnExport.Text = "Применение кадрирования...";
-
-            try
-            {
-                await Task.Run(async () =>
-                {
-                    var conversion = FFmpeg.Conversions.New();
-                    conversion.AddParameter($"-i \"{inputPath}\" -vf \"crop={cropRect.Width}:{cropRect.Height}:{cropRect.X}:{cropRect.Y}\" -c:a copy");
-                    conversion.SetOutput(tempPath);
-                    
-                    await conversion.Start();
-
-                    var newInfo = await FFmpeg.GetMediaInfo(tempPath);
-
-                    if (!this.IsDisposed && this.IsHandleCreated)
-                    {
-                        this.Invoke(new MethodInvoker(() =>
-                        {
-                            _croppedVideoTempPath = tempPath;
-                            mediaInfo = newInfo;
-                            videoPlayer.LoadVideoAsync(_croppedVideoTempPath, mediaInfo);
-                            trimPanel.SetMediaInfo(mediaInfo);
-                            cropPanel.SetVideoDimensions(mediaInfo.VideoStreams.FirstOrDefault().Width, mediaInfo.VideoStreams.FirstOrDefault().Height);
-                            MessageBox.Show("Кадрирование успешно применено для предпросмотра!", "Кадрирование применено");
-                        }));
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                if (!this.IsDisposed && this.IsHandleCreated)
-                {
-                    this.Invoke(new MethodInvoker(() =>
-                    {
-                        MessageBox.Show($"Ошибка при кадрировании видео: {ex.Message}", "Ошибка кадрирования");
-                        _croppedVideoTempPath = null;
-                    }));
-                }
-            }
-            finally
-            {
-                if (!this.IsDisposed && this.IsHandleCreated)
-                {
-                    this.Invoke(new MethodInvoker(() =>
-                    {
-                        btnExport.Enabled = true;
-                        btnExport.Text = "💾 Экспортировать";
-                    }));
-                }
-            }
-        }
-
-        private void LoadVideo()
-        {
-            try
-            {
-                mediaInfo = FFmpeg.GetMediaInfo(currentVideoPath).GetAwaiter().GetResult();
-                videoPlayer.LoadVideoAsync(currentVideoPath, mediaInfo).GetAwaiter().GetResult();
-                subtitlesPanel.SetMediaInfo(mediaInfo);
-                trimPanel.SetMediaInfo(mediaInfo);
-                cropPanel.SetVideoDimensions(videoPlayer.VideoWidth, videoPlayer.VideoHeight);
-
-                // Set initial crop rect to full video size, in UI coordinates
-                Rectangle initialCropRect = videoPlayer.VideoToUiCoordinates(new Rectangle(0, 0, videoPlayer.VideoWidth, videoPlayer.VideoHeight));
-                videoPlayer.SetCropRect(initialCropRect);
-                cropPanel.SetCropRect(initialCropRect);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка загрузки видео: {ex.Message}", "Ошибка");
-            }
-        }
-
-        private void BtnExport_Click(object? sender, EventArgs e)
-        {
-            _ = BtnExportAsync();
-        }
-
-        private async Task BtnExportAsync()
-        {
-            using var saveDialog = new SaveFileDialog
-            {
-                Filter = "MP4 Video|*.mp4|All Files|*.*",
-                FileName = Path.GetFileNameWithoutExtension(currentVideoPath) + "_edited.mp4"
-            };
-
-            if (saveDialog.ShowDialog() != DialogResult.OK)
-            {
+                this.Invoke(new Action(() => LoadVideo(filePath)));
                 return;
             }
 
-            btnExport.Enabled = false;
-            btnExport.Text = "Экспорт...";
+            videoPlayer.LoadVideoAsync(filePath, MediaInfo).GetAwaiter().GetResult(); // Synchronous wait for UI update
+            subtitlesPanel.SetMediaInfo(MediaInfo);
+            trimPanel.SetMediaInfo(MediaInfo);
+            cropPanel.SetVideoDimensions(videoPlayer.VideoWidth, videoPlayer.VideoHeight);
 
-            try
-            {
-                await ApplyEditsAndExport(saveDialog.FileName, isPreview: false).ConfigureAwait(true);
-                MessageBox.Show("Видео успешно экспортировано!", "Готово");
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка экспорта: {ex.Message}", "Ошибка");
-            }
-            finally
-            {
-                btnExport.Enabled = true;
-                btnExport.Text = "💾 Экспортировать";
-            }
+            // Set initial crop rect to full video size, in UI coordinates
+            Rectangle initialCropRect = videoPlayer.VideoToUiCoordinates(new Rectangle(0, 0, videoPlayer.VideoWidth, videoPlayer.VideoHeight));
+            videoPlayer.SetCropRect(initialCropRect);
+            cropPanel.SetCropRect(initialCropRect);
+            VideoLoaded?.Invoke(this, filePath);
         }
 
-        private async Task ApplyEditsAndExport(string outputPath, bool isPreview)
+        public void UpdateTrimPanel(TimeSpan duration)
         {
-            var conversion = FFmpeg.Conversions.New();
-            string actualInputPath = currentVideoPath;
+            // Assuming TrimPanel needs IMediaInfo, this might need adjustment if it only needs duration
+            // For now, setting a dummy MediaInfo with just duration
+            var dummyMediaInfo = new DummyMediaInfo { Duration = duration };
+            trimPanel.SetMediaInfo(dummyMediaInfo);
+        }
 
-            if (trimPanel.IsTrimEnabled && !string.IsNullOrEmpty(_trimmedVideoTempPath) && File.Exists(_trimmedVideoTempPath))
+        public void UpdateCropPanel(Size videoSize)
+        {
+            if (this.InvokeRequired)
             {
-                actualInputPath = _trimmedVideoTempPath;
+                this.Invoke(new Action(() => UpdateCropPanel(videoSize)));
+                return;
+            }
+            cropPanel.SetVideoDimensions(videoSize.Width, videoSize.Height);
+            // Set initial crop rect to full video size
+            Rectangle initialCropRect = new Rectangle(0, 0, videoSize.Width, videoSize.Height);
+            cropPanel.SetCropRect(initialCropRect);
+        }
+
+        public void ShowLoadingState()
+        {
+            if (this.InvokeRequired)
+            {
+                this.Invoke(new Action(ShowLoadingState));
+                return;
             }
 
-            conversion.AddParameter($"-i \"{actualInputPath}\"");
+            Cursor = Cursors.WaitCursor;
+            IsExporting = true;
+        }
 
-            var videoFilters = new List<string>();
-
-            if (trimPanel.IsTrimEnabled && string.IsNullOrEmpty(_trimmedVideoTempPath))
+        public void HideLoadingState()
+        {
+            if (this.InvokeRequired)
             {
-                var trimData = trimPanel.GetTrimData();
-                conversion.AddParameter($"-ss {trimData.StartTime}");
-                conversion.AddParameter($"-t {trimData.Duration}");
+                this.Invoke(new Action(HideLoadingState));
+                return;
             }
 
-            if (cropPanel.IsCropEnabled)
-            {
-                var cropData = cropPanel.GetCropData();
-                videoFilters.Add($"crop={cropData.Width}:{cropData.Height}:{cropData.X}:{cropData.Y}");
-            }
+            Cursor = Cursors.Default;
+            IsExporting = false;
+        }
 
-            var effectsFilter = effectsPanel.GetVideoFilterGraph();
-            if (!string.IsNullOrWhiteSpace(effectsFilter))
+        public void ShowMessage(string message, string title, MessageBoxButtons buttons, MessageBoxIcon icon)
+        {
+            if (this.InvokeRequired)
             {
-                videoFilters.Add(effectsFilter);
+                this.Invoke(new Action(() => ShowMessage(message, title, buttons, icon)));
+                return;
             }
+            
+            MessageBox.Show(this, message, title, buttons, icon);
+        }
 
-            if (subtitlesPanel.HasSubtitles)
-            {
-                var subtitlesFilter = subtitlesPanel.BuildSubtitlesFilter();
-                if (!string.IsNullOrEmpty(subtitlesFilter))
-                {
-                    videoFilters.Add(subtitlesFilter);
-                }
-            }
+        public void EnableExportButton(bool enable)
+        {
+            btnExport.Enabled = enable;
+        }
 
-            if (videoFilters.Count > 0)
-            {
-                conversion.AddParameter($"-vf \"{string.Join(",", videoFilters)}\"");
-            }
+        public void UpdateProgress(int percentage)
+        {
+            // TODO: Implement a progress bar in the UI and update it here
+            Console.WriteLine($"Export Progress: {percentage}%");
+        }
+        
+        public void SetPlayerPosition(TimeSpan position)
+        {
+            videoPlayer.SetPosition(position);
+        }
 
-            if (isPreview)
-            {
-                conversion.AddParameter("-c:v libx264 -preset ultrafast -crf 28");
-            }
-            else
-            {
-                conversion.AddParameter("-c:v libx264 -preset medium -crf 23");
-            }
+        public event EventHandler<string> VideoLoaded;
+        public event EventHandler TrimRequested;
+        public event EventHandler CropRequested;
+        public event EventHandler ExportRequested;
+        public event EventHandler<TimeSpan> PlayerPositionChanged;
+        public event EventHandler AudioApplyRequested;
+        public event EventHandler EffectsApplyRequested;
 
-            conversion.AddParameter("-c:a copy");
-            conversion.SetOutput(outputPath);
+        // Dummy MediaInfo class for UpdateTrimPanel if it strictly requires IMediaInfo
+        private class DummyMediaInfo : IMediaInfo
+        {
+            public TimeSpan Duration { get; set; }
+            public IEnumerable<IAudioStream> AudioStreams => Enumerable.Empty<IAudioStream>();
+            public IEnumerable<IVideoStream> VideoStreams => Enumerable.Empty<IVideoStream>();
+            public IEnumerable<ISubtitleStream> SubtitleStreams => Enumerable.Empty<ISubtitleStream>();
+            public IEnumerable<IStream> Streams => Enumerable.Empty<IStream>();
+            public string Path => string.Empty;
+            public string Format => string.Empty;
+            public TimeSpan Start => TimeSpan.Zero;
+            public long Size => 0;
+            public double Bitrate => 0;
+            public int Chapters => 0;
+            public Dictionary<string, string> Metadata => new Dictionary<string, string>();
+            public DateTime? CreationTime => DateTime.MinValue;
+        }
+        
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            base.OnFormClosed(e);
+            _presenter.Cleanup();
+        }
 
-            await conversion.Start().ConfigureAwait(true);
+        private void OnLiveEffectChanged(VideoAdjustments adjustments)
+        {
+            videoPlayer.SetVideoAdjustments(adjustments);
         }
     }
 }

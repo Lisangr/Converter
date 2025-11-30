@@ -424,7 +424,7 @@ namespace Converter.UI
             if (hasSelection)
             {
                 var subtitle = subtitles[lstSubtitles.SelectedIndex];
-                videoPlayer.SeekTo(subtitle.StartTime);
+                videoPlayer.SetPosition(subtitle.StartTime);
             }
         }
 

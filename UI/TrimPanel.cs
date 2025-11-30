@@ -22,6 +22,9 @@ namespace Converter.UI
         // Событие объявляем здесь
         public event EventHandler<TrimRequestedEventArgs>? TrimRequested;
 
+        public TimeSpan StartTime { get => ParseTime(txtStartTime.Text); set => txtStartTime.Text = FormatTime(value); }
+        public TimeSpan EndTime { get => ParseTime(txtEndTime.Text); set => txtEndTime.Text = FormatTime(value); }
+
         public TrimPanel(VideoPlayerPanel player)
         {
             videoPlayer = player;

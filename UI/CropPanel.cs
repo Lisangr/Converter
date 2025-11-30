@@ -51,79 +51,56 @@ namespace Converter.UI
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
-                RowCount = 6, // Increased row count for new controls
+                RowCount = 1,
                 AutoSize = true,
                 Padding = new Padding(10)
             };
-            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120F));
-            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            // Define row styles for better layout control
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // chkEnableCrop
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // Presets label
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // Presets FlowLayoutPanel
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // Position label
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // Size label
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50F)); // Apply button
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 280F)); // Left column fixed width
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F)); // Right column takes remaining space
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F)); // Single row takes all vertical space
 
             Controls.Add(mainLayout);
+
+            // --- Left Section: Parameters ---
+            var leftControlsFlowPanel = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                AutoSize = true,
+                Margin = new Padding(0),
+                Padding = new Padding(0, 0, 10, 0)
+            };
+            mainLayout.Controls.Add(leftControlsFlowPanel, 0, 0);
 
             chkEnableCrop = new CheckBox
             {
                 Text = "Включить кадрирование",
-                Dock = DockStyle.Top,
                 AutoSize = true,
                 Font = new Font("Segoe UI", 10, FontStyle.Bold),
                 Margin = new Padding(0, 0, 0, 15)
             };
             chkEnableCrop.CheckedChanged += (_, _) => UpdateControlsState();
-            mainLayout.Controls.Add(chkEnableCrop, 0, 0);
-            mainLayout.SetColumnSpan(chkEnableCrop, 2);
-
-            // Presets Label
-            var lblPresets = new Label
-            {
-                Text = "Пресеты соотношения сторон:",
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft,
-                AutoSize = true,
-                Font = new Font("Segoe UI", 9, FontStyle.Bold)
-            };
-            mainLayout.Controls.Add(lblPresets, 0, 1);
-            mainLayout.SetColumnSpan(lblPresets, 2);
-
-            // Presets FlowLayoutPanel
-            pnlPresets = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = true,
-                AutoSize = true,
-                Margin = new Padding(0, 5, 0, 10)
-            };
-            mainLayout.Controls.Add(pnlPresets, 0, 2);
-            mainLayout.SetColumnSpan(pnlPresets, 2);
-            LoadAspectRatioPresets();
+            leftControlsFlowPanel.Controls.Add(chkEnableCrop);
 
             // Position controls
             var lblPosition = new Label
             {
                 Text = "Позиция (X, Y):",
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft,
                 AutoSize = true,
-                Font = new Font("Segoe UI", 9, FontStyle.Bold)
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                Margin = new Padding(0, 0, 0, 5)
             };
-            mainLayout.Controls.Add(lblPosition, 0, 3);
+            leftControlsFlowPanel.Controls.Add(lblPosition);
 
             var posPanel = new FlowLayoutPanel
             {
-                Dock = DockStyle.Fill,
+                AutoSize = true,
                 FlowDirection = FlowDirection.LeftToRight,
                 WrapContents = false,
-                AutoSize = true,
-                Margin = new Padding(0, 5, 0, 10)
+                Margin = new Padding(0, 0, 0, 10)
             };
-            mainLayout.Controls.Add(posPanel, 1, 3);
+            leftControlsFlowPanel.Controls.Add(posPanel);
 
             var lblX = new Label { Text = "X:", AutoSize = true, TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0, 5, 5, 0) };
             posPanel.Controls.Add(lblX);
@@ -152,22 +129,20 @@ namespace Converter.UI
             var lblSize = new Label
             {
                 Text = "Размер (Ш, В):",
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft,
                 AutoSize = true,
-                Font = new Font("Segoe UI", 9, FontStyle.Bold)
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                Margin = new Padding(0, 0, 0, 5)
             };
-            mainLayout.Controls.Add(lblSize, 0, 4);
+            leftControlsFlowPanel.Controls.Add(lblSize);
 
             var sizePanel = new FlowLayoutPanel
             {
-                Dock = DockStyle.Fill,
+                AutoSize = true,
                 FlowDirection = FlowDirection.LeftToRight,
                 WrapContents = false,
-                AutoSize = true,
-                Margin = new Padding(0, 5, 0, 10)
+                Margin = new Padding(0, 0, 0, 10)
             };
-            mainLayout.Controls.Add(sizePanel, 1, 4);
+            leftControlsFlowPanel.Controls.Add(sizePanel);
 
             var lblWidth = new Label { Text = "Ширина:", AutoSize = true, TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0, 5, 5, 0) };
             sizePanel.Controls.Add(lblWidth);
@@ -198,19 +173,50 @@ namespace Converter.UI
             btnApplyCrop = new Button
             {
                 Text = "Применить кадрирование",
-                Dock = DockStyle.Fill,
                 Height = 40,
                 Enabled = false,
                 FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(0, 122, 204), // Modern blue
+                BackColor = Color.FromArgb(0, 122, 204),
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 10, FontStyle.Bold),
                 Margin = new Padding(0, 15, 0, 0)
             };
             btnApplyCrop.FlatAppearance.BorderSize = 0;
             btnApplyCrop.Click += BtnApplyCrop_Click;
-            mainLayout.Controls.Add(btnApplyCrop, 0, 5);
-            mainLayout.SetColumnSpan(btnApplyCrop, 2);
+            leftControlsFlowPanel.Controls.Add(btnApplyCrop);
+
+
+            // --- Right Section: Presets ---
+            var rightPresetsFlowPanel = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                AutoSize = true,
+                Margin = new Padding(100, 0, 0, 0) // Moved 100 pixels to the right
+            };
+            mainLayout.Controls.Add(rightPresetsFlowPanel, 1, 0);
+
+            // Presets Label
+            var lblPresets = new Label
+            {
+                Text = "Пресеты соотношения сторон:",
+                AutoSize = true,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                Margin = new Padding(0, 0, 0, 5)
+            };
+            rightPresetsFlowPanel.Controls.Add(lblPresets);
+
+            // Presets FlowLayoutPanel
+            pnlPresets = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                FlowDirection = FlowDirection.TopDown, // Changed to TopDown
+                WrapContents = false, // Changed to false
+                Margin = new Padding(0)
+            };
+            rightPresetsFlowPanel.Controls.Add(pnlPresets);
+            LoadAspectRatioPresets();
 
             UpdateControlsState();
         }
@@ -264,14 +270,17 @@ namespace Converter.UI
         {
             if (_videoWidth == 0 || _videoHeight == 0) return; // Cannot apply preset without video dimensions
 
+            Rectangle newRect = GetCropData(); // Initialize with current data, will be overwritten if a specific preset is applied
             double targetRatio = 0.0;
+
             switch (preset)
             {
                 case CropAspectRatioPreset.Free:
-                    // No specific ratio, allow user to set freely, or keep current if set
-                    // For now, if free, just ensure current values are within bounds
-                    UpdateCropRectNumericControls(new Rectangle((int)numX.Value, (int)numY.Value, (int)numWidth.Value, (int)numHeight.Value));
-                    return;
+                    // For Free preset, use current values as the base, clamped to bounds.
+                    // UpdateCropRectNumericControls will handle clamping and then invoke CropRectChangedByUser.
+                    // No explicit ratio calculation needed, so targetRatio remains 0.0.
+                    newRect = new Rectangle((int)numX.Value, (int)numY.Value, (int)numWidth.Value, (int)numHeight.Value);
+                    break;
                 case CropAspectRatioPreset.InstagramPost_1_1: targetRatio = 1.0 / 1.0; break;
                 case CropAspectRatioPreset.InstagramStory_9_16: targetRatio = 9.0 / 16.0; break;
                 case CropAspectRatioPreset.YouTube_16_9: targetRatio = 16.0 / 9.0; break;
@@ -282,31 +291,37 @@ namespace Converter.UI
                 case CropAspectRatioPreset.Pinterest_2_3: targetRatio = 2.0 / 3.0; break;
             }
 
-            // Calculate maximum possible crop rectangle for the given aspect ratio
-            int newWidth = _videoWidth;
-            int newHeight = _videoHeight;
-
-            double videoRatio = (double)_videoWidth / _videoHeight;
-
             if (targetRatio > 0) // If a specific ratio is selected
             {
+                // Calculate maximum possible crop rectangle for the given aspect ratio
+                int calculatedWidth = _videoWidth;
+                int calculatedHeight = _videoHeight;
+
+                double videoRatio = (double)_videoWidth / _videoHeight;
+
                 if (videoRatio > targetRatio) // Video is wider than target ratio
                 {
-                    newWidth = (int)(_videoHeight * targetRatio);
-                    newHeight = _videoHeight;
+                    calculatedWidth = (int)(_videoHeight * targetRatio);
+                    calculatedHeight = _videoHeight;
                 }
                 else // Video is taller than target ratio
                 {
-                    newWidth = _videoWidth;
-                    newHeight = (int)(_videoWidth / targetRatio);
+                    calculatedWidth = _videoWidth;
+                    calculatedHeight = (int)(_videoWidth / targetRatio);
                 }
+                
+                // Center the new rectangle
+                int newX = (_videoWidth - calculatedWidth) / 2;
+                int newY = (_videoHeight - calculatedHeight) / 2;
+                newRect = new Rectangle(newX, newY, calculatedWidth, calculatedHeight);
             }
             
-            // Center the new rectangle
-            int newX = (_videoWidth - newWidth) / 2;
-            int newY = (_videoHeight - newHeight) / 2;
-
-            UpdateCropRectNumericControls(new Rectangle(newX, newY, newWidth, newHeight));
+            UpdateCropRectNumericControls(newRect);
+            // Explicitly invoke the event as per requirements, if crop is enabled and not suppressed
+            if (IsCropEnabled && !_suppressRectChangedEvent)
+            {
+                CropRectChangedByUser?.Invoke(this, newRect);
+            }
         }
 
         private void UpdateCropRectNumericControls(Rectangle rect)
