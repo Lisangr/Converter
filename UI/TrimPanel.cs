@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Globalization;
 using System.Windows.Forms;
@@ -14,9 +14,13 @@ namespace Converter.UI
         private readonly MaskedTextBox txtEndTime;
         private readonly Button btnSetStart;
         private readonly Button btnSetEnd;
+        private readonly Button btnApplyTrim; // Объявление кнопки
         private IMediaInfo? mediaInfo;
 
         public bool IsTrimEnabled => chkEnableTrim.Checked;
+
+        // Событие объявляем здесь
+        public event EventHandler<TrimRequestedEventArgs>? TrimRequested;
 
         public TrimPanel(VideoPlayerPanel player)
         {
@@ -87,6 +91,21 @@ namespace Converter.UI
             };
             btnSetEnd.Click += (_, _) => txtEndTime.Text = FormatTime(videoPlayer.GetCurrentTime());
             Controls.Add(btnSetEnd);
+
+            // Кнопка Применить
+            btnApplyTrim = new Button
+            {
+                Text = "Применить обрезку",
+                Location = new Point(40, 140),
+                Size = new Size(150, 30),
+                Enabled = false,
+                BackColor = Color.FromArgb(76, 175, 80),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                FlatAppearance = { BorderSize = 0 }
+            };
+            btnApplyTrim.Click += BtnApplyTrim_Click;
+            Controls.Add(btnApplyTrim);
         }
 
         private void UpdateControlsState()
@@ -96,6 +115,7 @@ namespace Converter.UI
             txtEndTime.Enabled = enabled;
             btnSetStart.Enabled = enabled;
             btnSetEnd.Enabled = enabled;
+            btnApplyTrim.Enabled = enabled;
         }
 
         public void SetMediaInfo(IMediaInfo info)
@@ -111,7 +131,11 @@ namespace Converter.UI
             var end = ParseTime(txtEndTime.Text);
             if (mediaInfo != null)
             {
-                end = TimeSpan.FromSeconds(Math.Min(end.TotalSeconds, mediaInfo.Duration.TotalSeconds));
+                // Ограничиваем временем видео
+                if (end.TotalSeconds > mediaInfo.Duration.TotalSeconds)
+                {
+                    end = mediaInfo.Duration;
+                }
             }
 
             if (end <= start)
@@ -128,10 +152,41 @@ namespace Converter.UI
             {
                 return result;
             }
-
-            throw new FormatException("Неверный формат времени");
+            // Fallback для простоты или выброс исключения
+            return TimeSpan.Zero;
         }
 
         private static string FormatTime(TimeSpan time) => time.ToString("hh\\:mm\\:ss");
+
+        protected virtual void OnTrimRequested(TimeSpan startTime, TimeSpan duration)
+        {
+            TrimRequested?.Invoke(this, new TrimRequestedEventArgs(startTime, duration));
+        }
+
+        private void BtnApplyTrim_Click(object? sender, EventArgs e)
+        {
+            try
+            {
+                var (startTime, duration) = GetTrimData();
+                OnTrimRequested(startTime, duration);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка в формате времени: {ex.Message}");
+            }
+        }
+
+        // --- ВЛОЖЕННЫЙ КЛАСС (теперь ошибки CS0426 и CS0123 уйдут) ---
+        public class TrimRequestedEventArgs : EventArgs
+        {
+            public TimeSpan StartTime { get; }
+            public TimeSpan Duration { get; }
+
+            public TrimRequestedEventArgs(TimeSpan startTime, TimeSpan duration)
+            {
+                StartTime = startTime;
+                Duration = duration;
+            }
+        }
     }
 }

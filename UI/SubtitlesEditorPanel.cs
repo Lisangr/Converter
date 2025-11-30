@@ -22,6 +22,7 @@ namespace Converter.UI
         private readonly ComboBox cmbPosition;
         private readonly CheckBox chkBold;
         private readonly CheckBox chkOutline;
+        private readonly CheckBox chkShowBackground;
 
         private readonly List<SubtitleItem> subtitles = new();
         private IMediaInfo? mediaInfo;
@@ -65,6 +66,7 @@ namespace Converter.UI
             };
             cmbFont.Items.AddRange(new[] { "Arial", "Impact", "Bebas", "Montserrat", "Roboto" });
             cmbFont.SelectedIndex = 0;
+            cmbFont.SelectedIndexChanged += (_, _) => UpdateSubtitleStyle();
             fontPanel.Controls.Add(cmbFont);
             styleFlow.Controls.Add(fontPanel);
 
@@ -79,6 +81,7 @@ namespace Converter.UI
                 Maximum = 120,
                 Value = 48
             };
+            numFontSize.ValueChanged += (_, _) => UpdateSubtitleStyle();
             sizePanel.Controls.Add(numFontSize);
             styleFlow.Controls.Add(sizePanel);
 
@@ -114,6 +117,7 @@ namespace Converter.UI
             };
             cmbPosition.Items.AddRange(new[] { "Внизу", "Вверху", "По центру" });
             cmbPosition.SelectedIndex = 0;
+            cmbPosition.SelectedIndexChanged += (_, _) => UpdateSubtitleStyle();
             posPanel.Controls.Add(cmbPosition);
             styleFlow.Controls.Add(posPanel);
 
@@ -124,6 +128,7 @@ namespace Converter.UI
                 Checked = true,
                 Margin = new Padding(5)
             };
+            chkBold.CheckedChanged += (_, _) => UpdateSubtitleStyle();
             styleFlow.Controls.Add(chkBold);
 
             chkOutline = new CheckBox
@@ -133,31 +138,52 @@ namespace Converter.UI
                 Checked = true,
                 Margin = new Padding(5)
             };
+            chkOutline.CheckedChanged += (_, _) => UpdateSubtitleStyle();
             styleFlow.Controls.Add(chkOutline);
+
+            chkShowBackground = new CheckBox
+            {
+                Text = "Показывать фон",
+                AutoSize = true,
+                Checked = true,
+                Margin = new Padding(5)
+            };
+            chkShowBackground.CheckedChanged += (_, _) => UpdateSubtitleStyle();
+            styleFlow.Controls.Add(chkShowBackground);
 
             var mainPanel = new Panel
             {
                 Dock = DockStyle.Fill,
-                Padding = new Padding(0, 0, 0, 10)
+                Padding = new Padding(0, 5, 0, 10)
             };
             Controls.Add(mainPanel);
 
             var leftPanel = new Panel
             {
                 Dock = DockStyle.Fill,
-                Padding = new Padding(0, 0, 5, 0)
+                Padding = new Padding(0, 5, 5, 0)
             };
             mainPanel.Controls.Add(leftPanel);
+
+            var tlpList = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2
+            };
+            tlpList.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            tlpList.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            leftPanel.Controls.Add(tlpList);
 
             var lblList = new Label
             {
                 Text = "Субтитры:",
-                Dock = DockStyle.Top,
+                Dock = DockStyle.Fill, // Use Fill for TableLayoutPanel
                 Height = 25,
                 Font = new Font("Segoe UI", 9, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleLeft
             };
-            leftPanel.Controls.Add(lblList);
+            tlpList.Controls.Add(lblList, 0, 0); // Add to Row 0
 
             lstSubtitles = new ListBox
             {
@@ -166,7 +192,7 @@ namespace Converter.UI
             };
             lstSubtitles.SelectedIndexChanged += LstSubtitles_SelectedIndexChanged;
             lstSubtitles.DoubleClick += (_, _) => EditSelectedSubtitle();
-            leftPanel.Controls.Add(lstSubtitles);
+            tlpList.Controls.Add(lstSubtitles, 0, 1); // Add to Row 1
 
             var rightPanel = new Panel
             {
@@ -243,6 +269,7 @@ namespace Converter.UI
                 subtitles.Add(dialog.GetSubtitle());
                 subtitles.Sort((a, b) => a.StartTime.CompareTo(b.StartTime));
                 RefreshSubtitlesList();
+                SyncSubtitlesToPlayer();
             }
         }
 
@@ -259,6 +286,7 @@ namespace Converter.UI
             {
                 subtitles[lstSubtitles.SelectedIndex] = dialog.GetSubtitle();
                 RefreshSubtitlesList();
+                SyncSubtitlesToPlayer();
             }
         }
 
@@ -271,6 +299,7 @@ namespace Converter.UI
 
             subtitles.RemoveAt(lstSubtitles.SelectedIndex);
             RefreshSubtitlesList();
+            SyncSubtitlesToPlayer();
         }
 
         private void BtnImport_Click(object? sender, EventArgs e)
@@ -291,6 +320,7 @@ namespace Converter.UI
                 subtitles.AddRange(imported);
                 subtitles.Sort((a, b) => a.StartTime.CompareTo(b.StartTime));
                 RefreshSubtitlesList();
+                SyncSubtitlesToPlayer();
                 MessageBox.Show($"Импортировано {imported.Count} субтитров", "Успех");
             }
             catch (Exception ex)
@@ -334,6 +364,7 @@ namespace Converter.UI
             if (colorDialog.ShowDialog() == DialogResult.OK)
             {
                 btnFontColor.BackColor = colorDialog.Color;
+                UpdateSubtitleStyle();
             }
         }
 
@@ -344,7 +375,44 @@ namespace Converter.UI
             {
                 btnBackgroundColor.BackColor = colorDialog.Color;
                 btnBackgroundColor.ForeColor = GetContrastColor(colorDialog.Color);
+                UpdateSubtitleStyle();
             }
+        }
+
+        private void UpdateSubtitleStyle()
+        {
+            var styleFontStyle = chkBold.Checked ? FontStyle.Bold : FontStyle.Regular;
+            var fontFamilyName = cmbFont.SelectedItem as string ?? "Segoe UI";
+            var size = (float)numFontSize.Value;
+
+            using var tempFont = new Font(fontFamilyName, size, styleFontStyle, GraphicsUnit.Point);
+            // Pass a cloned font so that VideoPlayerPanel owns and disposes it
+            var playerFont = (Font)tempFont.Clone();
+
+            var alignment = ContentAlignment.BottomCenter;
+            switch (cmbPosition.SelectedIndex)
+            {
+                case 1:
+                    alignment = ContentAlignment.TopCenter;
+                    break;
+                case 2:
+                    alignment = ContentAlignment.MiddleCenter;
+                    break;
+                default:
+                    alignment = ContentAlignment.BottomCenter;
+                    break;
+            }
+
+            videoPlayer.SetSubtitleStyle(
+                btnFontColor.BackColor,
+                btnBackgroundColor.BackColor,
+                chkShowBackground.Checked,
+                chkOutline.Checked,
+                alignment,
+                playerFont);
+
+            // No longer needed here as SetSubtitleStyle now calls UpdateSubtitleOverlay which invalidates the subtitleOverlay
+            // videoPlayer.Invalidate();
         }
 
         private void LstSubtitles_SelectedIndexChanged(object? sender, EventArgs e)
@@ -385,7 +453,21 @@ namespace Converter.UI
 
             var assPath = Path.Combine(Path.GetTempPath(), $"subtitles_{Guid.NewGuid():N}.ass");
             GenerateASSFile(assPath);
-            return $"ass='{assPath.Replace("\\", "/").Replace(":", "\\\\:")}'";
+
+            // Формируем путь в формате, удобном для FFmpeg под Windows:
+            // 1) заменяем обратные слэши на прямые (C:/Users/...)
+            // 2) экранируем двоеточие как \: (в итоговой строке)
+            // 3) оборачиваем в одинарные кавычки и явно указываем filename=
+            var escapedPath = assPath
+                .Replace("\\", "\\\\")
+                .Replace(":", "\\:");
+
+            return $"subtitles=filename='{escapedPath}'";
+        }
+
+        private void SyncSubtitlesToPlayer()
+        {
+            videoPlayer.UpdateSubtitles(new List<SubtitleItem>(subtitles));
         }
 
         private void GenerateASSFile(string outputPath)

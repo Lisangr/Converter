@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Linq; // Added for .OfType<T>()
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Xabe.FFmpeg;
@@ -13,23 +14,24 @@ namespace Converter.UI
         // Контролы
         private readonly VideoPlayerPanel videoPlayer;
         private readonly TabControl editorTabs;
-        private readonly SplitContainer mainSplitter; // Объявляем тут
+        private readonly SplitContainer mainSplitter;
 
         private readonly SubtitlesEditorPanel subtitlesPanel;
         private readonly CropPanel cropPanel;
         private readonly TrimPanel trimPanel;
         private readonly EffectsPanel effectsPanel;
 
-        private readonly Button btnApply;
         private readonly Button btnExport;
         private readonly Button btnCancel;
 
         private readonly string currentVideoPath;
+        private readonly string _originalVideoPath; // Store original path
         private IMediaInfo? mediaInfo;
 
         public VideoEditorForm(string videoPath)
         {
             currentVideoPath = videoPath ?? throw new ArgumentNullException(nameof(videoPath));
+            _originalVideoPath = currentVideoPath; // Store the original path
 
             Text = "Видео редактор";
             Size = new Size(1200, 800);
@@ -66,19 +68,6 @@ namespace Converter.UI
             };
             bottomPanel.Controls.Add(buttonsFlow);
 
-            btnApply = new Button
-            {
-                Text = "👁 Предпросмотр",
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                Margin = new Padding(10, 0, 0, 0),
-                Height = 36,
-                MinimumSize = new Size(120, 36),
-                Padding = new Padding(12, 0, 12, 0)
-            };
-            btnApply.Click += BtnApply_Click;
-            buttonsFlow.Controls.Add(btnApply);
-
             btnExport = new Button
             {
                 Text = "💾 Экспортировать",
@@ -111,7 +100,7 @@ namespace Converter.UI
             btnCancel.Click += (_, _) => Close();
             buttonsFlow.Controls.Add(btnCancel);
 
-            // --- 2. SplitContainer (Безопасная инициализация) ---
+            // --- 2. SplitContainer ---
             mainSplitter = new SplitContainer
             {
                 Dock = DockStyle.Fill,
@@ -119,7 +108,6 @@ namespace Converter.UI
                 SplitterWidth = 8,
                 BackColor = SystemColors.Control,
                 FixedPanel = FixedPanel.Panel1,
-                // ВАЖНО: Ставим маленькие минимумы при создании, чтобы избежать ошибки при инициализации
                 Panel1MinSize = 25,
                 Panel2MinSize = 25
             };
@@ -161,7 +149,7 @@ namespace Converter.UI
             };
             editorTabs.TabPages.Add(new TabPage("📝 Субтитры") { Controls = { subtitlesPanel } });
 
-            cropPanel = new CropPanel(videoPlayer)
+            cropPanel = new CropPanel()
             {
                 Dock = DockStyle.Fill,
                 AutoScroll = true
@@ -175,6 +163,8 @@ namespace Converter.UI
             };
             editorTabs.TabPages.Add(new TabPage("⏱ Обрезка") { Controls = { trimPanel } });
 
+            trimPanel.TrimRequested += OnTrimRequested;
+
             effectsPanel = new EffectsPanel(videoPlayer)
             {
                 Dock = DockStyle.Fill,
@@ -182,36 +172,219 @@ namespace Converter.UI
             };
             editorTabs.TabPages.Add(new TabPage("✨ Эффекты") { Controls = { effectsPanel } });
 
-            // Подписка на событие Load для безопасной настройки размеров
+            // Wire up crop events
+            // CropPanel оперирует в координатах исходного видео, а CropOverlay в координатах UI (оверлея)
+            cropPanel.CropRectChangedByUser += (s, videoRect) =>
+            {
+                // Пользователь изменил значения в NumericUpDown (videoRect в координатах видео)
+                var uiRect = videoPlayer.VideoToUiCoordinates(videoRect);
+                videoPlayer.SetCropRect(uiRect);
+            };
+
+            videoPlayer.CropRectChanged += (s, uiRect) =>
+            {
+                // Пользователь изменил рамку мышью в плеере (uiRect в координатах UI)
+                var videoRect = videoPlayer.UiToVideoCoordinates(uiRect);
+                cropPanel.SetCropRect(videoRect);
+            };
+            cropPanel.CropApplied += HandleCropApplied;
+            cropPanel.CropEnabledChanged += (s, enabled) => 
+            {
+                if (enabled)
+                {
+                    videoPlayer.ShowCropOverlay();
+                    // Initialize crop overlay with full video dimensions when enabling
+                    if (videoPlayer.VideoWidth > 0 && videoPlayer.VideoHeight > 0)
+                    {
+                        var fullVideoRect = new Rectangle(0, 0, videoPlayer.VideoWidth, videoPlayer.VideoHeight);
+                        // В плеер передаём UI-координаты, в панель — координаты видео
+                        videoPlayer.SetCropRect(videoPlayer.VideoToUiCoordinates(fullVideoRect));
+                        cropPanel.SetCropRect(fullVideoRect);
+                    }
+                }
+                else
+                {
+                    videoPlayer.HideCropOverlay();
+                }
+            };
+
             Load += VideoEditorForm_Load;
         }
 
+        private string? _trimmedVideoTempPath;
+        private string? _croppedVideoTempPath;
+
         private void VideoEditorForm_Load(object? sender, EventArgs e)
         {
-            // Настраиваем сплиттер только когда форма загрузилась и имеет размеры
             try
             {
-                // Рассчитываем 60% высоты под видео, но не меньше 200px
                 int totalHeight = mainSplitter.Height;
                 int desiredSplit = (int)(totalHeight * 0.6);
 
-                // Проверка на безопасность границ
                 if (desiredSplit < 200) desiredSplit = 200;
                 if (desiredSplit > totalHeight - 200) desiredSplit = totalHeight - 200;
 
-                // 1. Сначала ставим позицию
                 mainSplitter.SplitterDistance = desiredSplit;
-
-                // 2. Теперь, когда позиция корректна, включаем жесткие ограничения
                 mainSplitter.Panel1MinSize = 200;
                 mainSplitter.Panel2MinSize = 200;
             }
             catch
             {
-                // Если размеры совсем маленькие (глюк системы), оставляем дефолт
+                // Игнорируем ошибки размеров при инициализации
             }
 
             LoadVideo();
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            base.OnFormClosed(e);
+            CleanupTempFiles();
+        }
+
+        private void CleanupTempFiles()
+        {
+            if (!string.IsNullOrEmpty(_trimmedVideoTempPath) && File.Exists(_trimmedVideoTempPath))
+            {
+                try
+                {
+                    File.Delete(_trimmedVideoTempPath);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error deleting temporary trimmed video file: {ex.Message}");
+                } 
+            }
+            if (!string.IsNullOrEmpty(_croppedVideoTempPath) && File.Exists(_croppedVideoTempPath))
+            {
+                try
+                {
+                    File.Delete(_croppedVideoTempPath);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error deleting temporary cropped video file: {ex.Message}");
+                }
+            }
+        }
+
+        // --- ИСПРАВЛЕННЫЙ МЕТОД ---
+        private async void OnTrimRequested(object? sender, TrimPanel.TrimRequestedEventArgs e)
+        {
+            // 1. Подготовка (UI поток)
+            CleanupTempFiles();
+            var tempPath = Path.Combine(Path.GetTempPath(), $"preview_trim_{Guid.NewGuid()}.mp4");
+            var inputPath = _originalVideoPath;
+            var start = e.StartTime;
+            var duration = e.Duration;
+
+            try
+            {
+                // 2. Фоновая работа (Background Thread)
+                // Запускаем через Task.Run, чтобы не блокировать UI и иметь чистый контекст
+                await Task.Run(async () =>
+                {
+                    var conversion = FFmpeg.Conversions.New();
+                    conversion.AddParameter($"-ss {start} -i \"{inputPath}\" -t {duration} -c copy");
+                    conversion.SetOutput(tempPath);
+                    
+                    // Запуск FFmpeg
+                    await conversion.Start();
+
+                    // Получение инфо о новом файле (тоже IO операция)
+                    var newInfo = await FFmpeg.GetMediaInfo(tempPath);
+
+                    // 3. Обновление UI (UI Thread)
+                    // Используем Invoke для гарантированного выполнения в главном потоке
+                    if (!this.IsDisposed && this.IsHandleCreated)
+                    {
+                        this.Invoke(new MethodInvoker(() =>
+                        {
+                            _trimmedVideoTempPath = tempPath;
+                            mediaInfo = newInfo;
+
+                            // Обновление плеера (LoadVideoAsync меняет Label.Text, поэтому строго в UI потоке)
+                            videoPlayer.LoadVideoAsync(_trimmedVideoTempPath, mediaInfo);
+                            
+                            // Обновление панели тримминга
+                            trimPanel.SetMediaInfo(mediaInfo);
+
+                            MessageBox.Show("Видео успешно обрезано для предпросмотра!", "Обрезка применена");
+                        }));
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                // Обработка ошибок в UI потоке
+                if (!this.IsDisposed && this.IsHandleCreated)
+                {
+                    this.Invoke(new MethodInvoker(() =>
+                    {
+                        MessageBox.Show($"Ошибка при обрезке видео: {ex.Message}", "Ошибка обрезки");
+                        _trimmedVideoTempPath = null;
+                    }));
+                }
+            }
+        }
+
+        private async void HandleCropApplied(object? sender, Rectangle cropRect)
+        {
+            CleanupTempFiles();
+            var tempPath = Path.Combine(Path.GetTempPath(), $"preview_crop_{Guid.NewGuid()}.mp4");
+            var inputPath = _trimmedVideoTempPath ?? _originalVideoPath;
+
+            btnExport.Enabled = false;
+            btnExport.Text = "Применение кадрирования...";
+
+            try
+            {
+                await Task.Run(async () =>
+                {
+                    var conversion = FFmpeg.Conversions.New();
+                    conversion.AddParameter($"-i \"{inputPath}\" -vf \"crop={cropRect.Width}:{cropRect.Height}:{cropRect.X}:{cropRect.Y}\" -c:a copy");
+                    conversion.SetOutput(tempPath);
+                    
+                    await conversion.Start();
+
+                    var newInfo = await FFmpeg.GetMediaInfo(tempPath);
+
+                    if (!this.IsDisposed && this.IsHandleCreated)
+                    {
+                        this.Invoke(new MethodInvoker(() =>
+                        {
+                            _croppedVideoTempPath = tempPath;
+                            mediaInfo = newInfo;
+                            videoPlayer.LoadVideoAsync(_croppedVideoTempPath, mediaInfo);
+                            trimPanel.SetMediaInfo(mediaInfo);
+                            cropPanel.SetVideoDimensions(mediaInfo.VideoStreams.FirstOrDefault().Width, mediaInfo.VideoStreams.FirstOrDefault().Height);
+                            MessageBox.Show("Кадрирование успешно применено для предпросмотра!", "Кадрирование применено");
+                        }));
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                if (!this.IsDisposed && this.IsHandleCreated)
+                {
+                    this.Invoke(new MethodInvoker(() =>
+                    {
+                        MessageBox.Show($"Ошибка при кадрировании видео: {ex.Message}", "Ошибка кадрирования");
+                        _croppedVideoTempPath = null;
+                    }));
+                }
+            }
+            finally
+            {
+                if (!this.IsDisposed && this.IsHandleCreated)
+                {
+                    this.Invoke(new MethodInvoker(() =>
+                    {
+                        btnExport.Enabled = true;
+                        btnExport.Text = "💾 Экспортировать";
+                    }));
+                }
+            }
         }
 
         private void LoadVideo()
@@ -222,34 +395,16 @@ namespace Converter.UI
                 videoPlayer.LoadVideoAsync(currentVideoPath, mediaInfo).GetAwaiter().GetResult();
                 subtitlesPanel.SetMediaInfo(mediaInfo);
                 trimPanel.SetMediaInfo(mediaInfo);
+                cropPanel.SetVideoDimensions(videoPlayer.VideoWidth, videoPlayer.VideoHeight);
+
+                // Set initial crop rect to full video size, in UI coordinates
+                Rectangle initialCropRect = videoPlayer.VideoToUiCoordinates(new Rectangle(0, 0, videoPlayer.VideoWidth, videoPlayer.VideoHeight));
+                videoPlayer.SetCropRect(initialCropRect);
+                cropPanel.SetCropRect(initialCropRect);
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Ошибка загрузки видео: {ex.Message}", "Ошибка");
-            }
-        }
-
-        private void BtnApply_Click(object? sender, EventArgs e)
-        {
-            _ = BtnApplyAsync();
-        }
-
-        private async Task BtnApplyAsync()
-        {
-            var tempOutput = Path.Combine(Path.GetTempPath(), $"preview_{Guid.NewGuid():N}.mp4");
-            try
-            {
-                await ApplyEditsAndExport(tempOutput, isPreview: true).ConfigureAwait(true);
-
-                if (File.Exists(tempOutput))
-                {
-                    var previewInfo = await FFmpeg.GetMediaInfo(tempOutput).ConfigureAwait(true);
-                    await videoPlayer.LoadVideoAsync(tempOutput, previewInfo).ConfigureAwait(true);
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Не удалось подготовить предпросмотр: {ex.Message}", "Ошибка");
             }
         }
 
@@ -293,12 +448,18 @@ namespace Converter.UI
         private async Task ApplyEditsAndExport(string outputPath, bool isPreview)
         {
             var conversion = FFmpeg.Conversions.New();
-            conversion.AddParameter($"-i \"{currentVideoPath}\"");
+            string actualInputPath = currentVideoPath;
+
+            if (trimPanel.IsTrimEnabled && !string.IsNullOrEmpty(_trimmedVideoTempPath) && File.Exists(_trimmedVideoTempPath))
+            {
+                actualInputPath = _trimmedVideoTempPath;
+            }
+
+            conversion.AddParameter($"-i \"{actualInputPath}\"");
 
             var videoFilters = new List<string>();
-            var complexFilters = new List<string>();
 
-            if (trimPanel.IsTrimEnabled)
+            if (trimPanel.IsTrimEnabled && string.IsNullOrEmpty(_trimmedVideoTempPath))
             {
                 var trimData = trimPanel.GetTrimData();
                 conversion.AddParameter($"-ss {trimData.StartTime}");
@@ -322,18 +483,13 @@ namespace Converter.UI
                 var subtitlesFilter = subtitlesPanel.BuildSubtitlesFilter();
                 if (!string.IsNullOrEmpty(subtitlesFilter))
                 {
-                    complexFilters.Add(subtitlesFilter);
+                    videoFilters.Add(subtitlesFilter);
                 }
             }
 
             if (videoFilters.Count > 0)
             {
                 conversion.AddParameter($"-vf \"{string.Join(",", videoFilters)}\"");
-            }
-
-            if (complexFilters.Count > 0)
-            {
-                conversion.AddParameter($"-filter_complex \"{string.Join(";", complexFilters)}\"");
             }
 
             if (isPreview)

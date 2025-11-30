@@ -3,20 +3,39 @@
   "WorkspaceRootPath": "C:\\Users\\User\\source\\repos\\Converter\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\videoeditorform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\videoeditorform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\videoplayerpanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\videoplayerpanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\croppanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\croppanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\User\\AppData\\Local\\SourceServer\\a48e535155ce1696fc4028d9786fdbe5e85e799113e5a7ecccdb34a25222e666\\src\\System.Windows.Forms\\src\\System\\Windows\\Forms\\NativeWindow.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\videoeditorform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\videoeditorform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\trimpanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\trimpanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\subtitleseditorpanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\subtitleseditorpanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\videothumbnailcontrol.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\videothumbnailcontrol.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\controls\\themeselectorcontrol.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\controls\\themeselectorcontrol.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\controls\\estimatepanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\controls\\estimatepanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\croppanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\croppanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -26,7 +45,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 8,
+          "SelectedChildIndex": 12,
           "Children": [
             {
               "$type": "Bookmark",
@@ -50,52 +69,117 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 1,
+              "Title": "NativeWindow.cs",
+              "DocumentMoniker": "C:\\Users\\User\\AppData\\Local\\SourceServer\\a48e535155ce1696fc4028d9786fdbe5e85e799113e5a7ecccdb34a25222e666\\src\\System.Windows.Forms\\src\\System\\Windows\\Forms\\NativeWindow.cs",
+              "RelativeDocumentMoniker": "..\\..\\..\\AppData\\Local\\SourceServer\\a48e535155ce1696fc4028d9786fdbe5e85e799113e5a7ecccdb34a25222e666\\src\\System.Windows.Forms\\src\\System\\Windows\\Forms\\NativeWindow.cs",
+              "ToolTip": "C:\\Users\\User\\AppData\\Local\\SourceServer\\a48e535155ce1696fc4028d9786fdbe5e85e799113e5a7ecccdb34a25222e666\\src\\System.Windows.Forms\\src\\System\\Windows\\Forms\\NativeWindow.cs [\u0422\u043E\u043B\u044C\u043A\u043E \u0447\u0442\u0435\u043D\u0438\u0435]",
+              "RelativeToolTip": "..\\..\\..\\AppData\\Local\\SourceServer\\a48e535155ce1696fc4028d9786fdbe5e85e799113e5a7ecccdb34a25222e666\\src\\System.Windows.Forms\\src\\System\\Windows\\Forms\\NativeWindow.cs [\u0422\u043E\u043B\u044C\u043A\u043E \u0447\u0442\u0435\u043D\u0438\u0435]",
+              "ViewState": "AgIAAAICAAAAAAAAAAAswBECAAAMAAAAAQAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-30T14:40:29.912Z",
+              "EditorCaption": " [\u0422\u043E\u043B\u044C\u043A\u043E \u0447\u0442\u0435\u043D\u0438\u0435]"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "TrimPanel.cs",
+              "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\UI\\TrimPanel.cs",
+              "RelativeDocumentMoniker": "UI\\TrimPanel.cs",
+              "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\UI\\TrimPanel.cs",
+              "RelativeToolTip": "UI\\TrimPanel.cs",
+              "ViewState": "AgIAAKoAAAAAAAAAAAAcwK4AAAArAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-30T13:47:49.285Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "VideoThumbnailControl.cs",
+              "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\UI\\VideoThumbnailControl.cs",
+              "RelativeDocumentMoniker": "UI\\VideoThumbnailControl.cs",
+              "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\UI\\VideoThumbnailControl.cs",
+              "RelativeToolTip": "UI\\VideoThumbnailControl.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAACcAAAAoAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-30T11:42:18.119Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "ThemeSelectorControl.cs",
+              "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\UI\\Controls\\ThemeSelectorControl.cs",
+              "RelativeDocumentMoniker": "UI\\Controls\\ThemeSelectorControl.cs",
+              "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\UI\\Controls\\ThemeSelectorControl.cs",
+              "RelativeToolTip": "UI\\Controls\\ThemeSelectorControl.cs",
+              "ViewState": "AgIAAKQAAAAAAAAAAAAwwA8AAAAnAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-30T11:28:56.976Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "EstimatePanel.cs",
+              "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\UI\\Controls\\EstimatePanel.cs",
+              "RelativeDocumentMoniker": "UI\\Controls\\EstimatePanel.cs",
+              "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\UI\\Controls\\EstimatePanel.cs",
+              "RelativeToolTip": "UI\\Controls\\EstimatePanel.cs",
+              "ViewState": "AgIAAFwAAAAAAAAAAIAzwG8AAAAJAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-30T11:28:40.462Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
               "Title": "CropPanel.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\UI\\CropPanel.cs",
               "RelativeDocumentMoniker": "UI\\CropPanel.cs",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\UI\\CropPanel.cs",
               "RelativeToolTip": "UI\\CropPanel.cs",
-              "ViewState": "AgIAAJ8AAAAAAAAAAAAUwLYAAAAqAAAAAAAAAA==",
+              "ViewState": "AgIAANAAAAAAAAAAAAAUwNwBAAAUAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-30T10:53:06.796Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 4,
               "Title": "SubtitlesEditorPanel.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\UI\\SubtitlesEditorPanel.cs",
               "RelativeDocumentMoniker": "UI\\SubtitlesEditorPanel.cs",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\UI\\SubtitlesEditorPanel.cs",
               "RelativeToolTip": "UI\\SubtitlesEditorPanel.cs",
-              "ViewState": "AgIAAJoBAAAAAAAAAAAUwMMBAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAKgBAAAAAAAAAIAwwAQBAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-23T12:43:35.365Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 0,
               "Title": "VideoPlayerPanel.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\UI\\VideoPlayerPanel.cs",
               "RelativeDocumentMoniker": "UI\\VideoPlayerPanel.cs",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\UI\\VideoPlayerPanel.cs",
               "RelativeToolTip": "UI\\VideoPlayerPanel.cs",
-              "ViewState": "AgIAANUAAAAAAAAAAAAiwPIAAAAXAAAAAAAAAA==",
+              "ViewState": "AgIAAHECAAAAAAAAAADgv38CAAAbAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-23T12:39:41.734Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 2,
               "Title": "VideoEditorForm.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\UI\\VideoEditorForm.cs",
               "RelativeDocumentMoniker": "UI\\VideoEditorForm.cs",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\UI\\VideoEditorForm.cs",
               "RelativeToolTip": "UI\\VideoEditorForm.cs",
-              "ViewState": "AgIAADgBAAAAAAAAAAAUwGEBAAABAAAAAAAAAA==",
+              "ViewState": "AgIAAJoAAAAAAAAAAAAtwLMAAABJAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-23T12:39:26.782Z",
               "EditorCaption": ""
