@@ -3,16 +3,20 @@
   "WorkspaceRootPath": "C:\\Users\\User\\source\\repos\\Converter\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\videoeditorform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\videoeditorform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\videoplayerpanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\videoplayerpanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\subtitleseditorpanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\subtitleseditorpanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\croppanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\croppanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\videoeditorform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\videoeditorform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|c:\\users\\user\\source\\repos\\converter\\ui\\subtitleseditorpanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB1D78DF-F93E-4610-9BD7-4B442E04D585}|Converter.csproj|solutionrelative:ui\\subtitleseditorpanel.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -22,7 +26,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 6,
+          "SelectedChildIndex": 8,
           "Children": [
             {
               "$type": "Bookmark",
@@ -46,39 +50,52 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 2,
+              "Title": "CropPanel.cs",
+              "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\UI\\CropPanel.cs",
+              "RelativeDocumentMoniker": "UI\\CropPanel.cs",
+              "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\UI\\CropPanel.cs",
+              "RelativeToolTip": "UI\\CropPanel.cs",
+              "ViewState": "AgIAAJ8AAAAAAAAAAAAUwLYAAAAqAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-30T10:53:06.796Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
               "Title": "SubtitlesEditorPanel.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\UI\\SubtitlesEditorPanel.cs",
               "RelativeDocumentMoniker": "UI\\SubtitlesEditorPanel.cs",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\UI\\SubtitlesEditorPanel.cs",
               "RelativeToolTip": "UI\\SubtitlesEditorPanel.cs",
-              "ViewState": "AgIAAAUCAAAAAAAAAAAqwIkAAAAwAAAAAAAAAA==",
+              "ViewState": "AgIAAJoBAAAAAAAAAAAUwMMBAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-23T12:43:35.365Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 1,
               "Title": "VideoPlayerPanel.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\UI\\VideoPlayerPanel.cs",
               "RelativeDocumentMoniker": "UI\\VideoPlayerPanel.cs",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\UI\\VideoPlayerPanel.cs",
               "RelativeToolTip": "UI\\VideoPlayerPanel.cs",
-              "ViewState": "AgIAAMYAAAAAAAAAAAAWwJ8AAAAeAAAAAAAAAA==",
+              "ViewState": "AgIAANUAAAAAAAAAAAAiwPIAAAAXAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-23T12:39:41.734Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 0,
               "Title": "VideoEditorForm.cs",
               "DocumentMoniker": "C:\\Users\\User\\source\\repos\\Converter\\UI\\VideoEditorForm.cs",
               "RelativeDocumentMoniker": "UI\\VideoEditorForm.cs",
               "ToolTip": "C:\\Users\\User\\source\\repos\\Converter\\UI\\VideoEditorForm.cs",
               "RelativeToolTip": "UI\\VideoEditorForm.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAYAAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAD4BAAAAAAAAAAAQwGEBAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-23T12:39:26.782Z",
               "EditorCaption": ""

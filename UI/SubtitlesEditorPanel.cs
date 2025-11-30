@@ -1,4 +1,10 @@
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.IO;
+using System.Linq;
 using System.Text;
+using System.Windows.Forms;
 using Xabe.FFmpeg;
 
 namespace Converter.UI
@@ -17,40 +23,22 @@ namespace Converter.UI
         private readonly CheckBox chkBold;
         private readonly CheckBox chkOutline;
 
-        private Font? currentFont;
-
         private readonly List<SubtitleItem> subtitles = new();
         private IMediaInfo? mediaInfo;
 
         public bool HasSubtitles => subtitles.Count > 0;
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                // Dispose of the cached font
-                currentFont?.Dispose();
-                currentFont = null; // Help GC
-
-                // Unsubscribe from events to prevent memory leaks if the player is still alive
-                videoPlayer.PositionChanged -= OnPlayerPositionChanged;
-            }
-            base.Dispose(disposing);
-        }
 
         public SubtitlesEditorPanel(VideoPlayerPanel player)
         {
             videoPlayer = player;
             BackColor = Color.White;
             Padding = new Padding(10);
-            AutoScroll = true;
 
-            // 1. Нижняя панель стиля субтитров
             var grpStyle = new GroupBox
             {
                 Text = "🎨 Стиль субтитров",
                 Dock = DockStyle.Bottom,
-                Height = 140,
+                Height = 100,
                 Font = new Font("Segoe UI", 9, FontStyle.Bold),
                 Padding = new Padding(10)
             };
@@ -66,7 +54,6 @@ namespace Converter.UI
             };
             grpStyle.Controls.Add(styleFlow);
 
-            // Параметры стиля (как в присланном коде)
             var fontPanel = new Panel { Height = 30, Width = 200, Margin = new Padding(5) };
             var lblFont = new Label { Text = "Шрифт:", Location = new Point(0, 5), AutoSize = true };
             fontPanel.Controls.Add(lblFont);
@@ -135,7 +122,7 @@ namespace Converter.UI
                 Text = "Жирный",
                 AutoSize = true,
                 Checked = true,
-                Margin = new Padding(5, 8, 5, 5)
+                Margin = new Padding(5)
             };
             styleFlow.Controls.Add(chkBold);
 
@@ -144,11 +131,10 @@ namespace Converter.UI
                 Text = "Обводка",
                 AutoSize = true,
                 Checked = true,
-                Margin = new Padding(5, 8, 5, 5)
+                Margin = new Padding(5)
             };
             styleFlow.Controls.Add(chkOutline);
 
-            // 2. Главная панель сверху
             var mainPanel = new Panel
             {
                 Dock = DockStyle.Fill,
@@ -156,7 +142,32 @@ namespace Converter.UI
             };
             Controls.Add(mainPanel);
 
-            // Сначала правая панель с кнопками
+            var leftPanel = new Panel
+            {
+                Dock = DockStyle.Fill,
+                Padding = new Padding(0, 0, 5, 0)
+            };
+            mainPanel.Controls.Add(leftPanel);
+
+            var lblList = new Label
+            {
+                Text = "Субтитры:",
+                Dock = DockStyle.Top,
+                Height = 25,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            leftPanel.Controls.Add(lblList);
+
+            lstSubtitles = new ListBox
+            {
+                Dock = DockStyle.Fill,
+                Font = new Font("Consolas", 9)
+            };
+            lstSubtitles.SelectedIndexChanged += LstSubtitles_SelectedIndexChanged;
+            lstSubtitles.DoubleClick += (_, _) => EditSelectedSubtitle();
+            leftPanel.Controls.Add(lstSubtitles);
+
             var rightPanel = new Panel
             {
                 Dock = DockStyle.Right,
@@ -221,101 +232,6 @@ namespace Converter.UI
             };
             btnExport.Click += BtnExport_Click;
             rightPanel.Controls.Add(btnExport);
-
-            // Затем левая панель со списком субтитров
-            var leftPanel = new Panel
-            {
-                Dock = DockStyle.Fill,
-                Padding = new Padding(0, 0, 5, 0)
-            };
-            mainPanel.Controls.Add(leftPanel);
-
-            var lblList = new Label
-            {
-                Text = "Субтитры:",
-                Dock = DockStyle.Top,
-                Height = 25,
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-            leftPanel.Controls.Add(lblList);
-
-            lstSubtitles = new ListBox
-            {
-                Dock = DockStyle.Fill,
-                Font = new Font("Consolas", 9),
-                IntegralHeight = false
-            };
-            lstSubtitles.SelectedIndexChanged += LstSubtitles_SelectedIndexChanged;
-            lstSubtitles.DoubleClick += (_, _) => EditSelectedSubtitle();
-            leftPanel.Controls.Add(lstSubtitles);
-
-            // Живой предпросмотр субтитров по позиции плеера
-            videoPlayer.PositionChanged += OnPlayerPositionChanged;
-        }
-
-        private void OnPlayerPositionChanged(TimeSpan position)
-        {
-            if (subtitles.Count == 0)
-            {
-                videoPlayer.SetSubtitleOverlay(null, null, null, null, ContentAlignment.BottomCenter);
-                return;
-            }
-
-            SubtitleItem? current = null;
-            foreach (var s in subtitles)
-            {
-                if (position >= s.StartTime && position <= s.EndTime)
-                {
-                    current = s;
-                    break;
-                }
-            }
-
-            if (current == null)
-            {
-                videoPlayer.SetSubtitleOverlay(null, null, null, null, ContentAlignment.BottomCenter);
-                return;
-            }
-
-            // Настройки стиля для live-просмотра (упрощённо на основе текущих контролов)
-            var fontStyle = chkBold.Checked ? FontStyle.Bold : FontStyle.Regular;
-            var newFont = new Font(cmbFont.Text, (float)numFontSize.Value, fontStyle);
-
-            // Dispose of the old font if it exists and is different from the new one
-            if (currentFont != null && !currentFont.Equals(newFont))
-            {
-                currentFont.Dispose();
-                currentFont = null;
-            }
-
-            // Cache the new font if it's not already cached
-            if (currentFont == null)
-            {
-                currentFont = newFont;
-            }
-            else
-            {
-                // If the font is the same, dispose of the newly created one to avoid leak
-                newFont.Dispose();
-            }
-
-            var fore = btnFontColor.BackColor;
-            var back = btnBackgroundColor.BackColor;
-
-            var align = ContentAlignment.BottomCenter;
-            if (cmbPosition.SelectedIndex >= 0 && cmbPosition.SelectedIndex <= 2)
-            {
-                align = cmbPosition.SelectedIndex switch
-                {
-                    0 => ContentAlignment.BottomCenter,
-                    1 => ContentAlignment.TopCenter,
-                    2 => ContentAlignment.MiddleCenter,
-                    _ => ContentAlignment.BottomCenter // Default fallback, though index should be valid
-                };
-            }
-            var outlineThickness = chkOutline.Checked ? 2 : 0;
-            videoPlayer.SetSubtitleOverlay(current.Text, currentFont, fore, back, align, outlineThickness);
         }
 
         private void BtnAdd_Click(object? sender, EventArgs e)
@@ -469,19 +385,7 @@ namespace Converter.UI
 
             var assPath = Path.Combine(Path.GetTempPath(), $"subtitles_{Guid.NewGuid():N}.ass");
             GenerateASSFile(assPath);
-
-            // Для FFmpeg под Windows рекомендуемый формат пути в фильтрах:
-            // C\\:/path/file.ass  (экранируем двоеточие после буквы диска)
-            var normalizedPath = assPath.Replace("\\", "/");
-            if (normalizedPath.Length >= 2 && normalizedPath[1] == ':')
-            {
-                normalizedPath = normalizedPath[0] + "\\:" + normalizedPath.Substring(2);
-            }
-
-            normalizedPath = normalizedPath.Replace("'", "\\'");
-
-            // Используем фильтр subtitles, он тоже принимает ASS-файл
-            return $"subtitles='{normalizedPath}'";
+            return $"ass='{assPath.Replace("\\", "/").Replace(":", "\\\\:")}'";
         }
 
         private void GenerateASSFile(string outputPath)
@@ -500,7 +404,7 @@ namespace Converter.UI
             var bgColor = ColorToAss(btnBackgroundColor.BackColor);
             var alignment = GetAlignment();
             var bold = chkBold.Checked ? -1 : 0;
-            var outline = chkOutline.Checked ? 3 : 0;
+            var outline = chkOutline.Checked ? 2 : 0;
 
             ass.AppendLine($"Style: Default,{cmbFont.Text},{numFontSize.Value},{fontColor},&H00000000,&H00000000,{bgColor},{bold},0,0,0,100,100,0,0,1,{outline},1,{alignment},10,10,10,1");
             ass.AppendLine();

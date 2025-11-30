@@ -1,354 +1,246 @@
 using System;
 using System.Drawing;
 using System.IO;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using Xabe.FFmpeg;
+using System.Threading.Tasks;
 
 namespace Converter.UI
 {
-    /// <summary>
-    /// Простая панель воспроизведения с предпросмотром и оверлеем субтитров.
-    /// </summary>
     public class VideoPlayerPanel : Panel
     {
-        private readonly PictureBox _pictureBox;
-        private readonly Label _subtitleLabel;
-        private readonly TrackBar _trackSeek;
-        private readonly Button _btnPlay;
-        private readonly Button _btnPause;
-        private readonly Label _lblTime;
-        private readonly Label _lblDuration;
+        private readonly PictureBox pictureBox;
+        private readonly TrackBar trackSeek;
+        private readonly Button btnPlay;
+        private readonly Button btnPause;
+        private readonly Label lblTime;
+        private readonly Label lblDuration;
 
-        private IMediaInfo? _currentMedia;
-        private readonly Timer _playbackTimer;
-        private TimeSpan _currentPosition = TimeSpan.Zero;
-        private bool _isPlaying;
-        private string? _currentVideoPath;
-
-        private string? currentSubtitleText;
-        private Font? currentSubtitleFont;
-        private Color? currentSubtitleForeColor;
-        private Color? currentSubtitleBackColor;
-        private ContentAlignment currentSubtitleAlignment = ContentAlignment.BottomCenter;
-        private int currentOutlineThickness;
-
-        public event Action<TimeSpan>? PositionChanged;
+        private IMediaInfo? currentMedia;
+        private readonly System.Windows.Forms.Timer playbackTimer;
+        private TimeSpan currentPosition = TimeSpan.Zero;
+        private bool isPlaying;
 
         public VideoPlayerPanel()
         {
             BackColor = Color.Black;
 
-            _pictureBox = new PictureBox
+            pictureBox = new PictureBox
             {
                 Dock = DockStyle.Fill,
                 SizeMode = PictureBoxSizeMode.Zoom,
                 BackColor = Color.Black
             };
-            Controls.Add(_pictureBox);
-
-            _subtitleLabel = new Label
-            {
-                Dock = DockStyle.Fill,
-                BackColor = Color.Transparent,
-                ForeColor = Color.White,
-                TextAlign = ContentAlignment.BottomCenter
-            };
-            _subtitleLabel.Paint += subtitleLabel_Paint;
-            _pictureBox.Controls.Add(_subtitleLabel);
+            Controls.Add(pictureBox);
 
             var controlPanel = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 60,
-                BackColor = Color.FromArgb(45, 45, 45)
+                Height = 80,
+                BackColor = Color.FromArgb(45, 45, 45),
+                Padding = new Padding(10, 5, 10, 5)
             };
             Controls.Add(controlPanel);
 
-            _trackSeek = new TrackBar
+            var layoutTable = new TableLayoutPanel
             {
-                Location = new Point(10, 5),
-                Width = Width - 20,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-                TickStyle = TickStyle.None,
-                Maximum = 1000
+                Dock = DockStyle.Fill,
+                RowCount = 2,
+                ColumnCount = 1,
+                BackColor = Color.FromArgb(45, 45, 45)
             };
-            _trackSeek.ValueChanged += TrackSeek_ValueChanged;
-            controlPanel.Controls.Add(_trackSeek);
+            layoutTable.RowStyles.Add(new RowStyle(SizeType.Absolute, 35F));
+            layoutTable.RowStyles.Add(new RowStyle(SizeType.Absolute, 35F));
+            controlPanel.Controls.Add(layoutTable);
 
-            _btnPlay = new Button
+            trackSeek = new TrackBar
+            {
+                Dock = DockStyle.Fill,
+                TickStyle = TickStyle.None,
+                Maximum = 1000,
+                Margin = new Padding(0, 5, 0, 0)
+            };
+            trackSeek.ValueChanged += TrackSeek_ValueChanged;
+            layoutTable.Controls.Add(trackSeek, 0, 0);
+
+            var buttonPanel = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                AutoSize = false,
+                Margin = new Padding(0)
+            };
+            layoutTable.Controls.Add(buttonPanel, 0, 1);
+
+            btnPlay = new Button
             {
                 Text = "▶",
-                Location = new Point(10, 30),
-                Size = new Size(40, 25),
-                Font = new Font("Segoe UI", 10)
+                Size = new Size(45, 30),
+                Font = new Font("Segoe UI", 10),
+                Margin = new Padding(0, 0, 5, 0)
             };
-            _btnPlay.Click += BtnPlay_Click;
-            controlPanel.Controls.Add(_btnPlay);
+            btnPlay.Click += BtnPlay_Click;
+            buttonPanel.Controls.Add(btnPlay);
 
-            _btnPause = new Button
+            btnPause = new Button
             {
                 Text = "⏸",
-                Location = new Point(55, 30),
-                Size = new Size(40, 25),
+                Size = new Size(45, 30),
                 Font = new Font("Segoe UI", 10),
-                Enabled = false
+                Enabled = false,
+                Margin = new Padding(0, 0, 15, 0)
             };
-            _btnPause.Click += BtnPause_Click;
-            controlPanel.Controls.Add(_btnPause);
+            btnPause.Click += BtnPause_Click;
+            buttonPanel.Controls.Add(btnPause);
 
-            _lblTime = new Label
+            lblTime = new Label
             {
                 Text = "00:00:00",
-                Location = new Point(110, 33),
                 AutoSize = true,
                 ForeColor = Color.White,
-                Font = new Font("Consolas", 9)
+                Font = new Font("Consolas", 10),
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = new Padding(0, 5, 5, 0)
             };
-            controlPanel.Controls.Add(_lblTime);
+            buttonPanel.Controls.Add(lblTime);
 
             var lblSeparator = new Label
             {
                 Text = "/",
-                Location = new Point(170, 33),
                 AutoSize = true,
-                ForeColor = Color.Gray
+                ForeColor = Color.Gray,
+                Font = new Font("Consolas", 10),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Margin = new Padding(0, 5, 5, 0)
             };
-            controlPanel.Controls.Add(lblSeparator);
+            buttonPanel.Controls.Add(lblSeparator);
 
-            _lblDuration = new Label
+            lblDuration = new Label
             {
                 Text = "00:00:00",
-                Location = new Point(180, 33),
                 AutoSize = true,
                 ForeColor = Color.White,
-                Font = new Font("Consolas", 9)
+                Font = new Font("Consolas", 10),
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = new Padding(0, 5, 0, 0)
             };
-            controlPanel.Controls.Add(_lblDuration);
+            buttonPanel.Controls.Add(lblDuration);
 
-            _playbackTimer = new Timer { Interval = 100 };
-            _playbackTimer.Tick += PlaybackTimer_Tick;
+            playbackTimer = new System.Windows.Forms.Timer { Interval = 100 };
+            playbackTimer.Tick += PlaybackTimer_Tick;
         }
 
         public async Task LoadVideoAsync(string videoPath, IMediaInfo mediaInfo)
         {
-            // Перенаправляем на UI-поток, чтобы контролы инициализировались корректно.
-            if (InvokeRequired)
-            {
-                await (Task)Invoke(new Func<Task>(() => LoadVideoAsync(videoPath, mediaInfo))); // UI marshal
-                return;
-            }
-
-            _currentVideoPath = videoPath ?? throw new ArgumentNullException(nameof(videoPath));
-            _currentMedia = mediaInfo ?? throw new ArgumentNullException(nameof(mediaInfo));
-            _lblDuration.Text = FormatTime(mediaInfo.Duration);
-            _currentPosition = TimeSpan.Zero;
-            UpdateUi();
+            currentMedia = mediaInfo;
+            lblDuration.Text = FormatTime(mediaInfo.Duration);
+            currentPosition = TimeSpan.Zero;
+            UpdateUI();
 
             var thumbnailPath = Path.Combine(Path.GetTempPath(), $"video_preview_{Guid.NewGuid():N}.jpg");
 
             try
             {
-                await Task.Run(async () =>
-                {
-                    var conversion = FFmpeg.Conversions.New()
-                        .AddParameter($"-i \"{videoPath}\"")
-                        .AddParameter("-vframes 1")
-                        .AddParameter("-ss 00:00:01")
-                        .SetOutput(thumbnailPath);
+                var conversion = FFmpeg.Conversions.New()
+                    .AddParameter($"-i \"{videoPath}\"")
+                    .AddParameter("-vframes 1")
+                    .AddParameter("-ss 00:00:01")
+                    .SetOutput(thumbnailPath);
 
-                    await conversion.Start().ConfigureAwait(false);
-                }).ConfigureAwait(false);
+                await conversion.Start().ConfigureAwait(true);
 
                 if (File.Exists(thumbnailPath))
                 {
                     using var fs = new FileStream(thumbnailPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                    using var image = Image.FromStream(fs);
-                    RunOnUiThread(() =>
-                    {
-                        _pictureBox.Image?.Dispose();
-                        _pictureBox.Image = new Bitmap(image);
-                    });
+                    pictureBox.Image = Image.FromStream(fs);
                 }
             }
             catch
             {
-                // Игнорируем ошибки получения миниатюры, чтобы не срывать загрузку.
+                // ignore thumbnail errors
             }
             finally
             {
                 if (File.Exists(thumbnailPath))
                 {
-                    try { File.Delete(thumbnailPath); } catch { /* ignore */ }
+                    try
+                    {
+                        File.Delete(thumbnailPath);
+                    }
+                    catch
+                    {
+                        // ignore cleanup errors
+                    }
                 }
             }
-        }
-
-        public TimeSpan GetCurrentTime() => _currentPosition;
-
-        public void SeekTo(TimeSpan time)
-        {
-            var clamped = time;
-            if (_currentMedia != null)
-            {
-                clamped = TimeSpan.FromSeconds(Math.Max(0, Math.Min(time.TotalSeconds, _currentMedia.Duration.TotalSeconds)));
-            }
-
-            _currentPosition = clamped;
-            UpdateUi();
-            PositionChanged?.Invoke(_currentPosition);
-        }
-
-        public void SetSubtitleOverlay(string? text, Font? font, Color? foreColor, Color? backColor,
-            ContentAlignment alignment, int outlineThickness)
-        {
-            currentSubtitleText = text;
-
-            // Dispose previous font if it differs from the new one
-            if (currentSubtitleFont != null && font != null && !currentSubtitleFont.Equals(font))
-            {
-                currentSubtitleFont.Dispose();
-            }
-
-            currentSubtitleFont = font;
-            currentSubtitleForeColor = foreColor;
-            currentSubtitleBackColor = backColor;
-            currentSubtitleAlignment = alignment;
-            currentOutlineThickness = outlineThickness;
-
-            _subtitleLabel.Invalidate();
         }
 
         private void BtnPlay_Click(object? sender, EventArgs e)
         {
-            _isPlaying = true;
-            _btnPlay.Enabled = false;
-            _btnPause.Enabled = true;
-            _playbackTimer.Start();
+            isPlaying = true;
+            btnPlay.Enabled = false;
+            btnPause.Enabled = true;
+            playbackTimer.Start();
         }
 
         private void BtnPause_Click(object? sender, EventArgs e)
         {
-            _isPlaying = false;
-            _btnPlay.Enabled = true;
-            _btnPause.Enabled = false;
-            _playbackTimer.Stop();
+            isPlaying = false;
+            btnPlay.Enabled = true;
+            btnPause.Enabled = false;
+            playbackTimer.Stop();
         }
 
         private void PlaybackTimer_Tick(object? sender, EventArgs e)
         {
-            if (!_isPlaying || _currentMedia == null)
+            if (currentMedia == null)
             {
                 return;
             }
 
-            _currentPosition = _currentPosition.Add(TimeSpan.FromMilliseconds(_playbackTimer.Interval));
+            currentPosition = currentPosition.Add(TimeSpan.FromMilliseconds(100));
 
-            if (_currentPosition >= _currentMedia.Duration)
+            if (currentPosition >= currentMedia.Duration)
             {
-                _currentPosition = _currentMedia.Duration;
+                currentPosition = currentMedia.Duration;
                 BtnPause_Click(null, EventArgs.Empty);
             }
 
-            UpdateUi();
-            PositionChanged?.Invoke(_currentPosition);
+            UpdateUI();
         }
 
         private void TrackSeek_ValueChanged(object? sender, EventArgs e)
         {
-            if (_currentMedia == null)
+            if (currentMedia == null)
             {
                 return;
             }
 
-            var percent = _trackSeek.Value / (double)_trackSeek.Maximum;
-            SeekTo(TimeSpan.FromSeconds(_currentMedia.Duration.TotalSeconds * percent));
+            var percent = trackSeek.Value / (double)trackSeek.Maximum;
+            currentPosition = TimeSpan.FromSeconds(currentMedia.Duration.TotalSeconds * percent);
+            UpdateUI();
         }
 
-        private void UpdateUi()
+        private void UpdateUI()
         {
-            RunOnUiThread(() =>
-            {
-                _lblTime.Text = FormatTime(_currentPosition);
+            lblTime.Text = FormatTime(currentPosition);
 
-                if (_currentMedia != null && _currentMedia.Duration.TotalSeconds > 0)
-                {
-                    var percent = _currentPosition.TotalSeconds / _currentMedia.Duration.TotalSeconds;
-                    _trackSeek.Value = Math.Clamp((int)(percent * _trackSeek.Maximum), 0, _trackSeek.Maximum);
-                }
-            });
+            if (currentMedia != null)
+            {
+                var percent = currentPosition.TotalSeconds / currentMedia.Duration.TotalSeconds;
+                trackSeek.Value = Math.Clamp((int)(percent * trackSeek.Maximum), 0, trackSeek.Maximum);
+            }
         }
 
         private static string FormatTime(TimeSpan time) => time.ToString("hh\\:mm\\:ss");
 
-        private void RunOnUiThread(Action action)
+        public TimeSpan GetCurrentTime() => currentPosition;
+
+        public void SeekTo(TimeSpan time)
         {
-            if (InvokeRequired)
-            {
-                BeginInvoke(action);
-            }
-            else
-            {
-                action();
-            }
-        }
-
-        private void subtitleLabel_Paint(object? sender, PaintEventArgs e)
-        {
-            if (string.IsNullOrWhiteSpace(currentSubtitleText) || currentSubtitleFont == null || !currentSubtitleForeColor.HasValue)
-            {
-                return;
-            }
-
-            var g = e.Graphics;
-            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
-
-            // Determine colors
-            var foreColor = currentSubtitleForeColor.Value;
-            // For outline, use a semi-transparent black or a color derived from background/theme
-            var outlineColor = Color.FromArgb(160, 0, 0, 0); // Semi-transparent black for outline
-
-            // Set background for the label if it has one
-            if (currentSubtitleBackColor.HasValue)
-            {
-                using var backgroundBrush = new SolidBrush(currentSubtitleBackColor.Value);
-                g.FillRectangle(backgroundBrush, e.ClipRectangle);
-            }
-
-            // Prepare text format flags based on alignment
-            TextFormatFlags flags = TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl;
-            switch (currentSubtitleAlignment)
-            {
-                case ContentAlignment.BottomCenter: flags |= TextFormatFlags.Bottom | TextFormatFlags.HorizontalCenter; break;
-                case ContentAlignment.TopCenter: flags |= TextFormatFlags.Top | TextFormatFlags.HorizontalCenter; break;
-                case ContentAlignment.MiddleCenter: flags |= TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter; break;
-            }
-
-            // Draw outline if thickness is greater than 0
-            if (currentOutlineThickness > 0)
-            {
-                // Draw outline by drawing text with offsets in outline color
-                for (int xOffset = -currentOutlineThickness; xOffset <= currentOutlineThickness; xOffset++)
-                {
-                    for (int yOffset = -currentOutlineThickness; yOffset <= currentOutlineThickness; yOffset++)
-                    {
-                        // Avoid drawing outline on the center position if it's the same as foreground
-                        if (Math.Abs(xOffset) == currentOutlineThickness && Math.Abs(yOffset) == currentOutlineThickness && currentOutlineThickness > 0) continue; // Skip corners for a cleaner look if desired
-
-                        // Draw the outline text at an offset rectangle
-                        var offsetRect = new Rectangle(
-                            e.ClipRectangle.Left + xOffset,
-                            e.ClipRectangle.Top + yOffset,
-                            e.ClipRectangle.Width,
-                            e.ClipRectangle.Height);
-
-                        TextRenderer.DrawText(g, currentSubtitleText, currentSubtitleFont, offsetRect, outlineColor, flags);
-                    }
-                }
-            }
-
-            // Draw the main text
-            TextRenderer.DrawText(g, currentSubtitleText, currentSubtitleFont, e.ClipRectangle, foreColor, flags);
+            currentPosition = time;
+            UpdateUI();
         }
     }
 }
