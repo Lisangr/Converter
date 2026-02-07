@@ -58,7 +58,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 6,
+          "SelectedChildIndex": 7,
           "Children": [
             {
               "$type": "Bookmark",
@@ -81,6 +81,10 @@
               "Name": "ST:0:0:{34e76e81-ee4a-11d0-ae2e-00a0c90fffc3}"
             },
             {
+              "$type": "Bookmark",
+              "Name": "ST:1:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
               "$type": "Document",
               "DocumentIndex": 3,
               "Title": "IVideoProcessingService.cs",
@@ -90,8 +94,7 @@
               "RelativeToolTip": "Services\\IVideoProcessingService.cs",
               "ViewState": "AgIAAAAAAAAAAAAAAAAqwAwAAAANAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-30T19:49:08.671Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-30T19:49:08.671Z"
             },
             {
               "$type": "Document",
@@ -116,8 +119,7 @@
               "RelativeToolTip": "UI\\EffectsPanel.cs",
               "ViewState": "AgIAAEABAAAAAAAAAAAowIsBAAAJAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-30T18:13:21.019Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-30T18:13:21.019Z"
             },
             {
               "$type": "Document",
@@ -129,8 +131,7 @@
               "RelativeToolTip": "UI\\AudioPanel.cs",
               "ViewState": "AgIAANcAAAAAAAAAAAAuwOAAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-30T18:13:04.838Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-30T18:13:04.838Z"
             },
             {
               "$type": "Document",
@@ -142,8 +143,7 @@
               "RelativeToolTip": "src\\Converter.Domain\\Models\\AudioProcessingOptions.cs",
               "ViewState": "AgIAACsAAAAAAAAAAAA9wDsAAAAfAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-30T17:53:00.568Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-30T17:53:00.568Z"
             },
             {
               "$type": "Document",
@@ -155,8 +155,7 @@
               "RelativeToolTip": "src\\Converter.Domain\\Models\\NotificationOptions.cs",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAUAAAAQAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-30T17:52:29.067Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-30T17:52:29.067Z"
             },
             {
               "$type": "Document",
@@ -168,8 +167,7 @@
               "RelativeToolTip": "Form1.UI.cs",
               "ViewState": "AgIAAPkBAAAAAAAAAAAtwA0CAAAMAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-30T17:11:50.608Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-30T17:11:50.608Z"
             },
             {
               "$type": "Document",
@@ -181,8 +179,7 @@
               "RelativeToolTip": "UI\\VideoPlayerPanel.cs",
               "ViewState": "AgIAADABAAAAAAAAAAAawEABAABKAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-30T17:11:03.796Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-30T17:11:03.796Z"
             },
             {
               "$type": "Document",
@@ -194,8 +191,7 @@
               "RelativeToolTip": "UI\\SubtitlesEditorPanel.cs",
               "ViewState": "AgIAAPEBAAAAAAAAAAAwwBUCAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-30T16:58:26.37Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-30T16:58:26.37Z"
             },
             {
               "$type": "Document",
@@ -207,8 +203,7 @@
               "RelativeToolTip": "UI\\IVideoEditorView.cs",
               "ViewState": "AgIAAAYAAAAAAAAAAAAAABkAAAAwAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-30T16:56:00.076Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-30T16:56:00.076Z"
             },
             {
               "$type": "Document",
@@ -220,8 +215,7 @@
               "RelativeToolTip": "UI\\VideoEditorForm.cs",
               "ViewState": "AgIAAJoBAAAAAAAAAAA5wKsBAAAJAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-30T16:39:45.405Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-30T16:39:45.405Z"
             },
             {
               "$type": "Document",
@@ -233,8 +227,7 @@
               "RelativeToolTip": "Services\\VideoProcessingService.cs",
               "ViewState": "AgIAADcAAAAAAAAAAAAtwE8AAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-11-30T16:32:31.637Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-11-30T16:32:31.637Z"
             }
           ]
         }
